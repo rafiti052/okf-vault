@@ -10,13 +10,13 @@
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "npm@11.4.2",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "format:check": "prettier --check src test schemas .agents/skills/okf-knowledge-vault package.json tsconfig.json tsconfig.test.json eslint.config.js .prettierrc.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/*.test.js dist-test/**/*.test.js test/contracts/*.test.mjs test/workflows/*.test.mjs",
+    "test": "pnpm run build && tsc -p tsconfig.test.json && node --test dist-test/*.test.js dist-test/**/*.test.js test/contracts/*.test.mjs test/workflows/*.test.mjs",
     "test:contracts": "node --test test/contracts/*.test.mjs test/workflows/*.test.mjs"
   },
   "dependencies": {

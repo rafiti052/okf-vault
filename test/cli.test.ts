@@ -17,9 +17,9 @@ const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 };
 
 describe("package metadata", () => {
-  it("declares Node 24, exact npm version, private package, and one helper bin", () => {
+  it("declares Node 24, exact pnpm version, private package, and one helper bin", () => {
     assert.equal(packageJson.engines.node, "24.x");
-    assert.equal(packageJson.packageManager, "npm@11.4.2");
+    assert.equal(packageJson.packageManager, "pnpm@11.8.0");
     assert.equal(packageJson.private, true);
     assert.deepEqual(Object.keys(packageJson.bin), ["okf-vault"]);
   });
