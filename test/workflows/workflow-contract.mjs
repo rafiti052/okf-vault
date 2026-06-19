@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
+import { readFileSync, existsSync, lstatSync, realpathSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 export const SOURCE_ENVELOPE_VERSION = "okf-source-envelope/1.0.0";
@@ -1094,6 +1094,119 @@ export function registryMarksPhase1bShipped(registryText, commandSlug) {
  */
 export function registryLinksToStub(registryText, stubFileName) {
   return registryText.includes(`](${stubFileName})`);
+}
+
+/**
+ * Converts a markdown heading title to a GitHub-style anchor slug.
+ * @param {string} title
+ * @returns {string}
+ */
+export function headingToMarkdownAnchor(title) {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+/**
+ * @param {string} markdownText
+ * @returns {Set<string>}
+ */
+export function extractMarkdownHeadingAnchors(markdownText) {
+  const anchors = new Set();
+  for (const line of markdownText.split("\n")) {
+    const match = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (match) {
+      anchors.add(headingToMarkdownAnchor(match[2]));
+    }
+  }
+  return anchors;
+}
+
+/**
+ * Returns true when anchor exists as a heading slug in markdown text.
+ * @param {string} markdownText
+ * @param {string} anchor
+ * @returns {boolean}
+ */
+export function resolveMarkdownAnchor(markdownText, anchor) {
+  const normalized = anchor.replace(/^#/, "");
+  return extractMarkdownHeadingAnchors(markdownText).has(normalized);
+}
+
+/**
+ * @param {string} commandsDir
+ * @returns {string[]}
+ */
+export function listCommandStubs(commandsDir) {
+  return readdirSync(commandsDir)
+    .filter((entry) => entry.startsWith("vault-") && entry.endsWith(".md"))
+    .sort();
+}
+
+/**
+ * Resolves a relative markdown link (optional file + optional #anchor) from baseDir.
+ * @param {string} baseDir
+ * @param {string} link
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function resolveMarkdownLink(baseDir, link) {
+  if (link.startsWith("http")) {
+    return { ok: true };
+  }
+
+  if (link.startsWith("#")) {
+    return { ok: false, message: "Fragment-only links require a target file." };
+  }
+
+  const hashIndex = link.indexOf("#");
+  const filePart = hashIndex >= 0 ? link.slice(0, hashIndex) : link;
+  const anchorPart = hashIndex >= 0 ? link.slice(hashIndex + 1) : "";
+
+  if (!filePart) {
+    return { ok: false, message: "Link missing target file." };
+  }
+
+  const resolvedPath = join(baseDir, filePart);
+  if (!existsSync(resolvedPath)) {
+    return { ok: false, message: `Missing file: ${filePart}` };
+  }
+
+  if (anchorPart.length > 0) {
+    const content = readFileSync(resolvedPath, "utf8");
+    if (!resolveMarkdownAnchor(content, anchorPart)) {
+      return { ok: false, message: `Missing anchor #${anchorPart} in ${filePart}` };
+    }
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Validates every relative markdown link in text, including heading anchors.
+ * @param {string} baseDir
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function brokenMarkdownLinksWithAnchors(baseDir, text) {
+  const broken = [];
+  for (const link of extractMarkdownLinks(text)) {
+    const result = resolveMarkdownLink(baseDir, link);
+    if (!result.ok) {
+      broken.push(`${link} (${result.message})`);
+    }
+  }
+  return broken;
+}
+
+/**
+ * True when stub text violates pointer-only rules (provider tools or ingestion-loop copy).
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function violatesPointerOnlyStubRules(text) {
+  return PROVIDER_TOOL_PATTERN.test(text) || containsIngestionLoopPhaseOrder(text);
 }
 
 /**
