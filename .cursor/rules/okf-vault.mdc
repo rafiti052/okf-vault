@@ -1,0 +1,30 @@
+---
+description: OKF Knowledge Vault workflow — use the canonical skill and helper CLI
+alwaysApply: true
+---
+
+# OKF Knowledge Vault
+
+Read [AGENTS.md](../../AGENTS.md) at the start of any vault-related task.
+
+## Workflow
+
+Use the **okf-knowledge-vault** skill at `.agents/skills/okf-knowledge-vault/SKILL.md` for `initialize`, `ingest`, `organize`, `validate`, and `visualize` modes. Follow phase order and curator interaction rules defined there.
+
+## TypeScript helper
+
+- Implement CLI and vault logic in `src/vault/` following existing patterns.
+- Use fixtures under `test/fixtures/` for contract and workflow tests.
+- Build with `npm run build`; invoke as `node dist/main.js <command>` with argument arrays only.
+- Parse helper results from **stdout JSON**; treat stderr as human diagnostics.
+
+## Failure handling
+
+- Enforce **ADR-009 failure-stop**: after a source failure, stop and offer retry, skip with reason, or abort — never silently continue.
+- Map helper exit codes 0–5 to curator actions per `references/helper-invocation.md`.
+- Run `recover` before re-validating when a transaction journal is present.
+
+## Git and managed paths
+
+- **Helper-only Git transactions** — use `commit` and `recover`; do not hand-edit managed vault files during ingestion.
+- Do not add automatic watchers, batch silent conversion, or compozy/cy-* workflow dependencies.

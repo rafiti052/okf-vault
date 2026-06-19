@@ -3,3 +3,8 @@ node_modules/
 dist/
 dist-test/
 .DS_Store
+
+.preflight-missing-*/
+.claude/settings.local.json
+.claude/settings.local.*
+*.tsbuildinfo

@@ -1,7 +1,7 @@
-import { readFileSync, mkdtempSync, existsSync } from "node:fs";
+import { readFileSync, mkdtempSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   CAPABILITY_NAMES,
@@ -29,6 +29,14 @@ const root = join(__dirname, "..", "..");
 const fixturesDir = join(root, "test", "fixtures", "envelopes");
 const refsDir = join(skillRoot(root), "references");
 const skillDir = skillRoot(root);
+
+after(() => {
+  for (const entry of readdirSync(root)) {
+    if (entry.startsWith(".preflight-missing-")) {
+      rmSync(join(root, entry), { recursive: true, force: true });
+    }
+  }
+});
 
 describe("provider-neutral skill artifacts", () => {
   it("SKILL.md and capability references contain zero vendor MCP tool name patterns", () => {
