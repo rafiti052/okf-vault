@@ -15,7 +15,7 @@ Use the **okf-knowledge-vault** skill at `.agents/skills/okf-knowledge-vault/SKI
 
 - Implement CLI and vault logic in `src/vault/` following existing patterns.
 - Use fixtures under `test/fixtures/` for contract and workflow tests.
-- Build with `npm run build`; invoke as `node dist/main.js <command>` with argument arrays only.
+- Build with `pnpm run build`; invoke as `node dist/main.js <command>` with argument arrays only.
 - Parse helper results from **stdout JSON**; treat stderr as human diagnostics.
 
 ## Failure handling

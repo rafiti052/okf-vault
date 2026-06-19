@@ -27,13 +27,13 @@ The skill decides *what* to process; the helper decides *whether* staged output 
 
 - **Node.js 24** (see `.nvmrc`)
 - **Git**
-- **npm**
+- **pnpm** (via Corepack; see `packageManager` in `package.json`)
 
 ## Quick start
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 node dist/main.js init /path/to/vault
 node dist/main.js validate /path/to/vault
 ```
@@ -75,10 +75,10 @@ The skill enforces explicit sources, sequential processing, visible progress eve
 ## Development
 
 ```bash
-npm test              # build + run all tests
-npm run lint          # ESLint
-npm run format:check  # Prettier
-npm run typecheck     # TypeScript without emit
+pnpm test              # build + run all tests
+pnpm run lint          # ESLint
+pnpm run format:check  # Prettier
+pnpm run typecheck     # TypeScript without emit
 ```
 
 ## Contracts

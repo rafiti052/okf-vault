@@ -21,8 +21,8 @@ The skill orchestrates acquisition, semantic conversion, and curation proposals.
 Build before invoking:
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Invoke as a child process with an **argument array** — never shell-interpolate curator paths:
@@ -31,7 +31,7 @@ Invoke as a child process with an **argument array** — never shell-interpolate
 node dist/main.js <command> [args...]
 ```
 
-The binary name is `okf-vault` when installed via `npm link` or `npx`; during development use `node dist/main.js` directly.
+The binary name is `okf-vault` when installed via `pnpm link` or `pnpm dlx`; during development use `node dist/main.js` directly.
 
 ## Key contracts
 
@@ -74,9 +74,9 @@ Do not duplicate reference content elsewhere in the repo.
 ## Development
 
 ```bash
-npm test              # build + run all tests
-npm run lint          # ESLint
-npm run format:check  # Prettier
+pnpm test              # build + run all tests
+pnpm run lint          # ESLint
+pnpm run format:check  # Prettier
 ```
 
 Requires Node 24 (see `.nvmrc`).
