@@ -1,3 +1,7 @@
+---
+disable-model-invocation: true
+---
+
 # /vault-ingest
 
 Guided ingest wizard for one explicit source (MCP artifact or local file).

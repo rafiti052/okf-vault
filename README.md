@@ -81,6 +81,15 @@ pnpm run format:check  # Prettier
 pnpm run typecheck     # TypeScript without emit
 ```
 
+### Runtime adapter symlinks
+
+Cursor and Claude Code discover `/vault-ingest` via thin symlinks to the canonical command stubs under `.agents/skills/okf-knowledge-vault/commands/`:
+
+- **Cursor** — `.cursor/skills/okf-knowledge-vault/commands/` → canonical `commands/`
+- **Claude Code** — `.claude/skills/okf-knowledge-vault/` → canonical skill (includes `commands/`)
+
+On Windows, if `git config core.symlinks` is `false`, Git may check out symlink paths as plain text files. Enable symlink support (`git config core.symlinks true`) or recreate the links manually after clone so runtime adapters resolve to the canonical stubs.
+
 ## Contracts
 
 All durable contracts live in [`.agents/skills/okf-knowledge-vault/references/`](.agents/skills/okf-knowledge-vault/references/). Do not maintain duplicate reference files at the repo root.

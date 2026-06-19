@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 export const SOURCE_ENVELOPE_VERSION = "okf-source-envelope/1.0.0";
@@ -72,6 +72,122 @@ export const NORMALIZATION_ERROR_CODES = {
  */
 export function skillRoot(root) {
   return join(root, ".agents", "skills", "okf-knowledge-vault");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
+export function canonicalCommandsDir(root) {
+  return join(skillRoot(root), "commands");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
+export function cursorCommandsDir(root) {
+  return join(root, ".cursor", "skills", "okf-knowledge-vault", "commands");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
+export function claudeCommandsDir(root) {
+  return join(root, ".claude", "skills", "okf-knowledge-vault", "commands");
+}
+
+export const MVP_COMMAND_STUBS = ["vault-ingest.md", "registry.md"];
+
+/**
+ * @param {string} path
+ * @returns {boolean}
+ */
+export function pathIsSymlink(path) {
+  return existsSync(path) && lstatSync(path).isSymbolicLink();
+}
+
+/**
+ * @param {string} left
+ * @param {string} right
+ * @returns {boolean}
+ */
+export function resolvesToSameRealpath(left, right) {
+  if (!existsSync(left) || !existsSync(right)) {
+    return false;
+  }
+  return realpathSync(left) === realpathSync(right);
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripYamlFrontmatter(text) {
+  return text.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasDisableModelInvocationFrontmatter(text) {
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!match) {
+    return false;
+  }
+  return /disable-model-invocation:\s*true/.test(match[1]);
+}
+
+/**
+ * True when a regular file copies the canonical stub body instead of symlinking or wrapping.
+ * @param {string} adapterText
+ * @param {string} canonicalText
+ * @returns {boolean}
+ */
+export function isDuplicateStubBody(adapterText, canonicalText) {
+  const adapterBody = stripYamlFrontmatter(adapterText).trim();
+  const canonicalBody = stripYamlFrontmatter(canonicalText).trim();
+  return adapterBody.length > 0 && adapterBody === canonicalBody;
+}
+
+/**
+ * @param {string} adapterCommandsDir
+ * @param {string} canonicalCommandsDirPath
+ * @param {string} stubFileName
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function assertAdapterStubResolves(
+  adapterCommandsDir,
+  canonicalCommandsDirPath,
+  stubFileName,
+) {
+  const adapterPath = join(adapterCommandsDir, stubFileName);
+  const canonicalPath = join(canonicalCommandsDirPath, stubFileName);
+
+  if (!existsSync(adapterPath)) {
+    return { ok: false, message: `Missing adapter stub: ${adapterPath}` };
+  }
+  if (!existsSync(canonicalPath)) {
+    return { ok: false, message: `Missing canonical stub: ${canonicalPath}` };
+  }
+  if (!resolvesToSameRealpath(adapterPath, canonicalPath)) {
+    const adapterText = readFileSync(adapterPath, "utf8");
+    const canonicalText = readFileSync(canonicalPath, "utf8");
+    if (isDuplicateStubBody(adapterText, canonicalText)) {
+      return {
+        ok: false,
+        message: `Adapter stub duplicates canonical body: ${adapterPath}`,
+      };
+    }
+    return {
+      ok: false,
+      message: `Adapter stub does not resolve to canonical path: ${adapterPath}`,
+    };
+  }
+
+  return { ok: true };
 }
 
 /**
