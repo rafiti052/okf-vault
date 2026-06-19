@@ -1,11 +1,14 @@
 ---
 name: okf-knowledge-vault
 description: >-
-  Provider-neutral OKF Knowledge Vault workflow. Use when initializing a vault,
-  ingesting local/Drive/Granola sources, organizing notes, validating quality,
-  or visualizing the knowledge graph. Orchestrates acquisition and conversion;
-  delegates deterministic validation, manifest, graph, and Git work to the
-  okf-vault helper.
+  Provider-neutral OKF Knowledge Vault workflow. Commands: /vault-ingest (ingest
+  wizard, recommended for new content), /vault-init (initialize ./knowledge/),
+  /vault-organize, /vault-validate, /vault-visualize, /vault-bootstrap,
+  /vault-ingest-check. Triggers: initializing a vault, ingesting
+  local/Drive/Granola sources, organizing notes, validating quality,
+  visualizing the knowledge graph, bootstrapping a new vault, ingest-then-validate
+  pipeline. Orchestrates acquisition and conversion; delegates deterministic
+  validation, manifest, graph, and Git work to the okf-vault helper.
 ---
 
 # OKF Knowledge Vault
@@ -59,6 +62,8 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 | Normalization            | [references/normalization.md](references/normalization.md)                             |
 | Progress events          | [references/progress-events.md](references/progress-events.md)                         |
 | Helper invocation        | [references/helper-invocation.md](references/helper-invocation.md)                     |
+| Ingest wizard            | [references/ingest-wizard.md](references/ingest-wizard.md)                             |
+| Command registry         | [commands/registry.md](commands/registry.md)                                           |
 | Sequential ingestion     | [references/ingestion-loop.md](references/ingestion-loop.md)                           |
 | Organize / curate        | [references/organize.md](references/organize.md)                                       |
 | Visualizer               | [references/visualizer.md](references/visualizer.md)                                   |

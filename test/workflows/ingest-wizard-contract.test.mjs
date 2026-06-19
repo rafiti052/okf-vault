@@ -46,7 +46,7 @@ function extractMarkdownTableFields(markdown, sectionHeading) {
   assert.ok(sectionIndex >= 0, `Missing section: ${sectionHeading}`);
 
   const afterSection = markdown.slice(sectionIndex);
-  const tableStart = afterSection.indexOf("| Field |");
+  const tableStart = afterSection.search(/\| Field\s+\|/);
   assert.ok(tableStart >= 0, `Missing field table under ${sectionHeading}`);
 
   const tableBlock = afterSection.slice(tableStart);

@@ -39,6 +39,20 @@ export const CAPABILITY_NAMES = [
   "invoke_process",
 ];
 
+export const VAULT_COMMANDS = [
+  "vault-ingest",
+  "vault-init",
+  "vault-organize",
+  "vault-validate",
+  "vault-visualize",
+  "vault-bootstrap",
+  "vault-ingest-check",
+];
+
+export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
+
+export const PIPELINE_COMMANDS = ["vault-bootstrap", "vault-ingest-check"];
+
 export const PREFLIGHT_ERROR_CODES = {
   vaultNotInitialized: "PREFLIGHT_VAULT_NOT_INITIALIZED",
   gitUnavailable: "PREFLIGHT_GIT_UNAVAILABLE",
@@ -497,4 +511,89 @@ export function documentsOrganizePathMoveRejection(text) {
   return (
     lower.includes("path move") && lower.includes("rename") && lower.includes("silent duplicate")
   );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function usesVaultPrefixOnly(text) {
+  return !/\/okf-/i.test(text);
+}
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function extractVaultCommandSlugs(text) {
+  const slugs = new Set();
+  const pattern = /\/vault-([a-z-]+)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    slugs.add(`vault-${match[1]}`);
+  }
+  return [...slugs].sort();
+}
+
+/**
+ * @param {string} registryText
+ * @returns {Map<string, { mode: string; availability: string }>}
+ */
+export function parseRegistryCommandRows(registryText) {
+  const rows = new Map();
+  for (const line of registryText.split("\n")) {
+    if (!line.includes("`/vault-")) {
+      continue;
+    }
+    const cells = line
+      .split("|")
+      .map((cell) => cell.trim())
+      .filter((cell) => cell.length > 0);
+    if (cells.length < 4) {
+      continue;
+    }
+    const command = cells[0].replace(/^`\/vault-/, "vault-").replace(/`$/, "");
+    const mode = cells[2];
+    const availability = cells[3];
+    rows.set(command, { mode, availability });
+  }
+  return rows;
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsIngestFirstRouting(text) {
+  const lower = text.toLowerCase();
+  return (
+    text.includes("/vault-ingest") &&
+    (lower.includes("recommended") ||
+      lower.includes("new content") ||
+      lower.includes("starting point"))
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsVaultSetupRouting(text) {
+  return (
+    text.includes("/vault-init") &&
+    text.includes("/vault-bootstrap") &&
+    text.includes("./knowledge/")
+  );
+}
+
+/**
+ * @param {string} frontmatterDescription
+ * @returns {boolean}
+ */
+export function documentsSkillModeTriggers(frontmatterDescription) {
+  const lower = frontmatterDescription.toLowerCase();
+  const modeHits = ["initializing", "ingesting", "organizing", "validating", "visualizing"].filter(
+    (phrase) => lower.includes(phrase),
+  );
+  return modeHits.length >= 4 && lower.includes("/vault-ingest");
 }

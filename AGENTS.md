@@ -2,6 +2,21 @@
 
 This repository combines a **provider-neutral workflow skill** with a **deterministic TypeScript helper CLI** for AI-assisted OKF vault ingestion. Any agent runtime (Cursor, Claude Code, etc.) should treat this file as the entry point.
 
+## Choose the right command
+
+Use this one-screen decision tree before reading the full skill. Map MCP and filesystem access via [capabilities preflight](.agents/skills/okf-knowledge-vault/references/capabilities.md) — never assume runtime-specific tool names.
+
+| Your goal | Command | Notes |
+| --------- | ------- | ----- |
+| **Add new content** (recommended starting point) | **`/vault-ingest`** | Interactive ingest wizard — MCP artifact or explicit local file |
+| Set up a new vault at `./knowledge/` | `/vault-init` or `/vault-bootstrap` | `/vault-init` creates layout; `/vault-bootstrap` runs init then validate (Phase 1b) |
+| Organize notes after ingestion | `/vault-organize` | Dossiers and curation proposals (Phase 1b) |
+| Check vault health / contracts | `/vault-validate` | Contract, manifest, graph checks (Phase 1b) |
+| Inspect the knowledge graph | `/vault-visualize` | OKF visualizer (Phase 1b) |
+| Ingest then validate in one session | `/vault-ingest-check` | Composed pipeline (Phase 1b) |
+
+Full command list with availability labels: [commands/registry.md](.agents/skills/okf-knowledge-vault/commands/registry.md).
+
 ## Canonical skill
 
 Read and follow [`.agents/skills/okf-knowledge-vault/SKILL.md`](.agents/skills/okf-knowledge-vault/SKILL.md) for all vault workflows:
@@ -44,6 +59,7 @@ All durable contracts live under [`.agents/skills/okf-knowledge-vault/references
 | Vault layout      | [vault-layout.md](.agents/skills/okf-knowledge-vault/references/vault-layout.md) |
 | Capabilities      | [capabilities.md](.agents/skills/okf-knowledge-vault/references/capabilities.md) |
 | Helper invocation | [helper-invocation.md](.agents/skills/okf-knowledge-vault/references/helper-invocation.md) |
+| Ingest wizard      | [ingest-wizard.md](.agents/skills/okf-knowledge-vault/references/ingest-wizard.md) |
 
 Do not duplicate reference content elsewhere in the repo.
 
