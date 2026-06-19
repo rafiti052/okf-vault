@@ -151,9 +151,6 @@ describe("discoverability contract (integration)", () => {
         continue;
       }
       const resolved = resolve(registryDir, target);
-      if (target.includes("pipelines.md")) {
-        continue;
-      }
       assert.ok(existsSync(resolved), `Broken registry link "${target}" → ${resolved}`);
     }
   });

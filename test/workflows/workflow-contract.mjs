@@ -53,6 +53,13 @@ export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "vis
 
 export const PIPELINE_COMMANDS = ["vault-bootstrap", "vault-ingest-check"];
 
+export const PIPELINE_NAMES = ["bootstrap", "ingest-check"];
+
+export const PIPELINE_MODE_SEQUENCES = {
+  bootstrap: ["initialize", "validate"],
+  "ingest-check": ["ingest", "validate"],
+};
+
 export const PREFLIGHT_ERROR_CODES = {
   vaultNotInitialized: "PREFLIGHT_VAULT_NOT_INITIALIZED",
   gitUnavailable: "PREFLIGHT_GIT_UNAVAILABLE",
@@ -1023,4 +1030,175 @@ export function brokenMarkdownLinks(baseDir, text) {
     }
   }
   return broken;
+}
+
+/**
+ * @param {string} text
+ * @param {string[]} [pipelines]
+ * @returns {boolean}
+ */
+export function assertPipelineSections(text, pipelines = PIPELINE_NAMES) {
+  for (const name of pipelines) {
+    if (!new RegExp(`##\\s+${name}\\b`, "i").test(text)) {
+      return false;
+    }
+  }
+  return pipelines.length === 2;
+}
+
+/**
+ * @param {string} text
+ * @param {string} pipelineName
+ * @param {string[]} modes
+ * @returns {boolean}
+ */
+export function referencesSkillModeEntries(text, pipelineName, modes) {
+  const marker = `## ${pipelineName}`;
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const after = text.slice(start);
+  const nextPipeline = after.search(/\n## (?!#)/);
+  const section = nextPipeline >= 0 ? after.slice(0, nextPipeline) : after;
+
+  if (!section.includes("SKILL.md")) {
+    return false;
+  }
+  for (const mode of modes) {
+    if (!section.includes(mode)) {
+      return false;
+    }
+  }
+  if (containsIngestionLoopPhaseOrder(section)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * @param {string} text
+ * @param {string} pipelineName
+ * @returns {boolean}
+ */
+export function documentsPipelineRunIdPairs(text, pipelineName) {
+  const marker = `## ${pipelineName}`;
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const after = text.slice(start);
+  const nextPipeline = after.search(/\n## (?!#)/);
+  const section = nextPipeline >= 0 ? after.slice(0, nextPipeline) : after;
+  const lower = section.toLowerCase();
+  return lower.includes("run_started") && lower.includes("run_completed");
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsIngestCheckHardPause(text) {
+  const marker = "## ingest-check";
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const section = text.slice(start);
+  const lower = section.toLowerCase();
+  return (
+    lower.includes("hard pause") &&
+    lower.includes("skipped") &&
+    lower.includes("aborted") &&
+    /do\s+\*\*not\*\*\s+auto-validate|do not auto-validate/i.test(section)
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsIngestCheckValidateSuggestion(text) {
+  const marker = "## ingest-check";
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const section = text.slice(start);
+  const lower = section.toLowerCase();
+  return (
+    lower.includes("full success") &&
+    lower.includes("auto-suggest") &&
+    (lower.includes("confirms") || lower.includes("confirm")) &&
+    (lower.includes("opts out") || lower.includes("opt out"))
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsBootstrapVaultResolution(text) {
+  const marker = "## bootstrap";
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const section = text.slice(start);
+  return (
+    section.includes("./knowledge/") &&
+    section.includes("`not_initialized`") &&
+    /\/vault-init/.test(section)
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsIngestCheckWizardReuse(text) {
+  const marker = "## ingest-check";
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const section = text.slice(start);
+  return section.includes("ingest-wizard.md") && section.includes("delegate_ingest");
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsFreshValidateRunId(text) {
+  const lower = text.toLowerCase();
+  return lower.includes("fresh `run_id`") || lower.includes("fresh run_id");
+}
+
+/**
+ * @param {string} registryText
+ * @returns {Map<string, string>}
+ */
+export function parsePipelineRegistrySectionLinks(registryText) {
+  const links = new Map();
+  for (const command of PIPELINE_COMMANDS) {
+    const pattern = new RegExp(
+      `\\| \`/${command}\`[^\\n]*pipelines\\.md\\)\\s+(bootstrap|ingest-check)`,
+      "i",
+    );
+    const match = registryText.match(pattern);
+    if (match) {
+      links.set(command, match[1]);
+      continue;
+    }
+    const fallback = new RegExp(
+      `\\| \`/${command}\`[^\\n]*pipelines\\.md[^\\n]*(bootstrap|ingest-check)`,
+      "i",
+    );
+    const fallbackMatch = registryText.match(fallback);
+    if (fallbackMatch) {
+      links.set(command, fallbackMatch[1]);
+    }
+  }
+  return links;
 }
