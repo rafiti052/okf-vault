@@ -723,6 +723,71 @@ export const INGESTION_LOOP_HAPPY_PATH_EVENTS = [
   "run_completed",
 ];
 
+export const INGEST_WIZARD_STEPS = [
+  "resolve_vault",
+  "choose_source_type",
+  "acquire_mcp",
+  "acquire_local",
+  "confirm_source",
+  "delegate_ingest",
+  "post_commit",
+];
+
+export const INGEST_RUN_INPUT_FIELDS = ["vault_root", "run_id", "sources"];
+
+/**
+ * @param {string} skillText
+ * @param {string} heading
+ * @returns {string}
+ */
+export function extractSkillModeSection(skillText, heading) {
+  const marker = `### ${heading}`;
+  const start = skillText.indexOf(marker);
+  if (start < 0) {
+    return "";
+  }
+  const after = skillText.slice(start + marker.length);
+  const nextHeading = after.search(/\n### /);
+  return nextHeading >= 0 ? after.slice(0, nextHeading) : after;
+}
+
+/**
+ * True when a section enumerates most wizard steps (shadow orchestrator violation).
+ * @param {string} sectionText
+ * @param {string[]} [steps]
+ * @returns {boolean}
+ */
+export function duplicatesWizardStepList(sectionText, steps = INGEST_WIZARD_STEPS) {
+  let referenced = 0;
+  for (const step of steps) {
+    if (sectionText.includes(`\`${step}\``)) {
+      referenced += 1;
+    }
+  }
+  return referenced >= 5;
+}
+
+/**
+ * @param {string} text
+ * @param {string[]} [fields]
+ * @returns {boolean}
+ */
+export function documentsIngestRunInputHandoff(text, fields = INGEST_RUN_INPUT_FIELDS) {
+  return fields.every((field) => text.includes(`\`${field}\``));
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsNotInitializedRoutesAway(text) {
+  return (
+    text.includes("`not_initialized`") &&
+    /\/vault-init/.test(text) &&
+    /do not.*delegate|not.*ingest|routes to/i.test(text)
+  );
+}
+
 /**
  * @param {string} text
  * @returns {string[]}

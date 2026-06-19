@@ -19,13 +19,13 @@ Never embed runtime-specific MCP tool names in durable instructions. Map **capab
 
 ## User-facing modes
 
-| Mode         | Purpose                                                              | Entry                                               |
-| ------------ | -------------------------------------------------------------------- | --------------------------------------------------- |
-| `initialize` | Create vault layout, manifest, indexes, log, and Git repository      | Curator requests vault setup at a path              |
-| `ingest`     | Sequentially acquire, convert, validate, and commit supplied sources | Curator supplies an explicit source list with kinds |
-| `organize`   | Generate bounded dossiers and curation proposals after conversion    | Curator requests organization after ingestion       |
-| `validate`   | Run contract, manifest, graph, and recovery checks                   | Curator requests validation on an existing vault    |
-| `visualize`  | Invoke the configured OKF visualizer for manual graph review         | Curator requests visual inspection                  |
+| Mode         | Purpose                                                              | Entry                                                                |
+| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `initialize` | Create vault layout, manifest, indexes, log, and Git repository      | Curator requests vault setup at a path                               |
+| `ingest`     | Sequentially acquire, convert, validate, and commit supplied sources | `/vault-ingest` wizard (recommended) or curator-supplied `sources[]` |
+| `organize`   | Generate bounded dossiers and curation proposals after conversion    | Curator requests organization after ingestion                        |
+| `validate`   | Run contract, manifest, graph, and recovery checks                   | Curator requests validation on an existing vault                     |
+| `visualize`  | Invoke the configured OKF visualizer for manual graph review         | Curator requests visual inspection                                   |
 
 Each mode follows the phase order below unless the mode table limits scope (for example, `initialize` stops after vault creation; `validate` skips acquisition).
 
@@ -85,17 +85,43 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 
 ### ingest
 
-1. Parse curator run input: non-empty ordered `sources` with `kind`, `locator`, and `content_type` per entry. Reject duplicate stable source keys.
-2. Run full preflight including capability mapping for every kind in the batch.
-3. Emit `run_started`, then `preflight_passed` or `run_failed`.
-4. For each source in order, follow [ingestion-loop.md](references/ingestion-loop.md):
-   - acquire → normalize → **inspect** → profile select → convert → **validate-staged** → **commit** (or failure stop with retry / skip-with-reason / abort).
-5. On `already_processed`, emit `source_already_processed` and advance without commit.
-6. On `changed_conflict`, stop before conversion; never overwrite the manifest `note_path`.
-7. On curator skip, record manifest `skipped` with reason; emit `validation_failed` with `status: skipped` and no `commit_id`.
-8. Finish with `run_completed` when the batch is fully handled or `run_failed` on abort.
+**Entry paths** — choose one; orchestration below is identical after run input is known:
 
-**Forbidden during ingest:** batch silent conversion, automatic watchers, reprocessing sources not in the run input.
+| Path               | When                                      | Start                                                                                       |
+| ------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Command-driven** | Curator invokes `/vault-ingest` (ADR-007) | Follow [ingest-wizard.md](references/ingest-wizard.md) through acquisition and confirmation |
+| **Direct**         | Curator supplies an explicit `sources[]`  | Parse run input in [Direct run input](#direct-run-input) below                              |
+
+Do **not** embed wizard step lists here — the wizard contract owns acquisition UX; this section owns post-handoff orchestration only.
+
+#### Wizard handoff (command-driven only)
+
+When the wizard reaches `delegate_ingest`, ingest mode receives an **`IngestRunInput`** handoff. The wizard stops; do not re-run wizard steps or redefine post-acquisition phases.
+
+| Field        | Populated by wizard acquisition                                                                           |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `vault_root` | From `resolveVaultRoot()` during wizard `resolve_vault` — `found` required                                |
+| `run_id`     | Assigned at wizard source-type selection                                                                  |
+| `sources`    | Single-element array: confirmed `kind` (`local`, `google_drive`, or `granola`), `locator`, `content_type` |
+
+When `resolveVaultRoot()` returns `not_initialized`, the wizard routes to `/vault-init` — **do not** delegate to ingest mode. Validate handoff shape with `parseIngestRunInput()` before continuing to orchestration below.
+
+#### Direct run input
+
+When the curator supplies sources without the wizard, provide `vault_root`, `run_id`, and a non-empty ordered `sources` list. Each entry requires `kind`, `locator`, and `content_type`. Reject duplicate stable source keys.
+
+#### Orchestration (both paths)
+
+1. Run full preflight including capability mapping for every kind in the batch — **after** source metadata is confirmed (wizard handoff or direct input), **before** helper acquisition per [capabilities.md](references/capabilities.md).
+2. Emit `run_started`, then `preflight_passed` or `run_failed`.
+3. For each source in order, follow [ingestion-loop.md](references/ingestion-loop.md):
+   - acquire → normalize → **inspect** → profile select → convert → **validate-staged** → **commit** (or failure stop with retry / skip-with-reason / abort).
+4. On `already_processed`, emit `source_already_processed` and advance without commit.
+5. On `changed_conflict`, stop before conversion; never overwrite the manifest `note_path`.
+6. On curator skip, record manifest `skipped` with reason; emit `validation_failed` with `status: skipped` and no `commit_id`.
+7. Finish with `run_completed` when the batch is fully handled or `run_failed` on abort.
+
+**Forbidden during ingest:** batch silent conversion, automatic watchers, reprocessing sources not in the run input, shadow wizard orchestration after `delegate_ingest`.
 
 ### organize
 
