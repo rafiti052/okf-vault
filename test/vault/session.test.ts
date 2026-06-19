@@ -1,10 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 import { parseIngestRunInput } from "../../dist/vault/ingestion.js";
 import {
   createDefaultSessionContext,
   INGEST_WIZARD_STEPS,
   parseVaultSessionContext,
+  resolveVaultRoot,
   SESSION_EXIT_STATUSES,
   SESSION_SOURCE_KINDS,
   SessionContextError,
@@ -12,6 +16,78 @@ import {
   type IngestWizardState,
   type VaultSessionContext,
 } from "../../dist/vault/session.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, "..", "..");
+const resolveFixturesRoot = join(root, "test", "fixtures", "vaults", "resolve");
+
+describe("resolveVaultRoot", () => {
+  it("returns found with vault_root ending in knowledge when knowledge manifest exists", () => {
+    const repoRoot = join(resolveFixturesRoot, "knowledge-initialized");
+    const result = resolveVaultRoot(repoRoot);
+
+    assert.equal(result.status, "found");
+    assert.ok(result.vault_root);
+    assert.ok(result.vault_root.endsWith("knowledge"));
+    assert.equal(result.vault_root, join(repoRoot, "knowledge"));
+  });
+
+  it("returns not_initialized when neither knowledge manifest nor legacy marker exists", () => {
+    const repoRoot = join(resolveFixturesRoot, "missing");
+    const result = resolveVaultRoot(repoRoot);
+
+    assert.deepEqual(result, {
+      status: "not_initialized",
+      vault_root: null,
+    });
+  });
+
+  it("returns found via legacy repo-root marker when knowledge layout is absent", () => {
+    const repoRoot = join(resolveFixturesRoot, "legacy-root");
+    const result = resolveVaultRoot(repoRoot);
+
+    assert.equal(result.status, "found");
+    assert.equal(result.vault_root, repoRoot);
+  });
+
+  it("prefers knowledge layout when both knowledge manifest and legacy marker exist", () => {
+    const repoRoot = join(resolveFixturesRoot, "both-markers");
+    const result = resolveVaultRoot(repoRoot);
+
+    assert.equal(result.status, "found");
+    assert.equal(result.vault_root, join(repoRoot, "knowledge"));
+    assert.notEqual(result.vault_root, repoRoot);
+  });
+
+  it("returns not_initialized for a nonexistent repo root without throwing", () => {
+    const result = resolveVaultRoot("/nonexistent");
+
+    assert.deepEqual(result, {
+      status: "not_initialized",
+      vault_root: null,
+    });
+  });
+});
+
+describe("resolveVaultRoot session integration", () => {
+  it("creates default session context from resolved knowledge vault root", () => {
+    const repoRoot = join(resolveFixturesRoot, "knowledge-initialized");
+    const resolved = resolveVaultRoot(repoRoot);
+
+    assert.equal(resolved.status, "found");
+    assert.ok(resolved.vault_root);
+
+    const context = createDefaultSessionContext(resolved.vault_root);
+    assert.equal(context.vault_root, resolved.vault_root);
+    assert.deepEqual(context, {
+      vault_root: join(repoRoot, "knowledge"),
+      last_run_id: null,
+      last_mode: null,
+      last_exit_status: null,
+      last_source_kind: null,
+    } satisfies VaultSessionContext);
+  });
+});
 
 describe("parseVaultSessionContext", () => {
   it("accepts a fully populated context with all SkillMode and SessionExitStatus enum values", () => {

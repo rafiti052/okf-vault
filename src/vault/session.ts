@@ -1,4 +1,9 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { MANIFEST_RELATIVE_PATH } from "./constants.js";
 import type { IngestSourceInput } from "./ingestion.js";
+
+const KNOWLEDGE_DIR = "knowledge";
 
 export type SkillMode = "initialize" | "ingest" | "organize" | "validate" | "visualize";
 
@@ -148,4 +153,27 @@ export function createDefaultSessionContext(vaultRoot: string): VaultSessionCont
     last_exit_status: null,
     last_source_kind: null,
   });
+}
+
+export function resolveVaultRoot(repoRoot: string): VaultResolveResult {
+  const knowledgeManifestPath = join(repoRoot, KNOWLEDGE_DIR, MANIFEST_RELATIVE_PATH);
+  if (existsSync(knowledgeManifestPath)) {
+    return {
+      status: "found",
+      vault_root: join(repoRoot, KNOWLEDGE_DIR),
+    };
+  }
+
+  const legacyManifestPath = join(repoRoot, MANIFEST_RELATIVE_PATH);
+  if (existsSync(legacyManifestPath)) {
+    return {
+      status: "found",
+      vault_root: repoRoot,
+    };
+  }
+
+  return {
+    status: "not_initialized",
+    vault_root: null,
+  };
 }
