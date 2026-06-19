@@ -59,12 +59,13 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 | Normalization            | [references/normalization.md](references/normalization.md)                             |
 | Progress events          | [references/progress-events.md](references/progress-events.md)                         |
 | Helper invocation        | [references/helper-invocation.md](references/helper-invocation.md)                     |
+| Sequential ingestion     | [references/ingestion-loop.md](references/ingestion-loop.md)                           |
 | Article conversion       | [references/conversion-profiles/article.md](references/conversion-profiles/article.md) |
 | Deck conversion          | [references/conversion-profiles/deck.md](references/conversion-profiles/deck.md)       |
 | Panel conversion         | [references/conversion-profiles/panel.md](references/conversion-profiles/panel.md)     |
 | Video conversion         | [references/conversion-profiles/video.md](references/conversion-profiles/video.md)     |
 
-Sequential ingestion details (`references/ingestion-loop.md`) and organization workflow (`references/organize.md`) are added in later tasks — reference them when present; do not invent provider-specific steps here.
+Sequential organization workflow (`references/organize.md`) is added in later tasks — reference it when present; do not invent provider-specific steps here. **Ingest mode** details live in [ingestion-loop.md](references/ingestion-loop.md).
 
 ## Mode entry points
 
@@ -77,10 +78,17 @@ Sequential ingestion details (`references/ingestion-loop.md`) and organization w
 
 ### ingest
 
-1. Collect curator-supplied sources: kind (`local`, `google_drive`, `granola`), locator, and declared content type.
+1. Parse curator run input: non-empty ordered `sources` with `kind`, `locator`, and `content_type` per entry. Reject duplicate stable source keys.
 2. Run full preflight including capability mapping for every kind in the batch.
-3. For each source: acquire → normalize → inspect → convert → validate-staged → commit (or failure handling).
-4. Emit ingestion progress events per source; finish with `run_completed` or `run_failed`.
+3. Emit `run_started`, then `preflight_passed` or `run_failed`.
+4. For each source in order, follow [ingestion-loop.md](references/ingestion-loop.md):
+   - acquire → normalize → **inspect** → profile select → convert → **validate-staged** → **commit** (or failure stop with retry / skip-with-reason / abort).
+5. On `already_processed`, emit `source_already_processed` and advance without commit.
+6. On `changed_conflict`, stop before conversion; never overwrite the manifest `note_path`.
+7. On curator skip, record manifest `skipped` with reason; emit `validation_failed` with `status: skipped` and no `commit_id`.
+8. Finish with `run_completed` when the batch is fully handled or `run_failed` on abort.
+
+**Forbidden during ingest:** batch silent conversion, automatic watchers, reprocessing sources not in the run input.
 
 ### organize
 

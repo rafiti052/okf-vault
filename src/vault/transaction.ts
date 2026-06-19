@@ -527,7 +527,7 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
       const message = `okf-vault: commit ${envelope.source_key}`;
       createCommitHook(root, message);
       let commitHash = getHeadCommit(root);
-      let committedManifest = upsertCommittedSource(
+      const committedManifest = upsertCommittedSource(
         currentManifest,
         buildCommittedRecord(envelope, notePath, commitHash, processedAt),
       );
@@ -538,15 +538,10 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
       );
       stageManagedPaths(root, [MANIFEST_RELATIVE_PATH]);
       commitHash = amendCommitHook(root);
-      committedManifest = upsertCommittedSource(
-        currentManifest,
-        buildCommittedRecord(envelope, notePath, commitHash, processedAt),
-      );
-      writeFileAtomic(
-        join(root, MANIFEST_RELATIVE_PATH),
-        serializeManifest(committedManifest),
-        renameSync,
-      );
+      const headManifest = readManagedFileFromHead(root, MANIFEST_RELATIVE_PATH);
+      if (headManifest !== undefined) {
+        writeFileAtomic(join(root, MANIFEST_RELATIVE_PATH), headManifest, renameSync);
+      }
     } catch (error) {
       rollbackFailure(
         root,

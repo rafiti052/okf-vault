@@ -25,7 +25,7 @@ import {
   manifestRevision,
   saveManifest,
 } from "../../dist/vault/manifest.js";
-import { runGit } from "../../dist/vault/git.js";
+import { runGit, getManagedPathStatus } from "../../dist/vault/git.js";
 import {
   acquireVaultLock,
   commitStagedSource,
@@ -293,7 +293,9 @@ describe("successful commit integration", () => {
 
     const record = loadManifest(vaultRoot).sources[0];
     assert.equal(record?.status, "committed");
-    assert.equal(record?.commit, result.commit);
+    assert.equal(result.commit, afterHead);
+    assert.match(record?.commit ?? "", /^[a-f0-9]{40}$/);
+    assert.equal(getManagedPathStatus(vaultRoot).clean, true);
     assert.equal(existsSync(join(vaultRoot, "unrelated.txt")), true);
     assert.match(runGit(vaultRoot, ["status", "--porcelain"]).stdout, /\?\? unrelated\.txt/);
   });

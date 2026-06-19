@@ -153,6 +153,13 @@ export function upsertCommittedSource(manifest: Manifest, record: SourceRecord):
   });
 }
 
+export function upsertSkippedSource(manifest: Manifest, record: SourceRecord): Manifest {
+  if (record.status !== "skipped") {
+    throw new ManifestValidationError("upsertSkippedSource requires status 'skipped'");
+  }
+  return upsertCommittedSource(manifest, record);
+}
+
 export function validateManifestSchema(manifest: Manifest): void {
   if (manifest.schema_version !== MANIFEST_SCHEMA_VERSION) {
     throw new ManifestValidationError(
