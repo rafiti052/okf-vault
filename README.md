@@ -83,12 +83,18 @@ pnpm run typecheck     # TypeScript without emit
 
 ### Runtime adapter symlinks
 
-Cursor and Claude Code discover `/vault-ingest` via thin symlinks to the canonical command stubs under `.agents/skills/okf-knowledge-vault/commands/`:
+Cursor and Claude Code discover all seven `/vault-*` commands plus `registry.md` via thin symlinks to the canonical command stubs under `.agents/skills/okf-knowledge-vault/commands/`:
 
 - **Cursor** — `.cursor/skills/okf-knowledge-vault/commands/` → canonical `commands/`
 - **Claude Code** — `.claude/skills/okf-knowledge-vault/` → canonical skill (includes `commands/`)
 
-On Windows, if `git config core.symlinks` is `false`, Git may check out symlink paths as plain text files. Enable symlink support (`git config core.symlinks true`) or recreate the links manually after clone so runtime adapters resolve to the canonical stubs.
+Canonical stubs carry `disable-model-invocation: true` frontmatter; Cursor inherits it through the `commands/` directory symlink (ADR-008).
+
+On Windows, if `git config core.symlinks` is `false`, Git may check out symlink paths as plain text files. Enable symlink support (`git config core.symlinks true`) or run the optional adapter link script after clone:
+
+```bash
+node scripts/link-runtime-adapters.mjs
+```
 
 ## Contracts
 

@@ -7,7 +7,10 @@ import {
   canonicalCommandsDir,
   cursorCommandsDir,
   claudeCommandsDir,
+  ALL_VAULT_COMMAND_STUBS,
+  PIPELINE_COMMANDS,
   SHIPPED_COMMAND_STUBS,
+  VAULT_COMMANDS,
   pathIsSymlink,
   resolvesToSameRealpath,
   assertAdapterStubResolves,
@@ -77,6 +80,16 @@ describe("runtime adapter symlinks (unit)", () => {
     assert.equal(resolvesToSameRealpath(claudeDir, canonicalDir), true);
   });
 
+  it("all seven vault command stubs resolve through Cursor and Claude adapter paths", () => {
+    assert.equal(ALL_VAULT_COMMAND_STUBS.length, 7);
+    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+      const cursorResult = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
+      assert.equal(cursorResult.ok, true, cursorResult.ok ? "" : cursorResult.message);
+      const claudeResult = assertAdapterStubResolves(claudeDir, canonicalDir, stubFileName);
+      assert.equal(claudeResult.ok, true, claudeResult.ok ? "" : claudeResult.message);
+    }
+  });
+
   for (const stubFileName of SHIPPED_COMMAND_STUBS) {
     it(`Cursor ${stubFileName} resolves to canonical stub`, () => {
       const result = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
@@ -92,9 +105,15 @@ describe("runtime adapter symlinks (unit)", () => {
     });
   }
 
-  it("Cursor-visible vault-ingest includes disable-model-invocation frontmatter", () => {
-    const cursorIngestText = readFileSync(join(cursorDir, "vault-ingest.md"), "utf8");
-    assert.equal(hasDisableModelInvocationFrontmatter(cursorIngestText), true);
+  it("Cursor-visible stubs for all seven commands include disable-model-invocation frontmatter", () => {
+    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+      const cursorText = readFileSync(join(cursorDir, stubFileName), "utf8");
+      assert.equal(
+        hasDisableModelInvocationFrontmatter(cursorText),
+        true,
+        `missing disable-model-invocation in ${stubFileName}`,
+      );
+    }
   });
 
   it("no duplicate full stub bodies exist under Cursor or Claude adapter trees", () => {
@@ -154,14 +173,29 @@ describe("runtime adapter symlinks (integration)", () => {
     assert.match(broken.message, /Missing canonical|does not resolve/);
   });
 
-  it("vault-ingest slash entry is discoverable at expected runtime paths", () => {
-    for (const runtimeDir of [cursorDir, claudeDir]) {
-      const ingestPath = join(runtimeDir, "vault-ingest.md");
-      assert.ok(existsSync(ingestPath));
-      const heading = readFileSync(ingestPath, "utf8")
-        .split("\n")
-        .find((line) => line.startsWith("#"));
-      assert.match(heading ?? "", /\/vault-ingest/);
+  it("all seven /vault-* slash entries are discoverable at expected runtime paths", () => {
+    for (const command of VAULT_COMMANDS) {
+      const stubFileName = `${command}.md`;
+      for (const runtimeDir of [cursorDir, claudeDir]) {
+        const stubPath = join(runtimeDir, stubFileName);
+        assert.ok(existsSync(stubPath), `missing ${stubPath}`);
+        const heading = readFileSync(stubPath, "utf8")
+          .split("\n")
+          .find((line) => line.startsWith("#"));
+        assert.match(heading ?? "", new RegExp(`/${command}`));
+      }
+    }
+  });
+
+  it("Cursor pipeline command stubs include disable-model-invocation frontmatter", () => {
+    for (const command of PIPELINE_COMMANDS) {
+      const stubPath = join(cursorDir, `${command}.md`);
+      const stubText = readFileSync(stubPath, "utf8");
+      assert.equal(
+        hasDisableModelInvocationFrontmatter(stubText),
+        true,
+        `missing disable-model-invocation in ${command}.md`,
+      );
     }
   });
 });
