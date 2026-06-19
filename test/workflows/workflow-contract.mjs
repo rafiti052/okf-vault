@@ -735,6 +735,166 @@ export const INGEST_WIZARD_STEPS = [
 
 export const INGEST_RUN_INPUT_FIELDS = ["vault_root", "run_id", "sources"];
 
+export const VAULT_SESSION_CONTEXT_FIELDS = [
+  "vault_root",
+  "last_run_id",
+  "last_mode",
+  "last_exit_status",
+  "last_source_kind",
+];
+
+export const INGEST_WIZARD_STATE_FIELDS = ["step", "source_type", "pending_source", "run_id"];
+
+export const INGEST_SOURCE_INPUT_FIELDS = ["kind", "locator", "content_type"];
+
+/** Progress events documented in ingest-wizard.md emission table (post-delegation vocabulary). */
+export const WIZARD_PROGRESS_EMISSION_EVENTS = [
+  "run_started",
+  "preflight_passed",
+  "source_acquired",
+  "source_already_processed",
+  "conversion_started",
+  "validation_failed",
+  "source_committed",
+  "run_failed",
+  "run_completed",
+];
+
+/** Happy-path subset in wizard emission table order for ordering checks. */
+export const WIZARD_HAPPY_PATH_PROGRESS_EVENTS = [
+  "run_started",
+  "preflight_passed",
+  "source_acquired",
+  "conversion_started",
+  "source_committed",
+  "run_completed",
+];
+
+/**
+ * @param {string} markdown
+ * @param {string} sectionHeading
+ * @returns {string[]}
+ */
+export function extractMarkdownTableFields(markdown, sectionHeading) {
+  const sectionIndex = markdown.indexOf(sectionHeading);
+  if (sectionIndex < 0) {
+    return [];
+  }
+
+  const afterSection = markdown.slice(sectionIndex);
+  const tableStart = afterSection.search(/\| Field\s+\|/);
+  if (tableStart < 0) {
+    return [];
+  }
+
+  const tableBlock = afterSection.slice(tableStart);
+  const tableEnd = tableBlock.indexOf("\n\n");
+  const tableText = tableEnd >= 0 ? tableBlock.slice(0, tableEnd) : tableBlock;
+
+  const fields = [];
+  for (const line of tableText.split("\n")) {
+    const match = line.match(/^\|\s*`([^`]+)`\s*\|/);
+    if (match) {
+      fields.push(match[1]);
+    }
+  }
+  return fields;
+}
+
+/**
+ * @param {string} sourceText
+ * @param {string} interfaceName
+ * @returns {string[]}
+ */
+export function extractInterfaceFieldNames(sourceText, interfaceName) {
+  const pattern = new RegExp(`export interface ${interfaceName}\\s*\\{([^}]+)\\}`, "s");
+  const match = sourceText.match(pattern);
+  if (!match) {
+    return [];
+  }
+
+  const fields = [];
+  for (const line of match[1].split("\n")) {
+    const fieldMatch = line.match(/^\s*(\w+)\??\s*:/);
+    if (fieldMatch) {
+      fields.push(fieldMatch[1]);
+    }
+  }
+  return fields;
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function extractProgressEmissionSection(text) {
+  const marker = "## Progress event emission points";
+  const start = text.indexOf(marker);
+  if (start < 0) {
+    return "";
+  }
+  const after = text.slice(start + marker.length);
+  const nextHeading = after.search(/\n## /);
+  return nextHeading >= 0 ? after.slice(0, nextHeading) : after;
+}
+
+/**
+ * @param {string} text
+ * @param {string[]} [events]
+ * @returns {boolean}
+ */
+export function verifyWizardProgressEventDocumentation(
+  text,
+  events = WIZARD_PROGRESS_EMISSION_EVENTS,
+) {
+  const section = extractProgressEmissionSection(text);
+  if (section.length === 0) {
+    return false;
+  }
+
+  for (const event of events) {
+    if (!REQUIRED_PROGRESS_EVENTS.includes(event)) {
+      return false;
+    }
+    if (!section.includes(`\`${event}\``)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @param {string} text
+ * @param {string[]} [steps]
+ * @returns {boolean}
+ */
+export function assertIngestWizardStepSections(text, steps = INGEST_WIZARD_STEPS) {
+  for (const step of steps) {
+    if (!new RegExp(`##\\s+[0-9a-z.]+\\s+${step}\\b`, "i").test(text)) {
+      return false;
+    }
+    if (!text.includes(`\`${step}\``)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Builds the IngestRunInput handoff object described at delegate_ingest.
+ * @param {string} vaultRoot
+ * @param {string} runId
+ * @param {{ kind: string; locator: string; content_type: string }} pendingSource
+ * @returns {{ vault_root: string; run_id: string; sources: Array<{ kind: string; locator: string; content_type: string }> }}
+ */
+export function buildWizardHandoffInput(vaultRoot, runId, pendingSource) {
+  return {
+    vault_root: vaultRoot,
+    run_id: runId,
+    sources: [pendingSource],
+  };
+}
+
 /**
  * @param {string} skillText
  * @param {string} heading

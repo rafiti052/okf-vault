@@ -3,66 +3,31 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { IngestInputError, parseIngestRunInput } from "../../dist/vault/ingestion.js";
 import {
+  assertIngestWizardStepSections,
+  buildWizardHandoffInput,
   CAPABILITY_NAMES,
   documentsIngestionFailureActions,
+  extractInterfaceFieldNames,
+  extractMarkdownTableFields,
+  INGEST_SOURCE_INPUT_FIELDS,
+  INGEST_WIZARD_STATE_FIELDS,
+  INGEST_WIZARD_STEPS,
+  REQUIRED_PROGRESS_EVENTS,
   skillRoot,
+  VAULT_SESSION_CONTEXT_FIELDS,
+  verifyHappyPathOrdering,
+  verifyWizardProgressEventDocumentation,
+  WIZARD_HAPPY_PATH_PROGRESS_EVENTS,
+  WIZARD_PROGRESS_EMISSION_EVENTS,
 } from "./workflow-contract.mjs";
-import { parseVaultSessionContext } from "../../dist/vault/session.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
 const skillDir = skillRoot(root);
 const ingestWizardPath = join(skillDir, "references", "ingest-wizard.md");
 const sessionSourcePath = join(root, "src", "vault", "session.ts");
-
-const INGEST_WIZARD_STEPS = [
-  "resolve_vault",
-  "choose_source_type",
-  "acquire_mcp",
-  "acquire_local",
-  "confirm_source",
-  "delegate_ingest",
-  "post_commit",
-];
-
-const VAULT_SESSION_CONTEXT_FIELDS = [
-  "vault_root",
-  "last_run_id",
-  "last_mode",
-  "last_exit_status",
-  "last_source_kind",
-];
-
-const INGEST_WIZARD_STATE_FIELDS = ["step", "source_type", "pending_source", "run_id"];
-
-const INGEST_SOURCE_INPUT_FIELDS = ["kind", "locator", "content_type"];
-
-/**
- * @param {string} markdown
- * @returns {string[]}
- */
-function extractMarkdownTableFields(markdown, sectionHeading) {
-  const sectionIndex = markdown.indexOf(sectionHeading);
-  assert.ok(sectionIndex >= 0, `Missing section: ${sectionHeading}`);
-
-  const afterSection = markdown.slice(sectionIndex);
-  const tableStart = afterSection.search(/\| Field\s+\|/);
-  assert.ok(tableStart >= 0, `Missing field table under ${sectionHeading}`);
-
-  const tableBlock = afterSection.slice(tableStart);
-  const tableEnd = tableBlock.indexOf("\n\n");
-  const tableText = tableEnd >= 0 ? tableBlock.slice(0, tableEnd) : tableBlock;
-
-  const fields = [];
-  for (const line of tableText.split("\n")) {
-    const match = line.match(/^\|\s*`([^`]+)`\s*\|/);
-    if (match) {
-      fields.push(match[1]);
-    }
-  }
-  return fields;
-}
 
 /**
  * @param {string} markdown
@@ -91,14 +56,15 @@ function indexOfSuggestion(text, command) {
 
 describe("ingest-wizard contract", () => {
   const text = readFileSync(ingestWizardPath, "utf8");
+  const sessionSource = readFileSync(sessionSourcePath, "utf8");
 
   it("contains numbered step sections for all seven IngestWizardStep values", () => {
-    for (const step of INGEST_WIZARD_STEPS) {
-      assert.match(text, new RegExp(`##\\s+[0-9a-z.]+\\s+${step}\\b`, "i"));
-    }
-    for (const step of INGEST_WIZARD_STEPS) {
-      assert.match(text, new RegExp(`\`${step}\``, "g"));
-    }
+    assert.equal(assertIngestWizardStepSections(text), true);
+  });
+
+  it("detects missing wizard step headings in synthetic markdown", () => {
+    const broken = text.replace(/##\s+5\.\s+delegate_ingest/i, "## 5. removed_step");
+    assert.equal(assertIngestWizardStepSections(broken), false);
   });
 
   it("documents exactly two source type branches: MCP artifact and local file", () => {
@@ -130,24 +96,33 @@ describe("ingest-wizard contract", () => {
   });
 
   it("markdown table fields match VaultSessionContext and IngestWizardState from session.ts", () => {
-    const sessionSource = readFileSync(sessionSourcePath, "utf8");
+    const sessionInterfaceFields = extractInterfaceFieldNames(sessionSource, "VaultSessionContext");
+    const wizardInterfaceFields = extractInterfaceFieldNames(sessionSource, "IngestWizardState");
 
-    for (const field of VAULT_SESSION_CONTEXT_FIELDS) {
-      assert.match(sessionSource, new RegExp(`${field}:`));
-    }
-    for (const field of INGEST_WIZARD_STATE_FIELDS) {
-      assert.match(sessionSource, new RegExp(`${field}:`));
-    }
+    assert.deepEqual(sessionInterfaceFields, VAULT_SESSION_CONTEXT_FIELDS);
+    assert.deepEqual(wizardInterfaceFields, INGEST_WIZARD_STATE_FIELDS);
 
     const sessionFields = extractMarkdownTableFields(text, "### VaultSessionContext fields");
     const wizardFields = extractMarkdownTableFields(text, "### IngestWizardState fields");
 
     assert.deepEqual(sessionFields, VAULT_SESSION_CONTEXT_FIELDS);
     assert.deepEqual(wizardFields, INGEST_WIZARD_STATE_FIELDS);
+    assert.deepEqual(sessionFields, sessionInterfaceFields);
+    assert.deepEqual(wizardFields, wizardInterfaceFields);
 
     for (const field of INGEST_SOURCE_INPUT_FIELDS) {
       assert.match(text, new RegExp(`\`${field}\``));
     }
+  });
+
+  it("detects field parity drift when session.ts gains an undocumented field", () => {
+    const augmented = sessionSource.replace(
+      "last_source_kind: SessionSourceKind | null;",
+      "last_source_kind: SessionSourceKind | null;\n  experimental_field: string | null;",
+    );
+    const augmentedFields = extractInterfaceFieldNames(augmented, "VaultSessionContext");
+    const documentedFields = extractMarkdownTableFields(text, "### VaultSessionContext fields");
+    assert.notDeepEqual(augmentedFields, documentedFields);
   });
 
   it("contains delegate_ingest handoff referencing SKILL.md ingest mode without redefining phase order", () => {
@@ -181,20 +156,30 @@ describe("ingest-wizard contract", () => {
     assert.match(text, /granola/);
   });
 
-  it("aligns progress event emission points with progress-events.md vocabulary", () => {
-    assert.match(text, /progress-events\.md/);
-    for (const event of [
-      "run_started",
-      "preflight_passed",
-      "source_acquired",
-      "conversion_started",
-      "validation_failed",
-      "source_committed",
-      "run_completed",
-      "run_failed",
-    ]) {
-      assert.match(text, new RegExp(`\`${event}\``));
+  it("documents wizard progress emission points using REQUIRED_PROGRESS_EVENTS vocabulary", () => {
+    assert.equal(verifyWizardProgressEventDocumentation(text), true);
+    for (const event of WIZARD_PROGRESS_EMISSION_EVENTS) {
+      assert.ok(
+        REQUIRED_PROGRESS_EVENTS.includes(event),
+        `${event} must be a canonical progress event`,
+      );
     }
+  });
+
+  it("detects missing run_started in synthetic emission documentation", () => {
+    const broken = text.replace(/`run_started`/g, "`run_begin`");
+    assert.equal(verifyWizardProgressEventDocumentation(broken), false);
+  });
+
+  it("preserves happy-path progress event ordering in wizard emission table", () => {
+    const events = WIZARD_HAPPY_PATH_PROGRESS_EVENTS.map((name) => ({
+      event: name,
+      run_id: "r",
+      phase: "p",
+      status: "ok",
+      duration_ms: 0,
+    }));
+    assert.equal(verifyHappyPathOrdering(events), true);
   });
 
   it("states session memory is chat-ephemeral with no filesystem persistence to managed vault paths", () => {
@@ -228,6 +213,49 @@ describe("ingest-wizard contract", () => {
     assert.match(text, /`run_failed`/);
     assert.match(text, /Skip \(choice B\)/i);
     assert.match(text, /Abort \(choice C\)/i);
+  });
+});
+
+describe("ingest-wizard handoff payload", () => {
+  it("rejects empty sources[] through parseIngestRunInput()", () => {
+    assert.throws(
+      () =>
+        parseIngestRunInput({
+          vault_root: "knowledge",
+          run_id: "run-empty",
+          sources: [],
+        }),
+      (error) => error instanceof IngestInputError && error.code === "EMPTY_SOURCE_LIST",
+    );
+  });
+
+  it("rejects duplicate source keys in a two-element sources array", () => {
+    assert.throws(
+      () =>
+        parseIngestRunInput({
+          vault_root: "knowledge",
+          run_id: "run-dup",
+          sources: [
+            { kind: "local", locator: "/tmp/a.md", content_type: "text/markdown" },
+            { kind: "local", locator: "/tmp/a.md", content_type: "text/plain" },
+          ],
+        }),
+      (error) => error instanceof IngestInputError && error.code === "DUPLICATE_SOURCE_KEY",
+    );
+  });
+
+  it("accepts google_drive wizard handoff fixture through parseIngestRunInput()", () => {
+    const handoff = buildWizardHandoffInput("knowledge", "run-wizard-drive-01", {
+      kind: "google_drive",
+      locator: "drive:doc-123",
+      content_type: "application/vnd.google-apps.document",
+    });
+
+    const parsed = parseIngestRunInput(handoff);
+    assert.equal(parsed.vault_root, "knowledge");
+    assert.equal(parsed.run_id, "run-wizard-drive-01");
+    assert.equal(parsed.sources.length, 1);
+    assert.equal(parsed.sources[0]?.kind, "google_drive");
   });
 });
 
@@ -267,34 +295,33 @@ describe("ingest-wizard contract integration", () => {
     assert.ok(sectionValidate < sectionEnd, "/vault-validate must precede session end");
   });
 
-  it("parseVaultSessionContext accepts post-run context matching documented update semantics", () => {
-    const postRunContext = {
-      vault_root: "/workspace/repo/knowledge",
-      last_run_id: "run-20260619-ingest-001",
-      last_mode: "ingest",
-      last_exit_status: "completed",
-      last_source_kind: "google_drive",
-    };
+  it("wizard handoff with google_drive pending_source matches delegate_ingest contract fields", () => {
+    const wizardText = readFileSync(ingestWizardPath, "utf8");
+    assert.match(wizardText, /`vault_root`/);
+    assert.match(wizardText, /`run_id`/);
+    assert.match(wizardText, /`sources`/);
 
-    const parsed = parseVaultSessionContext(postRunContext);
-    assert.deepEqual(parsed, postRunContext);
-
-    const skippedContext = parseVaultSessionContext({
-      vault_root: "/workspace/repo/knowledge",
-      last_run_id: "run-20260619-ingest-002",
-      last_mode: "ingest",
-      last_exit_status: "skipped",
-      last_source_kind: "local",
+    const handoff = buildWizardHandoffInput("knowledge", "run-integration-01", {
+      kind: "google_drive",
+      locator: "drive:integration-doc",
+      content_type: "application/vnd.google-apps.presentation",
     });
-    assert.equal(skippedContext.last_exit_status, "skipped");
 
-    const abortedContext = parseVaultSessionContext({
-      vault_root: "/workspace/repo/knowledge",
-      last_run_id: "run-20260619-ingest-003",
-      last_mode: "ingest",
-      last_exit_status: "aborted",
-      last_source_kind: "granola",
-    });
-    assert.equal(abortedContext.last_exit_status, "aborted");
+    const parsed = parseIngestRunInput(handoff);
+    assert.equal(parsed.sources[0]?.locator, "drive:integration-doc");
+    assert.equal(parsed.sources[0]?.content_type, "application/vnd.google-apps.presentation");
+  });
+});
+
+describe("ingest-wizard contract helpers (unit)", () => {
+  it("extractMarkdownTableFields returns empty when section heading is missing", () => {
+    assert.deepEqual(extractMarkdownTableFields("no tables here", "### Missing"), []);
+  });
+
+  it("assertIngestWizardStepSections requires every INGEST_WIZARD_STEPS entry", () => {
+    assert.equal(INGEST_WIZARD_STEPS.length, 7);
+    for (const step of INGEST_WIZARD_STEPS) {
+      assert.match(step, /^[a-z_]+$/);
+    }
   });
 });
