@@ -122,7 +122,7 @@ describe("runtime adapter symlinks (unit)", () => {
     }
   });
 
-  it("adapter trees expose shipped command stubs only (no pipeline stubs yet)", () => {
+  it("adapter trees expose all shipped command stubs including pipeline stubs", () => {
     const cursorEntries = readdirSync(cursorDir)
       .filter((entry) => entry.endsWith(".md"))
       .sort();

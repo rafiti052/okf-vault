@@ -121,23 +121,23 @@ describe("discoverability contract (integration)", () => {
     }
   });
 
-  it("registry availability labels distinguish MVP shipped, Phase 1b shipped, and Phase 1b planned", () => {
+  it("registry availability labels distinguish MVP shipped and Phase 1b shipped", () => {
     const ingestRow = rows.get("vault-ingest");
     assert.ok(ingestRow);
     assert.match(ingestRow.availability, /MVP/i);
 
-    for (const command of ["vault-init", "vault-organize", "vault-validate", "vault-visualize"]) {
+    for (const command of [
+      "vault-init",
+      "vault-organize",
+      "vault-validate",
+      "vault-visualize",
+      "vault-bootstrap",
+      "vault-ingest-check",
+    ]) {
       const row = rows.get(command);
       assert.ok(row);
       assert.match(row.availability, /Phase 1b/i);
       assert.match(row.availability, /shipped/i);
-    }
-
-    for (const command of ["vault-bootstrap", "vault-ingest-check"]) {
-      const row = rows.get(command);
-      assert.ok(row);
-      assert.match(row.availability, /Phase 1b/i);
-      assert.match(row.availability, /planned/i);
     }
   });
 

@@ -114,10 +114,20 @@ export const PHASE_1B_MODE_COMMAND_STUBS = [
   "vault-visualize.md",
 ];
 
-/** Canonical command stubs shipped through MVP and Phase 1b mode rollout (excludes pipeline stubs). */
+export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["vault-bootstrap.md", "vault-ingest-check.md"];
+
+/** All seven `/vault-*` command stub files (excludes registry.md). */
+export const ALL_VAULT_COMMAND_STUBS = [
+  "vault-ingest.md",
+  ...PHASE_1B_MODE_COMMAND_STUBS,
+  ...PHASE_1B_PIPELINE_COMMAND_STUBS,
+];
+
+/** Canonical command stubs shipped through MVP and Phase 1b (includes pipeline stubs). */
 export const SHIPPED_COMMAND_STUBS = [
   "vault-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
+  ...PHASE_1B_PIPELINE_COMMAND_STUBS,
   "registry.md",
 ];
 
@@ -129,14 +139,22 @@ export const MODE_STUB_SKILL_ANCHORS = {
   "vault-visualize.md": "visualize",
 };
 
+/** Maps pipeline stub filenames to pipelines.md section anchors. */
+export const PIPELINE_STUB_SECTION_ANCHORS = {
+  "vault-bootstrap.md": "bootstrap",
+  "vault-ingest-check.md": "ingest-check",
+};
+
 export const PHASE_1B_SHIPPED_COMMANDS = [
   "vault-init",
   "vault-organize",
   "vault-validate",
   "vault-visualize",
+  "vault-bootstrap",
+  "vault-ingest-check",
 ];
 
-export const PHASE_1B_PLANNED_COMMANDS = ["vault-bootstrap", "vault-ingest-check"];
+export const PHASE_1B_PLANNED_COMMANDS = [];
 
 /**
  * @param {string} path
@@ -1242,6 +1260,43 @@ export function documentsIngestCheckWizardReuse(text) {
 export function documentsFreshValidateRunId(text) {
   const lower = text.toLowerCase();
   return lower.includes("fresh `run_id`") || lower.includes("fresh run_id");
+}
+
+/**
+ * @param {string} text
+ * @param {string} sectionAnchor
+ * @returns {boolean}
+ */
+export function linksToPipelineSection(text, sectionAnchor) {
+  const patterns = [
+    new RegExp(`pipelines\\.md#${sectionAnchor}`, "i"),
+    new RegExp(`pipelines\\.md\\][^\\n]*#${sectionAnchor}`, "i"),
+    new RegExp(`pipelines\\.md\\)[^\\n]*\\b${sectionAnchor}\\b`, "i"),
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function containsInlinePipelineModeSequence(text) {
+  for (const modes of Object.values(PIPELINE_MODE_SEQUENCES)) {
+    const sequence = modes.join("\\s*→\\s*");
+    if (new RegExp(sequence, "i").test(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsPipelineHandoffPointer(text) {
+  const lower = text.toLowerCase();
+  return lower.includes("handoff") || lower.includes("curator");
 }
 
 /**

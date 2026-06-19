@@ -154,7 +154,7 @@ describe("Phase 1b mode command stubs (integration)", () => {
     }
   });
 
-  it("pipeline commands remain Phase 1b planned", () => {
+  it("no Phase 1b commands remain planned in registry availability", () => {
     for (const command of PHASE_1B_PLANNED_COMMANDS) {
       const row = rows.get(command);
       assert.ok(row);
