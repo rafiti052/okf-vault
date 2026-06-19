@@ -1,0 +1,22 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "granola:panel-001",
+  "kind": "granola",
+  "content_type": "text/plain",
+  "origin": "granola:panel-001",
+  "canonical_uri": "https://granola.example/meetings/panel-001",
+  "title": "Panel Discussion",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "normalized_text": "Panel transcript with speakers.",
+  "anchors": [
+    {
+      "id": "timestamp-00:05:00",
+      "kind": "timestamp",
+      "label": "Opening",
+      "text": "Moderator opens the panel.",
+      "timestamp": "00:05:00",
+      "speaker": "Moderator"
+    }
+  ]
+}

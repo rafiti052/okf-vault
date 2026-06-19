@@ -1,4 +1,5 @@
 import { handleInit, handleInspect } from "./vault/manifest.js";
+import { handleValidateStaged } from "./vault/validation.js";
 
 /** Stable process exit classes for the okf-vault helper. */
 export const ExitCode = {
@@ -175,6 +176,10 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "inspect") {
     return handleInspect(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "validate-staged") {
+    return handleValidateStaged(parsed.positional.slice(1));
   }
 
   return {

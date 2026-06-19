@@ -1,0 +1,83 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "drive:deck-five",
+  "kind": "google_drive",
+  "content_type": "application/vnd.google-apps.presentation",
+  "origin": "drive:deck-five",
+  "canonical_uri": "https://drive.google.com/file/d/deck-five/view",
+  "title": "Five Slide Deck",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "normalized_text": "Deck content across five slides.",
+  "anchors": [
+    { "id": "slide-001", "kind": "slide", "label": "Slide 1", "text": "Intro", "slide_number": 1 },
+    {
+      "id": "slide-002",
+      "kind": "slide",
+      "label": "Slide 2",
+      "text": "Context",
+      "slide_number": 2
+    },
+    {
+      "id": "slide-003",
+      "kind": "slide",
+      "label": "Slide 3",
+      "text": "Metrics",
+      "slide_number": 3
+    },
+    { "id": "slide-004", "kind": "slide", "label": "Slide 4", "text": "Plan", "slide_number": 4 },
+    {
+      "id": "speaker-004",
+      "kind": "speaker_note",
+      "label": "Slide 4 notes",
+      "text": "Speaker-only detail for claim-002",
+      "slide_number": 4
+    },
+    {
+      "id": "slide-005",
+      "kind": "slide",
+      "label": "Slide 5",
+      "text": "Summary",
+      "slide_number": 5
+    },
+    { "id": "anchor-text-only", "kind": "text", "label": "Side quote", "text": "Peripheral quote" }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "Intro",
+      "text": "Intro",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 2,
+      "title": "Context",
+      "text": "Context",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 3,
+      "title": "Metrics",
+      "text": "Metrics",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 4,
+      "title": "Plan",
+      "text": "Plan",
+      "speaker_notes": "Speaker-only detail for claim-002",
+      "image_available": true
+    },
+    {
+      "number": 5,
+      "title": "Summary",
+      "text": "Summary",
+      "speaker_notes": "",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}

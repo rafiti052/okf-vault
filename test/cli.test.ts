@@ -39,7 +39,7 @@ describe("CLI parsing and dispatch", () => {
   });
 
   it("accepts reserved commands and rejects unknown commands with usage exit", () => {
-    const implementedWithoutArgs = new Set(["init", "inspect"]);
+    const implementedWithoutArgs = new Set(["init", "inspect", "validate-staged"]);
     for (const command of RESERVED_COMMANDS) {
       const outcome = dispatch(parseArgs([command]));
       if (implementedWithoutArgs.has(command)) {
