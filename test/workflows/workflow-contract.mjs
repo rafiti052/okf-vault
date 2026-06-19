@@ -107,6 +107,37 @@ export function claudeCommandsDir(root) {
 
 export const MVP_COMMAND_STUBS = ["vault-ingest.md", "registry.md"];
 
+export const PHASE_1B_MODE_COMMAND_STUBS = [
+  "vault-init.md",
+  "vault-organize.md",
+  "vault-validate.md",
+  "vault-visualize.md",
+];
+
+/** Canonical command stubs shipped through MVP and Phase 1b mode rollout (excludes pipeline stubs). */
+export const SHIPPED_COMMAND_STUBS = [
+  "vault-ingest.md",
+  ...PHASE_1B_MODE_COMMAND_STUBS,
+  "registry.md",
+];
+
+/** Maps mode stub filenames to SKILL.md mode section anchors. */
+export const MODE_STUB_SKILL_ANCHORS = {
+  "vault-init.md": "initialize",
+  "vault-organize.md": "organize",
+  "vault-validate.md": "validate",
+  "vault-visualize.md": "visualize",
+};
+
+export const PHASE_1B_SHIPPED_COMMANDS = [
+  "vault-init",
+  "vault-organize",
+  "vault-validate",
+  "vault-visualize",
+];
+
+export const PHASE_1B_PLANNED_COMMANDS = ["vault-bootstrap", "vault-ingest-check"];
+
 /**
  * @param {string} path
  * @returns {boolean}
@@ -998,6 +1029,44 @@ export function containsIngestionLoopPhaseOrder(text) {
  */
 export function documentsDisableModelInvocationGuidance(text) {
   return text.includes("disable-model-invocation");
+}
+
+/**
+ * True when text duplicates ingest-wizard step section headings (pointer-only violation).
+ * @param {string} text
+ * @param {string[]} [steps]
+ * @returns {boolean}
+ */
+export function duplicatesIngestWizardStepHeadings(text, steps = INGEST_WIZARD_STEPS) {
+  for (const step of steps) {
+    if (new RegExp(`^##\\s+[0-9a-z.]+\\s+${step}\\b`, "im").test(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {string} stubText
+ * @param {string} anchor
+ * @returns {boolean}
+ */
+export function linksToSkillModeAnchor(stubText, anchor) {
+  return stubText.includes(`SKILL.md#${anchor}`);
+}
+
+/**
+ * @param {string} registryText
+ * @param {string} commandSlug
+ * @returns {boolean}
+ */
+export function registryMarksPhase1bShipped(registryText, commandSlug) {
+  const rows = parseRegistryCommandRows(registryText);
+  const row = rows.get(commandSlug);
+  if (!row) {
+    return false;
+  }
+  return /Phase 1b/i.test(row.availability) && /shipped/i.test(row.availability);
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   canonicalCommandsDir,
   cursorCommandsDir,
   claudeCommandsDir,
-  MVP_COMMAND_STUBS,
+  SHIPPED_COMMAND_STUBS,
   pathIsSymlink,
   resolvesToSameRealpath,
   assertAdapterStubResolves,
@@ -77,7 +77,7 @@ describe("runtime adapter symlinks (unit)", () => {
     assert.equal(resolvesToSameRealpath(claudeDir, canonicalDir), true);
   });
 
-  for (const stubFileName of MVP_COMMAND_STUBS) {
+  for (const stubFileName of SHIPPED_COMMAND_STUBS) {
     it(`Cursor ${stubFileName} resolves to canonical stub`, () => {
       const result = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
       assert.equal(result.ok, true, result.ok ? "" : result.message);
@@ -122,15 +122,15 @@ describe("runtime adapter symlinks (unit)", () => {
     }
   });
 
-  it("MVP adapter trees expose only vault-ingest and registry stubs", () => {
+  it("adapter trees expose shipped command stubs only (no pipeline stubs yet)", () => {
     const cursorEntries = readdirSync(cursorDir)
       .filter((entry) => entry.endsWith(".md"))
       .sort();
-    assert.deepEqual(cursorEntries, [...MVP_COMMAND_STUBS].sort());
+    assert.deepEqual(cursorEntries, [...SHIPPED_COMMAND_STUBS].sort());
     const claudeEntries = readdirSync(claudeDir)
       .filter((entry) => entry.endsWith(".md"))
       .sort();
-    assert.deepEqual(claudeEntries, [...MVP_COMMAND_STUBS].sort());
+    assert.deepEqual(claudeEntries, [...SHIPPED_COMMAND_STUBS].sort());
   });
 });
 
