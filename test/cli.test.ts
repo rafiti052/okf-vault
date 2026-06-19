@@ -46,6 +46,8 @@ describe("CLI parsing and dispatch", () => {
       "validate-graph",
       "commit",
       "recover",
+      "dossier",
+      "validate-proposals",
     ]);
     for (const command of RESERVED_COMMANDS) {
       const outcome = dispatch(parseArgs([command]));

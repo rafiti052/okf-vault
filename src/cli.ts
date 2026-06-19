@@ -1,5 +1,7 @@
+import { handleDossier } from "./vault/dossier.js";
 import { handleValidateGraph } from "./vault/graph.js";
 import { handleInit, handleInspect } from "./vault/manifest.js";
+import { handleValidateProposals } from "./vault/proposals.js";
 import { handleCommit, handleRecover } from "./vault/transaction.js";
 import { handleValidateStaged } from "./vault/validation.js";
 
@@ -194,6 +196,14 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "recover") {
     return handleRecover(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "dossier") {
+    return handleDossier(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "validate-proposals") {
+    return handleValidateProposals(parsed.positional.slice(1));
   }
 
   return {

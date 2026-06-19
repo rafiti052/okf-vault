@@ -1,0 +1,31 @@
+{
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-valid-link",
+      "type": "link",
+      "affected_paths": ["notes/gold-article-01.md", "notes/gold-panel-01.md"],
+      "rationale": "Related discussion topics.",
+      "confidence": "medium",
+      "disposition": "pending"
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-missing-claims",
+      "type": "duplicate",
+      "affected_paths": ["notes/gold-article-01.md"],
+      "rationale": "Possible duplicate without cited claims.",
+      "confidence": "low",
+      "disposition": "pending"
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-outside-path",
+      "type": "link",
+      "affected_paths": ["../outside.md"],
+      "rationale": "Targets path outside vault.",
+      "confidence": "low",
+      "disposition": "pending"
+    }
+  ]
+}

@@ -219,7 +219,7 @@ function issue(code: string, message: string, path?: string): ValidationIssue {
   return entry;
 }
 
-function extractSection(body: string, heading: string): string | undefined {
+export function extractSection(body: string, heading: string): string | undefined {
   const lines = body.split(/\r?\n/u);
   const headingLine = heading.trim();
   let start = -1;
