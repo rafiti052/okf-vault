@@ -597,3 +597,89 @@ export function documentsSkillModeTriggers(frontmatterDescription) {
   );
   return modeHits.length >= 4 && lower.includes("/vault-ingest");
 }
+
+export const INGESTION_LOOP_HAPPY_PATH_EVENTS = [
+  "run_started",
+  "preflight_passed",
+  "source_acquired",
+  "conversion_started",
+  "source_committed",
+  "run_completed",
+];
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function extractMarkdownLinks(text) {
+  const links = [];
+  const pattern = /\[[^\]]+\]\(([^)]+)\)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    links.push(match[1]);
+  }
+  return links;
+}
+
+/**
+ * Returns true when text paraphrases ingestion-loop happy-path phase order (pointer-only violation).
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function containsIngestionLoopPhaseOrder(text) {
+  let consecutive = 0;
+  let searchFrom = 0;
+  for (const event of INGESTION_LOOP_HAPPY_PATH_EVENTS) {
+    const idx = text.indexOf(event, searchFrom);
+    if (idx >= 0) {
+      consecutive += 1;
+      searchFrom = idx + event.length;
+    } else {
+      break;
+    }
+  }
+  if (consecutive >= 3) {
+    return true;
+  }
+  return /acquire\s*→\s*inspect\s*→\s*convert/i.test(text);
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsDisableModelInvocationGuidance(text) {
+  return text.includes("disable-model-invocation");
+}
+
+/**
+ * @param {string} registryText
+ * @param {string} stubFileName
+ * @returns {boolean}
+ */
+export function registryLinksToStub(registryText, stubFileName) {
+  return registryText.includes(`](${stubFileName})`);
+}
+
+/**
+ * @param {string} baseDir
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function brokenMarkdownLinks(baseDir, text) {
+  const broken = [];
+  for (const link of extractMarkdownLinks(text)) {
+    if (link.startsWith("http") || link.startsWith("#")) {
+      continue;
+    }
+    const filePart = link.split("#")[0];
+    if (!filePart) {
+      continue;
+    }
+    const resolved = join(baseDir, filePart);
+    if (!existsSync(resolved)) {
+      broken.push(link);
+    }
+  }
+  return broken;
+}

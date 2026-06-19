@@ -21,4 +21,4 @@ Provider-neutral `/vault-*` command list for curator discoverability. Each comma
 - **After ingestion** — **`/vault-organize`** for curation proposals; **`/vault-validate`** for health checks; **`/vault-visualize`** for graph inspection (Phase 1b).
 - **Batch ingest with health check** — **`/vault-ingest-check`** composes ingest wizard acquisition with validate (Phase 1b).
 
-Stub files: `vault-ingest.md` ships in MVP; remaining stubs ship in Phase 1b per ADR-008.
+MVP stub: [`vault-ingest.md`](vault-ingest.md) (**MVP shipped**); remaining stubs ship in Phase 1b per ADR-008.
