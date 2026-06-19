@@ -1,3 +1,5 @@
+import { handleInit, handleInspect } from "./vault/manifest.js";
+
 /** Stable process exit classes for the okf-vault helper. */
 export const ExitCode = {
   SUCCESS: 0,
@@ -165,6 +167,14 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
       ),
       diagnostic: `Unknown command: ${parsed.command}`,
     };
+  }
+
+  if (parsed.command === "init") {
+    return handleInit(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "inspect") {
+    return handleInspect(parsed.positional.slice(1));
   }
 
   return {

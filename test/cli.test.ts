@@ -38,12 +38,17 @@ describe("CLI parsing and dispatch", () => {
     assert.equal(version.result?.command, "version");
   });
 
-  it("accepts every reserved command token and rejects unknown commands with usage exit", () => {
+  it("accepts reserved commands and rejects unknown commands with usage exit", () => {
+    const implementedWithoutArgs = new Set(["init", "inspect"]);
     for (const command of RESERVED_COMMANDS) {
       const outcome = dispatch(parseArgs([command]));
-      assert.equal(outcome.exitCode, ExitCode.VALIDATION);
-      assert.equal(outcome.result?.status, "error");
-      assert.equal(outcome.result?.command, command);
+      if (implementedWithoutArgs.has(command)) {
+        assert.equal(outcome.exitCode, ExitCode.USAGE);
+      } else {
+        assert.equal(outcome.exitCode, ExitCode.VALIDATION);
+        assert.equal(outcome.result?.status, "error");
+        assert.equal(outcome.result?.command, command);
+      }
     }
 
     const unknown = dispatch(parseArgs(["not-a-command"]));
@@ -54,7 +59,8 @@ describe("CLI parsing and dispatch", () => {
 
   it("maps usage, validation, and success outcomes to exit statuses 2, 3, and 0", () => {
     assert.equal(run([]), ExitCode.USAGE);
-    assert.equal(run(["init"]), ExitCode.VALIDATION);
+    assert.equal(run(["init"]), ExitCode.USAGE);
+    assert.equal(run(["commit"]), ExitCode.VALIDATION);
     assert.equal(run(["--version"]), ExitCode.SUCCESS);
   });
 
