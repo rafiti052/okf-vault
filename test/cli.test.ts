@@ -44,6 +44,8 @@ describe("CLI parsing and dispatch", () => {
       "inspect",
       "validate-staged",
       "validate-graph",
+      "commit",
+      "recover",
     ]);
     for (const command of RESERVED_COMMANDS) {
       const outcome = dispatch(parseArgs([command]));
@@ -65,7 +67,8 @@ describe("CLI parsing and dispatch", () => {
   it("maps usage, validation, and success outcomes to exit statuses 2, 3, and 0", () => {
     assert.equal(run([]), ExitCode.USAGE);
     assert.equal(run(["init"]), ExitCode.USAGE);
-    assert.equal(run(["commit"]), ExitCode.VALIDATION);
+    assert.equal(run(["commit"]), ExitCode.USAGE);
+    assert.equal(run(["recover"]), ExitCode.USAGE);
     assert.equal(run(["--version"]), ExitCode.SUCCESS);
   });
 

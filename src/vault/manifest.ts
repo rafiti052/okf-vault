@@ -125,6 +125,34 @@ export function manifestRevision(manifest: Manifest): string {
   return createHash("sha256").update(serializeManifest(manifest)).digest("hex");
 }
 
+export class ManifestRevisionMismatchError extends Error {
+  constructor(
+    public readonly expected: string,
+    public readonly actual: string,
+  ) {
+    super(`Manifest revision mismatch: expected ${expected}, found ${actual}`);
+    this.name = "ManifestRevisionMismatchError";
+  }
+}
+
+export function assertManifestRevision(manifest: Manifest, expectedRevision: string): void {
+  const actual = manifestRevision(manifest);
+  if (actual !== expectedRevision) {
+    throw new ManifestRevisionMismatchError(expectedRevision, actual);
+  }
+}
+
+export function upsertCommittedSource(manifest: Manifest, record: SourceRecord): Manifest {
+  validateSourceRecord(record);
+  const withoutExisting = manifest.sources.filter(
+    (entry) => entry.source_key !== record.source_key,
+  );
+  return canonicalizeManifest({
+    ...manifest,
+    sources: [...withoutExisting, record],
+  });
+}
+
 export function validateManifestSchema(manifest: Manifest): void {
   if (manifest.schema_version !== MANIFEST_SCHEMA_VERSION) {
     throw new ManifestValidationError(

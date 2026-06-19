@@ -1,5 +1,6 @@
 import { handleValidateGraph } from "./vault/graph.js";
 import { handleInit, handleInspect } from "./vault/manifest.js";
+import { handleCommit, handleRecover } from "./vault/transaction.js";
 import { handleValidateStaged } from "./vault/validation.js";
 
 /** Stable process exit classes for the okf-vault helper. */
@@ -185,6 +186,14 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "validate-graph") {
     return handleValidateGraph(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "commit") {
+    return handleCommit(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "recover") {
+    return handleRecover(parsed.positional.slice(1));
   }
 
   return {
