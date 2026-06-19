@@ -406,3 +406,95 @@ export function documentsIngestionFailureActions(text) {
     lower.includes("stop")
   );
 }
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizeInitialPendingGate(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("zero pending") &&
+    lower.includes("ingest batch") &&
+    lower.includes("committed") &&
+    lower.includes("skipped")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsIncrementalOrganizeScope(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("new") &&
+    lower.includes("dossier") &&
+    lower.includes("overlap") &&
+    lower.includes("topic map") &&
+    lower.includes("unrelated")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizeProposalOnlyBoundary(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("proposal json only") &&
+    lower.includes("never") &&
+    lower.includes("auto-apply") &&
+    lower.includes("validate-proposals")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizeDispositionTemplate(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("accepted") &&
+    lower.includes("rejected") &&
+    lower.includes("resolve") &&
+    lower.includes("duplicate") &&
+    lower.includes("contradiction")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizeApplicationPreservesNotePaths(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("topics/index.md") &&
+    lower.includes("notes/") &&
+    lower.includes("stable") &&
+    lower.includes("validate-graph")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizeJournalBlock(text) {
+  const lower = text.toLowerCase();
+  return lower.includes("journal") && lower.includes("recover") && lower.includes("organize");
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsOrganizePathMoveRejection(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("path move") && lower.includes("rename") && lower.includes("silent duplicate")
+  );
+}

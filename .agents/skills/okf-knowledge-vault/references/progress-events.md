@@ -35,12 +35,43 @@ Every event MUST include:
 
 Include when applicable:
 
-| Field        | When                                              |
-| ------------ | ------------------------------------------------- |
-| `source_key` | Source-scoped phases (`acquire` through `commit`) |
-| `error_code` | `status: failed` or `validation_failed`           |
-| `commit_id`  | After successful `source_committed`               |
-| `message`    | Curator-facing short summary                      |
+| Field            | When                                                      |
+| ---------------- | --------------------------------------------------------- |
+| `source_key`     | Source-scoped phases (`acquire` through `commit`)         |
+| `error_code`     | `status: failed` or `validation_failed`                   |
+| `commit_id`      | After successful `source_committed`                       |
+| `message`        | Curator-facing short summary                              |
+| `proposal_count` | After `organize_proposals_ready` when proposals validated |
+
+### `organize_proposals_ready` rules
+
+Emit only when **all** of the following hold:
+
+1. Helper `validate-proposals` returned exit **0** for the batch being presented.
+2. Organize preflight passed (no unresolved transaction journal; initial mode has zero pending ingest sources).
+3. No note bodies, indexes, or topic maps were modified automatically during proposal generation.
+4. The event follows dossier generation and proposal validation in the organize phase.
+
+Do **not** emit `organize_proposals_ready` when:
+
+- Proposal validation fails (emit `validation_failed` instead).
+- Organize is blocked by an unresolved ingest transaction journal.
+- The agent auto-applied any proposal content to vault files.
+
+Example shape:
+
+```json
+{
+  "event": "organize_proposals_ready",
+  "run_id": "run-20260619-organize-001",
+  "phase": "organize",
+  "status": "ok",
+  "timestamp": "2026-06-19T14:00:00.000Z",
+  "duration_ms": 120000,
+  "proposal_count": 4,
+  "message": "Validated proposal batch ready for curator review"
+}
+```
 
 Example (single-source happy path excerpt):
 
@@ -62,15 +93,16 @@ Example (single-source happy path excerpt):
 
 ## Emission points summary
 
-| Workflow step               | Event(s)                          |
-| --------------------------- | --------------------------------- |
-| Mode start                  | `run_started`                     |
-| Preflight success / failure | `preflight_passed` / `run_failed` |
-| Envelope ready              | `source_acquired`                 |
-| Manifest unchanged hit      | `source_already_processed`        |
-| Note rendering begins       | `conversion_started`              |
-| Helper validate-staged fail | `validation_failed`               |
-| Helper commit success       | `source_committed`                |
-| Organization batch ready    | `organize_proposals_ready`        |
-| Validate mode all pass      | `quality_gate_passed`             |
-| Mode success / fatal error  | `run_completed` / `run_failed`    |
+| Workflow step               | Event(s)                                       |
+| --------------------------- | ---------------------------------------------- |
+| Mode start                  | `run_started`                                  |
+| Preflight success / failure | `preflight_passed` / `run_failed`              |
+| Envelope ready              | `source_acquired`                              |
+| Manifest unchanged hit      | `source_already_processed`                     |
+| Note rendering begins       | `conversion_started`                           |
+| Helper validate-staged fail | `validation_failed`                            |
+| Helper commit success       | `source_committed`                             |
+| Organization batch ready    | `organize_proposals_ready`                     |
+| Post-curation graph check   | `validation_failed` or proceed to quality gate |
+| Validate mode all pass      | `quality_gate_passed`                          |
+| Mode success / fatal error  | `run_completed` / `run_failed`                 |

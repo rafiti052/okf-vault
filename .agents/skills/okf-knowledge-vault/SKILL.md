@@ -60,12 +60,13 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 | Progress events          | [references/progress-events.md](references/progress-events.md)                         |
 | Helper invocation        | [references/helper-invocation.md](references/helper-invocation.md)                     |
 | Sequential ingestion     | [references/ingestion-loop.md](references/ingestion-loop.md)                           |
+| Organize / curate        | [references/organize.md](references/organize.md)                                       |
 | Article conversion       | [references/conversion-profiles/article.md](references/conversion-profiles/article.md) |
 | Deck conversion          | [references/conversion-profiles/deck.md](references/conversion-profiles/deck.md)       |
 | Panel conversion         | [references/conversion-profiles/panel.md](references/conversion-profiles/panel.md)     |
 | Video conversion         | [references/conversion-profiles/video.md](references/conversion-profiles/video.md)     |
 
-Sequential organization workflow (`references/organize.md`) is added in later tasks — reference it when present; do not invent provider-specific steps here. **Ingest mode** details live in [ingestion-loop.md](references/ingestion-loop.md).
+**Ingest mode** details live in [ingestion-loop.md](references/ingestion-loop.md). **Organize mode** details live in [organize.md](references/organize.md).
 
 ## Mode entry points
 
@@ -92,9 +93,16 @@ Sequential organization workflow (`references/organize.md`) is added in later ta
 
 ### organize
 
-1. Preflight vault initialization, helper `dossier` / `validate-proposals` readiness, and clean managed paths.
-2. Generate dossiers and proposals (task 11); emit `organize_proposals_ready`.
-3. Present proposals for curator disposition before any application.
+Follow [organize.md](references/organize.md). Two modes: **initial** (full corpus, ADR-002) and **incremental** (scoped overlap, ADR-004).
+
+1. **Preflight** — Vault initialized; helper `dossier` / `validate-proposals` / `validate-graph` ready; clean managed paths; no unresolved transaction journal (task 06). Initial mode additionally requires **zero pending sources** in the completed ingest batch.
+2. **Dossier scope** — Initial: helper `dossier` full set. Incremental: new committed dossiers + all Topic Maps + overlap-selected existing notes (deterministic normalized-term overlap).
+3. **Proposal generation** — Agent emits proposal JSON only (`topic`, `link`, `duplicate`, `contradiction`). **Never** auto-apply to notes, indexes, or topic maps.
+4. **Validation gate** — Run helper `validate-proposals` before curator presentation. Reject path-move and silent duplicate-merge suggestions.
+5. **Curator review** — Emit `organize_proposals_ready` after validation passes. Record accept / reject / resolve-with-comment per proposal.
+6. **Application** — Apply only accepted proposals via documented manual steps; preserve stable paths under `notes/`. Run `validate-graph` after link and index updates.
+
+**Forbidden during organize:** auto-application, note path moves, re-ingest of existing notes, full-vault re-cluster on incremental runs.
 
 ### validate
 

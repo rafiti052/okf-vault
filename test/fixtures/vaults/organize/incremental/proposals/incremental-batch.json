@@ -1,0 +1,24 @@
+{
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-incremental-link-001",
+      "type": "link",
+      "affected_paths": ["notes/customer-retention.md", "notes/market-strategy.md"],
+      "rationale": "Retention strategy aligns with existing market strategy planning.",
+      "confidence": "high",
+      "disposition": "pending",
+      "suggested_changes": "Add cross-link to [[notes/market-strategy.md]]."
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-incremental-topic-001",
+      "type": "topic",
+      "affected_paths": ["topics/strategy.md"],
+      "rationale": "Add retention note to strategy topic map.",
+      "confidence": "medium",
+      "disposition": "pending",
+      "suggested_changes": "Add [[notes/customer-retention.md]] to topics/strategy.md"
+    }
+  ]
+}
