@@ -1,3 +1,4 @@
+import { handleValidateGraph } from "./vault/graph.js";
 import { handleInit, handleInspect } from "./vault/manifest.js";
 import { handleValidateStaged } from "./vault/validation.js";
 
@@ -180,6 +181,10 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "validate-staged") {
     return handleValidateStaged(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "validate-graph") {
+    return handleValidateGraph(parsed.positional.slice(1));
   }
 
   return {

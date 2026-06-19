@@ -1,0 +1,28 @@
+{
+  "schema_version": "okf-vault-manifest/1.0.0",
+  "note_contract_version": "okf-note-contract/1.0.0",
+  "sources": [
+    {
+      "source_key": "local:/fixtures/a",
+      "kind": "local",
+      "origin": "/fixtures/a",
+      "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/a.md",
+      "status": "committed",
+      "commit": "abc1234",
+      "processed_at": "2026-06-19T12:00:00.000Z"
+    },
+    {
+      "source_key": "local:/fixtures/orphan",
+      "kind": "local",
+      "origin": "/fixtures/orphan",
+      "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/orphan.md",
+      "status": "committed",
+      "commit": "abc1234",
+      "processed_at": "2026-06-19T12:00:00.000Z"
+    }
+  ]
+}
