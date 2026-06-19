@@ -1,0 +1,14 @@
+{
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-invalid-missing-path",
+      "type": "link",
+      "affected_paths": ["notes/missing-note.md"],
+      "rationale": "Invalid path for contract harness.",
+      "confidence": "low",
+      "disposition": "pending",
+      "suggested_changes": "Add link to missing note."
+    }
+  ]
+}

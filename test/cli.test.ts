@@ -44,6 +44,8 @@ describe("CLI parsing and dispatch", () => {
       "inspect",
       "validate-staged",
       "validate-graph",
+      "validate",
+      "visualize",
       "commit",
       "recover",
       "dossier",

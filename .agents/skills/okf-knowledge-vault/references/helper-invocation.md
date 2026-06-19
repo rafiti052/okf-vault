@@ -89,6 +89,22 @@ okf-vault validate-graph <vault-root>
 
 Zero-orphan and two-hop root-index reachability checks.
 
+### validate
+
+```
+okf-vault validate <vault-root>
+```
+
+Consolidated quality gate: committed-note contract, manifest consistency, indexes, graph, transaction state, curation dispositions, and gold-note reviews. Exit **3** when the gate fails.
+
+### visualize
+
+```
+okf-vault visualize <vault-root>
+```
+
+Invokes `.okf-vault/visualizer.json` command array; derived output only.
+
 ### recover
 
 ```
@@ -97,10 +113,21 @@ okf-vault recover <vault-root>
 
 Restores managed paths after interrupted transactions; run when preflight detects a pending journal or exit 5 occurs.
 
-### Reserved (later tasks)
+### dossier
 
-- `dossier` — bounded note dossiers (task 11)
-- `validate-proposals` — curation proposal validation (task 11)
+```
+okf-vault dossier <vault-root>
+```
+
+Bounded note dossiers for organize analysis.
+
+### validate-proposals
+
+```
+okf-vault validate-proposals <vault-root> <proposals.json>
+```
+
+Structural validation gate before curator presentation.
 
 ## Invocation rules
 

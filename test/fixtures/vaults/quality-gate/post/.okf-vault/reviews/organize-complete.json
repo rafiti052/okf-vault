@@ -1,0 +1,20 @@
+{
+  "schema_version": "okf-vault-review/1.0.0",
+  "run_id": "organize-complete",
+  "recorded_at": "2026-06-19T15:00:00.000Z",
+  "required_gold_reviews": [],
+  "gold_note_reviews": {},
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "dup-resolved",
+      "type": "duplicate",
+      "affected_paths": ["notes/revenue-growth.md", "notes/market-strategy.md"],
+      "claim_ids": ["claim-001", "claim-002"],
+      "rationale": "Reviewed overlap.",
+      "confidence": "high",
+      "disposition": "resolved",
+      "curator_comment": "Keep both notes with cross-links."
+    }
+  ]
+}

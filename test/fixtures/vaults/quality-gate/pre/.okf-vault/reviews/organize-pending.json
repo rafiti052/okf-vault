@@ -1,0 +1,18 @@
+{
+  "schema_version": "okf-vault-review/1.0.0",
+  "run_id": "organize-pending",
+  "recorded_at": "2026-06-19T14:00:00.000Z",
+  "required_gold_reviews": [],
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "dup-pending",
+      "type": "duplicate",
+      "affected_paths": ["notes/revenue-growth.md", "notes/market-strategy.md"],
+      "claim_ids": ["claim-001", "claim-002"],
+      "rationale": "Overlapping strategy claims require curator disposition.",
+      "confidence": "high",
+      "disposition": "pending"
+    }
+  ]
+}

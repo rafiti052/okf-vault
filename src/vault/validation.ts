@@ -857,6 +857,179 @@ export function validateStagedNotes(
   };
 }
 
+/** Structural validation for committed notes at quality-gate time (no envelope anchors). */
+export function validateCommittedNoteAtRest(
+  note: ParsedNote,
+  manifestContractVersion: string,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { relativePath, frontmatter, body } = note;
+
+  issues.push(...validateUnknownFrontmatterKeys(frontmatter, relativePath));
+
+  const credentialHits = findCredentialFields(frontmatter);
+  for (const hit of credentialHits) {
+    issues.push(
+      issue(
+        "CREDENTIAL_FIELD",
+        `Prohibited credential-like field '${hit}' is not allowed in managed notes.`,
+        relativePath,
+      ),
+    );
+  }
+
+  issues.push(
+    ...validateRequiredStringField(frontmatter, "type", relativePath, "MISSING_NOTE_TYPE"),
+  );
+  issues.push(...validateRequiredStringField(frontmatter, "title", relativePath));
+  issues.push(...validateRequiredStringField(frontmatter, "description", relativePath));
+
+  const contractVersion = frontmatter.contract_version;
+  if (typeof contractVersion !== "string" || contractVersion.trim() === "") {
+    issues.push(
+      issue(
+        "MISSING_REQUIRED_FIELD",
+        "Frontmatter field 'contract_version' is required.",
+        relativePath,
+      ),
+    );
+  } else if (contractVersion !== manifestContractVersion) {
+    issues.push(
+      issue(
+        "CONTRACT_VERSION_MISMATCH",
+        `Note contract_version '${contractVersion}' does not match vault manifest '${manifestContractVersion}'.`,
+        relativePath,
+      ),
+    );
+  } else if (contractVersion !== NOTE_CONTRACT_VERSION) {
+    issues.push(
+      issue(
+        "CONTRACT_VERSION_MISMATCH",
+        `Unsupported note contract_version '${contractVersion}'.`,
+        relativePath,
+      ),
+    );
+  }
+
+  const noteType = frontmatter.type;
+  if (typeof noteType !== "string" || noteType.trim() === "") {
+    return issues;
+  }
+
+  if (!(SOURCE_NOTE_TYPES as readonly string[]).includes(noteType)) {
+    issues.push(
+      issue("UNSUPPORTED_NOTE_TYPE", `Unsupported note type '${noteType}'.`, relativePath),
+    );
+    return issues;
+  }
+
+  for (const section of MANDATORY_SECTIONS) {
+    if (!hasSection(body, section)) {
+      issues.push(
+        issue("MISSING_SECTION", `Required section '${section}' is missing.`, relativePath),
+      );
+    }
+  }
+
+  if (noteType === "Slide Deck Note") {
+    for (const section of DECK_SECTIONS) {
+      if (!hasSection(body, section)) {
+        issues.push(
+          issue("MISSING_SECTION", `Required section '${section}' is missing.`, relativePath),
+        );
+      }
+    }
+  }
+
+  const source = frontmatter.source;
+  if (source === undefined || typeof source !== "object" || Array.isArray(source)) {
+    issues.push(
+      issue("MISSING_REQUIRED_FIELD", "Frontmatter field 'source' is required.", relativePath),
+    );
+  } else {
+    const sourceRecord = source as Record<string, unknown>;
+    for (const field of ["source_key", "kind", "origin", "content_sha256", "acquired_at"]) {
+      issues.push(...validateRequiredStringField(sourceRecord, field, relativePath));
+    }
+  }
+
+  const claims = frontmatter.claims;
+  if (!Array.isArray(claims) || claims.length === 0) {
+    issues.push(
+      issue("MISSING_REQUIRED_FIELD", "Frontmatter field 'claims' is required.", relativePath),
+    );
+  } else {
+    const claimIds = new Set<string>();
+    for (const [index, claim] of claims.entries()) {
+      if (typeof claim !== "object" || claim === null || Array.isArray(claim)) {
+        issues.push(
+          issue("INVALID_CLAIM", `Claim at index ${index} must be an object.`, relativePath),
+        );
+        continue;
+      }
+      const claimRecord = claim as Record<string, unknown>;
+      const claimId = claimRecord.id;
+      if (typeof claimId !== "string" || !CLAIM_ID_PATTERN.test(claimId)) {
+        issues.push(
+          issue(
+            "INVALID_CLAIM_ID",
+            `Claim id at index ${index} must match claim-NNN format.`,
+            relativePath,
+          ),
+        );
+        continue;
+      }
+      if (claimIds.has(claimId)) {
+        issues.push(issue("DUPLICATE_CLAIM_ID", `Duplicate claim id '${claimId}'.`, relativePath));
+      }
+      claimIds.add(claimId);
+    }
+
+    const keyClaimsSection = extractSection(body, "# Key Claims");
+    if (keyClaimsSection !== undefined) {
+      const referencedClaims = findClaimReferences(keyClaimsSection);
+      for (const claimId of referencedClaims) {
+        if (!claimIds.has(claimId)) {
+          issues.push(
+            issue(
+              "UNRESOLVED_CLAIM",
+              `# Key Claims references '${claimId}' that is not declared in frontmatter claims.`,
+              relativePath,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
+export function validateCommittedNotes(vaultRoot: string): ValidationIssue[] {
+  const manifest = loadManifest(vaultRoot);
+  const issues: ValidationIssue[] = [];
+  const root = resolve(vaultRoot);
+
+  for (const record of manifest.sources) {
+    if (record.status !== "committed" || record.note_path === undefined) {
+      continue;
+    }
+    const absolutePath = join(root, record.note_path);
+    if (!fs.existsSync(absolutePath)) {
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    const parsed = parseNoteContent(record.note_path, content);
+    if (Array.isArray(parsed)) {
+      issues.push(...parsed);
+      continue;
+    }
+    issues.push(...validateCommittedNoteAtRest(parsed, manifest.note_contract_version));
+  }
+
+  return issues;
+}
+
 export function handleValidateStaged(args: string[]): DispatchOutcome {
   const vaultRoot = args[0];
   const stagingDir = args[1];

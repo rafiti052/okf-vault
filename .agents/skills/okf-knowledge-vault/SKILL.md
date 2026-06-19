@@ -61,6 +61,7 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 | Helper invocation        | [references/helper-invocation.md](references/helper-invocation.md)                     |
 | Sequential ingestion     | [references/ingestion-loop.md](references/ingestion-loop.md)                           |
 | Organize / curate        | [references/organize.md](references/organize.md)                                       |
+| Visualizer               | [references/visualizer.md](references/visualizer.md)                                   |
 | Article conversion       | [references/conversion-profiles/article.md](references/conversion-profiles/article.md) |
 | Deck conversion          | [references/conversion-profiles/deck.md](references/conversion-profiles/deck.md)       |
 | Panel conversion         | [references/conversion-profiles/panel.md](references/conversion-profiles/panel.md)     |
@@ -107,13 +108,16 @@ Follow [organize.md](references/organize.md). Two modes: **initial** (full corpu
 ### validate
 
 1. Preflight vault and helper availability.
-2. Run `validate-staged` (when staging exists), `validate-graph`, manifest inspection, and `recover` when journals indicate interrupted transactions.
-3. Emit `quality_gate_passed` when all deterministic checks pass, or `validation_failed` / `run_failed` otherwise.
+2. Run consolidated helper **`validate <vault-root>`** — aggregates committed-note contract checks, manifest bidirectional consistency, populated indexes, graph navigation, clean transaction state, proposal dispositions, and required gold-note review markers under `.okf-vault/reviews/`.
+3. When a transaction journal or lock is present, run **`recover`** first; re-run `validate` until transaction state passes.
+4. Emit `quality_gate_passed` when `validate` exits 0, or `validation_failed` / `run_failed` otherwise.
 
 ### visualize
 
-1. Preflight vault and configured visualizer command.
-2. Invoke the curator-configured OKF visualizer; treat HTML output as derived and rebuildable.
+1. Preflight vault; confirm **`validate`** exit 0.
+2. Configure `.okf-vault/visualizer.json` per [visualizer.md](references/visualizer.md).
+3. Invoke **`okf-vault visualize <vault-root>`**; treat HTML output as derived and rebuildable.
+4. Visualizer failure must not mutate managed vault files.
 
 ## Failure handling summary
 

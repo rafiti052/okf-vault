@@ -346,6 +346,49 @@ export function handleInit(args: string[]): DispatchOutcome {
   }
 }
 
+export function validateManifestDiskConsistency(
+  vaultRoot: string,
+): { code: string; message: string; path?: string }[] {
+  const root = resolve(vaultRoot);
+  const manifest = loadManifest(vaultRoot);
+  const issues: { code: string; message: string; path?: string }[] = [];
+  const manifestPaths = new Set<string>();
+
+  for (const record of manifest.sources) {
+    if (record.status !== "committed" || record.note_path === undefined) {
+      continue;
+    }
+    manifestPaths.add(record.note_path);
+    const absolutePath = join(root, record.note_path);
+    if (!fs.existsSync(absolutePath)) {
+      issues.push({
+        code: "MANIFEST_DRIFT",
+        message: `Manifest record references missing note path '${record.note_path}'.`,
+        path: record.note_path,
+      });
+    }
+  }
+
+  const notesDir = join(root, "notes");
+  if (fs.existsSync(notesDir)) {
+    for (const entry of fs.readdirSync(notesDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name === "index.md") {
+        continue;
+      }
+      const relativePath = `notes/${entry.name}`;
+      if (!manifestPaths.has(relativePath)) {
+        issues.push({
+          code: "MANIFEST_DRIFT",
+          message: `On-disk note '${relativePath}' has no committed manifest record.`,
+          path: relativePath,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
 export function handleInspect(args: string[]): DispatchOutcome {
   const vaultRoot = args[0];
   const kind = args[1];
