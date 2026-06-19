@@ -165,7 +165,7 @@ describe("preflight contract", () => {
   it("reports preflight_passed for synthetic initialized vault when capabilities and helper are present", () => {
     const vaultRoot = join(root, "test", "fixtures", "vaults", "navigation", "pass");
     const helperPath = join(root, "dist", "main.js");
-    assert.equal(existsSync(helperPath), true, "run npm run build before workflow tests");
+    assert.equal(existsSync(helperPath), true, "run pnpm run build before workflow tests");
 
     const result = runPreflight({
       vaultRoot,
