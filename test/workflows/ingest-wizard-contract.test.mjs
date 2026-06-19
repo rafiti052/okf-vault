@@ -8,6 +8,7 @@ import {
   documentsIngestionFailureActions,
   skillRoot,
 } from "./workflow-contract.mjs";
+import { parseVaultSessionContext } from "../../dist/vault/session.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -195,6 +196,39 @@ describe("ingest-wizard contract", () => {
       assert.match(text, new RegExp(`\`${event}\``));
     }
   });
+
+  it("states session memory is chat-ephemeral with no filesystem persistence to managed vault paths", () => {
+    assert.match(text, /chat-ephemeral/i);
+    assert.match(text, /\.\/knowledge\//);
+    assert.match(text, /\.okf-vault\//);
+    assert.match(text, /never.*write session fields|never\*\* write session fields/i);
+  });
+
+  it("references parseVaultSessionContext for structural validation", () => {
+    assert.match(text, /parseVaultSessionContext\(\)/);
+  });
+
+  it("documents fresh run_id for validate while retaining ingest run_id in session", () => {
+    assert.match(text, /fresh `run_id`/i);
+    assert.match(text, /retain.*ingest `run_id`|retains ingest `run_id`/i);
+  });
+
+  it("requires explicit curator confirmation before suggesting validate after skip or abort", () => {
+    assert.match(text, /Post-commit suggestion gating \(skip and abort\)/i);
+    assert.match(text, /explicitly confirms.*validate|explicit confirmation on skip\/abort/i);
+    assert.match(
+      text,
+      /not\*\* include `\/vault-validate`|Do \*\*not\*\* include `\/vault-validate`/i,
+    );
+  });
+
+  it("documents session write triggers for run_completed, run_failed, skip, and abort", () => {
+    assert.match(text, /Write triggers by outcome/i);
+    assert.match(text, /`run_completed`/);
+    assert.match(text, /`run_failed`/);
+    assert.match(text, /Skip \(choice B\)/i);
+    assert.match(text, /Abort \(choice C\)/i);
+  });
 });
 
 describe("ingest-wizard contract integration", () => {
@@ -231,5 +265,36 @@ describe("ingest-wizard contract integration", () => {
 
     assert.ok(sectionIngest < sectionValidate, "/vault-ingest must precede /vault-validate");
     assert.ok(sectionValidate < sectionEnd, "/vault-validate must precede session end");
+  });
+
+  it("parseVaultSessionContext accepts post-run context matching documented update semantics", () => {
+    const postRunContext = {
+      vault_root: "/workspace/repo/knowledge",
+      last_run_id: "run-20260619-ingest-001",
+      last_mode: "ingest",
+      last_exit_status: "completed",
+      last_source_kind: "google_drive",
+    };
+
+    const parsed = parseVaultSessionContext(postRunContext);
+    assert.deepEqual(parsed, postRunContext);
+
+    const skippedContext = parseVaultSessionContext({
+      vault_root: "/workspace/repo/knowledge",
+      last_run_id: "run-20260619-ingest-002",
+      last_mode: "ingest",
+      last_exit_status: "skipped",
+      last_source_kind: "local",
+    });
+    assert.equal(skippedContext.last_exit_status, "skipped");
+
+    const abortedContext = parseVaultSessionContext({
+      vault_root: "/workspace/repo/knowledge",
+      last_run_id: "run-20260619-ingest-003",
+      last_mode: "ingest",
+      last_exit_status: "aborted",
+      last_source_kind: "granola",
+    });
+    assert.equal(abortedContext.last_exit_status, "aborted");
   });
 });

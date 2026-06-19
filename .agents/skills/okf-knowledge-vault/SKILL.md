@@ -87,16 +87,16 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 
 **Entry paths** — choose one; orchestration below is identical after run input is known:
 
-| Path               | When                                      | Start                                                                                       |
-| ------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Command-driven** | Curator invokes `/vault-ingest` (ADR-007) | Follow [ingest-wizard.md](references/ingest-wizard.md) through acquisition and confirmation |
-| **Direct**         | Curator supplies an explicit `sources[]`  | Parse run input in [Direct run input](#direct-run-input) below                              |
+| Path               | When                                      | Start                                                                                                                                 |
+| ------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Command-driven** | Curator invokes `/vault-ingest` (ADR-007) | Follow [ingest-wizard.md](references/ingest-wizard.md) through acquisition, confirmation, session memory, and post-commit suggestions |
+| **Direct**         | Curator supplies an explicit `sources[]`  | Parse run input in [Direct run input](#direct-run-input) below                                                                        |
 
 Do **not** embed wizard step lists here — the wizard contract owns acquisition UX; this section owns post-handoff orchestration only.
 
 #### Wizard handoff (command-driven only)
 
-When the wizard reaches `delegate_ingest`, ingest mode receives an **`IngestRunInput`** handoff. The wizard stops; do not re-run wizard steps or redefine post-acquisition phases.
+When the wizard reaches `delegate_ingest`, ingest mode receives an **`IngestRunInput`** handoff. The wizard stops; do not re-run wizard steps or redefine post-acquisition phases. After ingest completes, return to [ingest-wizard.md](references/ingest-wizard.md) `post_commit` for chat-ephemeral session updates and curator next-action suggestions.
 
 | Field        | Populated by wizard acquisition                                                                           |
 | ------------ | --------------------------------------------------------------------------------------------------------- |

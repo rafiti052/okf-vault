@@ -145,19 +145,42 @@ When the curator may have more sources to ingest, present suggestions in this **
 
 ### Session write
 
-Update `VaultSessionContext` after each completed ingest run:
+Update `VaultSessionContext` after each ingest run terminal outcome. Validate structural shape with `parseVaultSessionContext()` in agent runtimes before persisting to chat state.
 
-| Field              | When written                                                             |
-| ------------------ | ------------------------------------------------------------------------ |
-| `vault_root`       | After first successful `found` resolution (retain on subsequent runs)    |
-| `last_run_id`      | After skill ingest run finishes                                          |
-| `last_mode`        | Set to `ingest`                                                          |
-| `last_exit_status` | `completed`, `failed`, `aborted`, or `skipped` per run outcome           |
-| `last_source_kind` | `local`, `google_drive`, or `granola` from committed or attempted source |
+| Field              | When written                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `vault_root`       | After first successful `found` resolution (retain on subsequent runs)                                                               |
+| `last_run_id`      | After skill ingest run finishes — retains ingest `run_id` for correlation even when a later `/vault-validate` uses a fresh `run_id` |
+| `last_mode`        | Set to `ingest` on ingest terminal outcomes                                                                                         |
+| `last_exit_status` | `completed`, `failed`, `aborted`, or `skipped` per run outcome                                                                      |
+| `last_source_kind` | `local`, `google_drive`, or `granola` from committed or attempted source                                                            |
+
+#### Write triggers by outcome
+
+| Outcome / event  | Session update                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `run_completed`  | Write all post-run fields; `last_exit_status` = `completed`                           |
+| `run_failed`     | Write `last_run_id`, `last_mode`, `last_exit_status` = `failed`, `last_source_kind`   |
+| Skip (choice B)  | Write `last_exit_status` = `skipped`; emit `validation_failed` with `status: skipped` |
+| Abort (choice C) | Write `last_exit_status` = `aborted`; emit `run_failed` before presenting options     |
+
+Emit the triggering progress event **before** updating session memory so `last_run_id` matches the ingest `run_id` from that run.
+
+### Post-commit suggestion gating (skip and abort)
+
+When the ingest run ends with `skipped`, `aborted`, or unresolved `failed` (ADR-009 stop):
+
+1. Offer **retry**, **another explicit source** (`/vault-ingest`), or **session end**.
+2. Do **not** include `/vault-validate` in numbered suggestions until the curator **explicitly confirms** they want a quality gate on a partial or failed batch.
+3. After explicit confirmation, offer `/vault-validate` with a **fresh `run_id`** for the validate leg; retain the ingest `run_id` in `VaultSessionContext.last_run_id` for curator correlation.
+
+When `last_exit_status` is `completed`, follow the [post-commit suggestion order](#post-commit-suggestion-order) above without extra gating.
 
 ## Session memory conventions
 
-Session memory is **chat-scoped only** — never written to managed vault paths.
+Session memory is **chat-ephemeral only** — agents hold `VaultSessionContext` in conversation state. **Never** write session fields to `./knowledge/`, `.okf-vault/`, or any other managed vault path. No persistent vault profile database in V1.
+
+Validate structural updates with `parseVaultSessionContext()` from `src/vault/session.ts` before accepting session state across wizard steps or repeat `/vault-ingest` invocations.
 
 ### VaultSessionContext fields
 
@@ -178,13 +201,21 @@ Session memory is **chat-scoped only** — never written to managed vault paths.
 | `pending_source` | Populated `IngestSourceInput` before handoff            |
 | `run_id`         | Stable run identifier assigned at source type selection |
 
-### Session read (repeat `/vault-ingest`)
+### Session read (wizard start / repeat `/vault-ingest`)
 
-Pre-fill from existing `VaultSessionContext`:
+At wizard start, read existing `VaultSessionContext` from chat state (validate with `parseVaultSessionContext()` when shape is uncertain):
 
-- Skip vault path re-prompt when `vault_root` matches current resolution.
-- Surface `last_run_id`, `last_exit_status`, and `last_source_kind` in summary copy when helpful.
-- Generate a **new** `run_id` for each wizard invocation.
+- Pre-fill resolved `vault_root` from session when it matches current `resolveVaultRoot()` output — skip redundant vault confirmation per ADR-006.
+- Display last run context (`last_run_id`, `last_exit_status`, `last_source_kind`) in summary copy when helpful for repeat runs.
+- Assign a **new** `run_id` in `IngestWizardState` for each wizard invocation; do not reuse the previous ingest `run_id` for a new wizard run.
+
+### Validate `run_id` handoff
+
+When the curator chooses `/vault-validate` (after successful ingest or after explicit confirmation on skip/abort):
+
+- Start validate mode with a **fresh `run_id`** — do not reuse the ingest wizard `run_id`.
+- Retain the ingest `run_id` in `VaultSessionContext.last_run_id` until the next ingest run completes and overwrites it.
+- Update `last_mode` and `last_exit_status` only when validate mode reaches its own terminal outcome (task 11 scope); ingest correlation stays on `last_run_id` from the ingest leg.
 
 ## ADR-009 failure handling
 
