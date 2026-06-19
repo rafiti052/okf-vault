@@ -1,0 +1,21 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "granola:panel-no-speakers",
+  "kind": "granola",
+  "content_type": "text/plain",
+  "origin": "granola:panel-no-speakers",
+  "canonical_uri": "https://granola.example/meetings/panel-no-speakers",
+  "title": "Panel Without Speaker Markers",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "normalized_text": "Transcript text without speaker attribution markers.",
+  "anchors": [
+    {
+      "id": "timestamp-00:01:00",
+      "kind": "timestamp",
+      "label": "Opening",
+      "text": "Discussion begins.",
+      "timestamp": "00:01:00"
+    }
+  ]
+}

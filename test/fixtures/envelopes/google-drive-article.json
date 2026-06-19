@@ -1,0 +1,20 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "drive:file-redacted-001",
+  "kind": "google_drive",
+  "content_type": "application/vnd.google-apps.document",
+  "origin": "drive:file-redacted-001",
+  "canonical_uri": "https://drive.google.com/file/d/file-redacted-001/view",
+  "title": "Redacted Strategy Memo",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "normalized_text": "Redacted memo body about market expansion.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "label": "Executive summary",
+      "text": "Market expansion requires three pillars."
+    }
+  ]
+}
