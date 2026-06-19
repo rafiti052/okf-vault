@@ -31,7 +31,7 @@ Each mode follows the phase order below unless the mode table limits scope (for 
 1. **Preflight** — Verify vault, Git, helper build, required capabilities, and curator-supplied source metadata. See [capabilities.md](references/capabilities.md).
 2. **Acquire & normalize** — Fetch one explicit source and produce a task-01 source envelope. See [normalization.md](references/normalization.md).
 3. **Inspect manifest** — Call helper `inspect` with source key and content hash; handle `new`, `already_processed`, or `changed_conflict`.
-4. **Convert** — Apply the relevant conversion profile ([article](references/conversion-profiles/article.md), [deck](references/conversion-profiles/deck.md); panel/video in task 09) to staged note output under `.okf-vault/tmp/<run-id>/`.
+4. **Convert** — Apply the relevant conversion profile ([article](references/conversion-profiles/article.md), [deck](references/conversion-profiles/deck.md), [panel](references/conversion-profiles/panel.md), [video](references/conversion-profiles/video.md)) to staged note output under `.okf-vault/tmp/<run-id>/`.
 5. **Validate staged** — Call helper `validate-staged`; stop on failure per ADR-009.
 6. **Commit** — Call helper `commit` for atomic per-source installation. See [helper-invocation.md](references/helper-invocation.md).
 7. **Repeat** — Process the next curator-supplied source sequentially (ingest mode only).
@@ -61,6 +61,8 @@ Emit structured progress events at every phase boundary. See [progress-events.md
 | Helper invocation        | [references/helper-invocation.md](references/helper-invocation.md)                     |
 | Article conversion       | [references/conversion-profiles/article.md](references/conversion-profiles/article.md) |
 | Deck conversion          | [references/conversion-profiles/deck.md](references/conversion-profiles/deck.md)       |
+| Panel conversion         | [references/conversion-profiles/panel.md](references/conversion-profiles/panel.md)     |
+| Video conversion         | [references/conversion-profiles/video.md](references/conversion-profiles/video.md)     |
 
 Sequential ingestion details (`references/ingestion-loop.md`) and organization workflow (`references/organize.md`) are added in later tasks — reference them when present; do not invent provider-specific steps here.
 

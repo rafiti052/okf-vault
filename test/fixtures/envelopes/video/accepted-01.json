@@ -1,0 +1,42 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/product-demo.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/product-demo.txt",
+  "canonical_uri": "file:///tmp/sources/product-demo.txt",
+  "title": "Product Demo Recording",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3",
+  "normalized_text": "Intro segment. Feature overview. Demo walkthrough. Closing summary.",
+  "anchors": [
+    {
+      "id": "timestamp-00:00:45",
+      "kind": "timestamp",
+      "label": "Intro",
+      "timestamp": "00:00:45",
+      "text": "Welcome to the product demo."
+    },
+    {
+      "id": "timestamp-00:03:45",
+      "kind": "timestamp",
+      "label": "Feature overview",
+      "timestamp": "00:03:45",
+      "text": "The release ships quarterly with backward-compatible APIs."
+    },
+    {
+      "id": "timestamp-00:07:20",
+      "kind": "timestamp",
+      "label": "Demo walkthrough",
+      "timestamp": "00:07:20",
+      "text": "The dashboard highlights usage trends."
+    },
+    {
+      "id": "timestamp-00:12:30",
+      "kind": "timestamp",
+      "label": "Closing",
+      "timestamp": "00:12:30",
+      "text": "Thank you for watching."
+    }
+  ]
+}
