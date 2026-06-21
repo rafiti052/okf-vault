@@ -6,6 +6,7 @@ import { handleValidate } from "./vault/quality-gate.js";
 import { handleCommit, handleRecover } from "./vault/transaction.js";
 import { handleValidateStaged } from "./vault/validation.js";
 import { handleVisualize } from "./vault/visualizer.js";
+import type { OutputMode } from "./cli/output-mode.js";
 
 /** Stable process exit classes for the okf-vault helper. */
 export const ExitCode = {
@@ -89,6 +90,7 @@ export function failure(
 
 export interface ParsedArgs {
   command?: string;
+  outputModeFlag?: OutputMode;
   showHelp: boolean;
   showVersion: boolean;
   positional: string[];
@@ -96,10 +98,21 @@ export interface ParsedArgs {
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const positional: string[] = [];
+  let outputModeFlag: OutputMode | undefined;
   let showHelp = false;
   let showVersion = false;
 
   for (const arg of argv) {
+    if (arg === "--json") {
+      outputModeFlag = "json";
+      continue;
+    }
+    if (arg === "--human") {
+      if (outputModeFlag !== "json") {
+        outputModeFlag = "human";
+      }
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       showHelp = true;
       continue;
@@ -114,6 +127,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   const command = positional[0];
   return {
     ...(command !== undefined ? { command } : {}),
+    ...(outputModeFlag !== undefined ? { outputModeFlag } : {}),
     showHelp,
     showVersion,
     positional,
