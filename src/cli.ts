@@ -6,7 +6,8 @@ import { handleValidate } from "./vault/quality-gate.js";
 import { handleCommit, handleRecover } from "./vault/transaction.js";
 import { handleValidateStaged } from "./vault/validation.js";
 import { handleVisualize } from "./vault/visualizer.js";
-import type { OutputMode } from "./cli/output-mode.js";
+import { type OutputMode, resolveOutputMode } from "./cli/output-mode.js";
+import { presentHuman } from "./cli/present.js";
 
 /** Stable process exit classes for the okf-vault helper. */
 export const ExitCode = {
@@ -245,6 +246,12 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
 export function run(argv: string[]): ExitCodeValue {
   const parsed = parseArgs(argv);
+  const mode = resolveOutputMode({
+    argv,
+    env: process.env,
+    stdoutIsTTY: process.stdout.isTTY === true,
+    ...(parsed.outputModeFlag !== undefined ? { outputModeFlag: parsed.outputModeFlag } : {}),
+  });
   const outcome = dispatch(parsed);
 
   if (outcome.diagnostic !== undefined) {
@@ -252,7 +259,17 @@ export function run(argv: string[]): ExitCodeValue {
   }
 
   if (outcome.result !== undefined) {
-    writeJsonStdout(outcome.result);
+    if (mode === "json") {
+      writeJsonStdout(outcome.result);
+    } else {
+      // TODO(task 11): Document that human --help/--version intentionally render text;
+      // --json preserves the historical JSON envelopes for agent callers.
+      presentHuman(outcome, {
+        mode,
+        env: process.env,
+        stdoutIsTTY: process.stdout.isTTY === true,
+      });
+    }
   }
 
   return outcome.exitCode;

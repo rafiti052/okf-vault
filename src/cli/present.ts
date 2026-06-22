@@ -1,14 +1,7 @@
 import boxen from "boxen";
 import Table from "cli-table3";
 import pc from "picocolors";
-import {
-  type CliError,
-  type CliResult,
-  type DispatchOutcome,
-  ExitCode,
-  type ExitCodeValue,
-  RESERVED_COMMANDS,
-} from "../cli.js";
+import { type CliError, type CliResult, type DispatchOutcome, type ExitCodeValue } from "../cli.js";
 import type { OutputMode } from "./output-mode.js";
 
 export interface PresentOptions {
@@ -33,6 +26,13 @@ interface PresenterContext {
 
 type JsonRecord = Record<string, unknown>;
 
+const EXIT_SUCCESS = 0;
+const EXIT_UNEXPECTED = 1;
+const EXIT_USAGE = 2;
+const EXIT_VALIDATION = 3;
+const EXIT_CONFLICT = 4;
+const EXIT_TRANSACTION = 5;
+
 const SUCCESS_NEXT_BY_COMMAND: Record<string, string> = {
   init: "run validate to confirm the vault is ready.",
   inspect: "continue the ingest workflow based on the source outcome.",
@@ -50,12 +50,12 @@ const SUCCESS_NEXT_BY_COMMAND: Record<string, string> = {
 };
 
 const NEXT_BY_EXIT_CODE: Record<ExitCodeValue, string> = {
-  [ExitCode.SUCCESS]: "continue to the next phase.",
-  [ExitCode.UNEXPECTED]: "stop, inspect stderr, fix the environment, then retry once.",
-  [ExitCode.USAGE]: "fix the command arguments, then retry.",
-  [ExitCode.VALIDATION]: "fix the reported validation issues, then retry or skip with a reason.",
-  [ExitCode.CONFLICT]: "resolve the manifest or managed-path conflict, then retry.",
-  [ExitCode.TRANSACTION]: "run recover before retrying the transaction.",
+  [EXIT_SUCCESS]: "continue to the next phase.",
+  [EXIT_UNEXPECTED]: "stop, inspect stderr, fix the environment, then retry once.",
+  [EXIT_USAGE]: "fix the command arguments, then retry.",
+  [EXIT_VALIDATION]: "fix the reported validation issues, then retry or skip with a reason.",
+  [EXIT_CONFLICT]: "resolve the manifest or managed-path conflict, then retry.",
+  [EXIT_TRANSACTION]: "run recover before retrying the transaction.",
 };
 
 const NEXT_BY_ERROR_CODE: Record<string, string> = {
@@ -113,7 +113,7 @@ function createContext(options: PresentOptions): PresenterContext {
 }
 
 function statusGlyph(outcome: DispatchOutcome, context: PresenterContext): string {
-  if (outcome.result?.status === "error" || outcome.exitCode !== ExitCode.SUCCESS) {
+  if (outcome.result?.status === "error" || outcome.exitCode !== EXIT_SUCCESS) {
     return context.symbols.fail;
   }
   return context.symbols.ok;
@@ -135,7 +135,7 @@ function writeLine(text: string): void {
 
 function renderHeader(outcome: DispatchOutcome, context: PresenterContext): string {
   const command = outcome.result?.command ?? "error";
-  const failed = outcome.result?.status === "error" || outcome.exitCode !== ExitCode.SUCCESS;
+  const failed = outcome.result?.status === "error" || outcome.exitCode !== EXIT_SUCCESS;
   const glyph = statusGlyph(outcome, context);
   const text = failed
     ? context.colors.red(`${glyph} ${command}`)
@@ -400,9 +400,6 @@ function bodyFor(outcome: DispatchOutcome, context: PresenterContext): string {
   if (result.command === "init" || result.command === "inspect") {
     return keyValueSummary(data, context);
   }
-  if ((RESERVED_COMMANDS as readonly string[]).includes(result.command)) {
-    return keyValueSummary(data, context);
-  }
   return keyValueSummary(data, context);
 }
 
@@ -415,7 +412,7 @@ function nextStep(outcome: DispatchOutcome): string {
       "stop, inspect the error, then retry."
     );
   }
-  if (outcome.exitCode !== ExitCode.SUCCESS) {
+  if (outcome.exitCode !== EXIT_SUCCESS) {
     return NEXT_BY_EXIT_CODE[outcome.exitCode] ?? "stop, inspect the result, then retry.";
   }
   if (result?.command !== undefined && SUCCESS_NEXT_BY_COMMAND[result.command] !== undefined) {
