@@ -9,7 +9,7 @@ import addFormats from "ajv-formats";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
 const schemasDir = join(root, "schemas");
-const refsDir = join(root, ".agents", "skills", "okf-knowledge-vault", "references");
+const refsDir = join(root, ".agents", "skills", "okf-vault", "references");
 
 function loadJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));

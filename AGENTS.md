@@ -4,7 +4,7 @@ This repository combines a **provider-neutral workflow skill** with a **determin
 
 ## Choose the right command
 
-Use this one-screen decision tree before reading the full skill. Map MCP and filesystem access via [capabilities preflight](.agents/skills/okf-knowledge-vault/references/capabilities.md) — never assume runtime-specific tool names.
+Use this one-screen decision tree before reading the full skill. Map MCP and filesystem access via [capabilities preflight](.agents/skills/okf-vault/references/capabilities.md) — never assume runtime-specific tool names.
 
 | Your goal | Command | Notes |
 | --------- | ------- | ----- |
@@ -15,11 +15,11 @@ Use this one-screen decision tree before reading the full skill. Map MCP and fil
 | Inspect the knowledge graph | `/vault-visualize` | OKF visualizer (Phase 1b) |
 | Ingest then validate in one session | `/vault-ingest-check` | Composed pipeline (Phase 1b) |
 
-Full command list with availability labels: [commands/registry.md](.agents/skills/okf-knowledge-vault/commands/registry.md).
+Full command list with availability labels: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
 ## Canonical skill
 
-Read and follow [`.agents/skills/okf-knowledge-vault/SKILL.md`](.agents/skills/okf-knowledge-vault/SKILL.md) for all vault workflows:
+Read and follow [`.agents/skills/okf-vault/SKILL.md`](.agents/skills/okf-vault/SKILL.md) for all vault workflows:
 
 | Mode         | Purpose                                                              |
 | ------------ | -------------------------------------------------------------------- |
@@ -33,7 +33,11 @@ The skill orchestrates acquisition, semantic conversion, and curation proposals.
 
 ## Helper CLI
 
-Build before invoking:
+First-time setup in this repository: `pnpm run setup` (see [README.md](README.md#quick-start)).
+
+One-time global CLI for other repositories: `pnpm run setup:link` in the okf-vault clone, then `okf-vault init` from a new repo root (creates `./knowledge/` and installs skill adapters). `setup:link` requires the pnpm global bin directory on `PATH` — run `pnpm setup` and restart your shell, or add `export PATH="$(pnpm bin -g):$PATH"` to your shell profile.
+
+Build before invoking locally:
 
 ```bash
 pnpm install
@@ -46,20 +50,32 @@ Invoke as a child process with an **argument array** — never shell-interpolate
 node dist/main.js <command> [args...]
 ```
 
-The binary name is `okf-vault` when installed via `pnpm link` or `pnpm dlx`; during development use `node dist/main.js` directly.
+The binary name is `okf-vault` when installed via `pnpm run setup:link`; during development use `node dist/main.js` directly.
+
+### Init from a new repository
+
+```bash
+# once, in okf-vault clone (pnpm bin -g must be on PATH; run `pnpm setup` if needed)
+pnpm run setup:link
+
+# in your new repo root
+okf-vault init
+```
+
+No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/vault-*` is individually discoverable. Explicit `okf-vault init <vault-root>` initializes the vault only (backward compatible).
 
 ## Key contracts
 
-All durable contracts live under [`.agents/skills/okf-knowledge-vault/references/`](.agents/skills/okf-knowledge-vault/references/):
+All durable contracts live under [`.agents/skills/okf-vault/references/`](.agents/skills/okf-vault/references/):
 
 | Contract          | File                                                                 |
 | ----------------- | -------------------------------------------------------------------- |
-| Note contract     | [note-contract.md](.agents/skills/okf-knowledge-vault/references/note-contract.md) |
-| Source envelope   | [source-envelope.md](.agents/skills/okf-knowledge-vault/references/source-envelope.md) |
-| Vault layout      | [vault-layout.md](.agents/skills/okf-knowledge-vault/references/vault-layout.md) |
-| Capabilities      | [capabilities.md](.agents/skills/okf-knowledge-vault/references/capabilities.md) |
-| Helper invocation | [helper-invocation.md](.agents/skills/okf-knowledge-vault/references/helper-invocation.md) |
-| Ingest wizard      | [ingest-wizard.md](.agents/skills/okf-knowledge-vault/references/ingest-wizard.md) |
+| Note contract     | [note-contract.md](.agents/skills/okf-vault/references/note-contract.md) |
+| Source envelope   | [source-envelope.md](.agents/skills/okf-vault/references/source-envelope.md) |
+| Vault layout      | [vault-layout.md](.agents/skills/okf-vault/references/vault-layout.md) |
+| Capabilities      | [capabilities.md](.agents/skills/okf-vault/references/capabilities.md) |
+| Helper invocation | [helper-invocation.md](.agents/skills/okf-vault/references/helper-invocation.md) |
+| Ingest wizard      | [ingest-wizard.md](.agents/skills/okf-vault/references/ingest-wizard.md) |
 
 Do not duplicate reference content elsewhere in the repo.
 
@@ -67,7 +83,7 @@ Do not duplicate reference content elsewhere in the repo.
 
 | Layer              | Location              | Responsibility                                              |
 | ------------------ | --------------------- | ----------------------------------------------------------- |
-| Workflow skill     | `.agents/skills/okf-knowledge-vault/` | Orchestration, acquisition, conversion, curator interaction |
+| Workflow skill     | `.agents/skills/okf-vault/` | Orchestration, acquisition, conversion, curator interaction |
 | Deterministic gate | `src/vault/`          | Validation, manifest, graph, dossiers, Git transactions     |
 | CLI entry          | `src/cli.ts`, `src/main.ts` | Argument parsing, dispatch, JSON stdout/stderr         |
 | Tests              | `test/fixtures/`, `test/workflows/` | Contract and workflow fixtures                        |
@@ -95,4 +111,4 @@ pnpm run lint          # ESLint
 pnpm run format:check  # Prettier
 ```
 
-Requires Node 24 (see `.nvmrc`).
+Requires Node >= 24 (recommended: see `.nvmrc`).

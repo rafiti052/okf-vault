@@ -27,7 +27,7 @@ const profilesDir = join(
   root,
   ".agents",
   "skills",
-  "okf-knowledge-vault",
+  "okf-vault",
   "references",
   "conversion-profiles",
 );

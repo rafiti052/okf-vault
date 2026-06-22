@@ -99,4 +99,4 @@ Fix conversion output and re-validate; do not commit until exit 0.
 
 ## Semantic acceptance
 
-Compare staged output against [gold notes](../../../../test/fixtures/notes/gold/video/) before declaring ingest success for a new video profile revision. Gold notes demonstrate timestamp anchor binding, paragraph-granularity fallback, and topic-neutral wording.
+Compare staged output against [gold notes](../../../../../test/fixtures/notes/gold/video/) before declaring ingest success for a new video profile revision. Gold notes demonstrate timestamp anchor binding, paragraph-granularity fallback, and topic-neutral wording.

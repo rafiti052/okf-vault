@@ -8,12 +8,14 @@
     "okf-vault": "./dist/main.js"
   },
   "engines": {
-    "node": "24.x"
+    "node": ">=24"
   },
   "packageManager": "pnpm@11.8.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "format:check": "prettier --check src test schemas .agents/skills/okf-knowledge-vault package.json tsconfig.json tsconfig.test.json eslint.config.js .prettierrc.json",
+    "setup": "node scripts/install.mjs",
+    "setup:link": "node scripts/install.mjs --link",
+    "format:check": "prettier --check src test schemas .agents/skills/okf-vault package.json tsconfig.json tsconfig.test.json eslint.config.js .prettierrc.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && tsc -p tsconfig.test.json && node --test dist-test/*.test.js dist-test/**/*.test.js test/contracts/*.test.mjs test/workflows/*.test.mjs",
@@ -24,6 +26,7 @@
     "ajv-formats": "^3.0.1",
     "boxen": "8.0.1",
     "cli-table3": "0.6.5",
+    "okf-knowledge-vault": "link:",
     "picocolors": "1.1.1",
     "yaml": "^2.8.0"
   },

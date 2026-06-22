@@ -78,7 +78,7 @@ export const NORMALIZATION_ERROR_CODES = {
  * @returns {string}
  */
 export function skillRoot(root) {
-  return join(root, ".agents", "skills", "okf-knowledge-vault");
+  return join(root, ".agents", "skills", "okf-vault");
 }
 
 /**
@@ -93,8 +93,24 @@ export function canonicalCommandsDir(root) {
  * @param {string} root
  * @returns {string}
  */
+export function cursorSkillDir(root) {
+  return join(root, ".cursor", "skills", "okf-vault");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
+export function claudeSkillDir(root) {
+  return join(root, ".claude", "skills", "okf-vault");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
 export function cursorCommandsDir(root) {
-  return join(root, ".cursor", "skills", "okf-knowledge-vault", "commands");
+  return join(cursorSkillDir(root), "commands");
 }
 
 /**
@@ -102,7 +118,166 @@ export function cursorCommandsDir(root) {
  * @returns {string}
  */
 export function claudeCommandsDir(root) {
-  return join(root, ".claude", "skills", "okf-knowledge-vault", "commands");
+  return join(claudeSkillDir(root), "commands");
+}
+
+/**
+ * @param {string} root
+ * @returns {string}
+ */
+export function cursorRulePath(root) {
+  return join(root, ".cursor", "rules", "okf-vault.mdc");
+}
+
+/**
+ * Per-command Cursor skill directory (`.cursor/skills/<cmd>`) holding a discoverable `SKILL.md`.
+ * @param {string} root
+ * @param {string} command
+ * @returns {string}
+ */
+export function cursorCommandSkillDir(root, command) {
+  return join(root, ".cursor", "skills", command);
+}
+
+/**
+ * Per-command Cursor `SKILL.md` symlink (`.cursor/skills/<cmd>/SKILL.md`).
+ * @param {string} root
+ * @param {string} command
+ * @returns {string}
+ */
+export function cursorCommandSkillFile(root, command) {
+  return join(cursorCommandSkillDir(root, command), "SKILL.md");
+}
+
+/**
+ * Claude per-command slash entries directory (`.claude/commands`).
+ * @param {string} root
+ * @returns {string}
+ */
+export function claudeCommandsFileDir(root) {
+  return join(root, ".claude", "commands");
+}
+
+/**
+ * Claude per-command slash entry file (`.claude/commands/<cmd>.md`).
+ * @param {string} root
+ * @param {string} command
+ * @returns {string}
+ */
+export function claudeCommandFile(root, command) {
+  return join(claudeCommandsFileDir(root), `${command}.md`);
+}
+
+/**
+ * Verifies Cursor and Claude runtime adapters resolve to the canonical skill and commands.
+ * @param {string} root
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function verifyRuntimeAdapters(root) {
+  const canonical = skillRoot(root);
+  const canonicalCmd = canonicalCommandsDir(root);
+  const cursorSkill = cursorSkillDir(root);
+  const claudeSkill = claudeSkillDir(root);
+  const cursorCmd = cursorCommandsDir(root);
+  const claudeCmd = claudeCommandsDir(root);
+  const rulePath = cursorRulePath(root);
+
+  if (!existsSync(rulePath)) {
+    return { ok: false, message: `Missing Cursor rule: ${rulePath}` };
+  }
+
+  for (const [label, adapterSkill, adapterCmd] of [
+    ["Cursor", cursorSkill, cursorCmd],
+    ["Claude", claudeSkill, claudeCmd],
+  ]) {
+    if (!existsSync(adapterSkill)) {
+      return { ok: false, message: `${label} skill adapter missing: ${adapterSkill}` };
+    }
+    if (!pathIsSymlink(adapterSkill)) {
+      return {
+        ok: false,
+        message: `${label} skill adapter is not a symlink: ${adapterSkill}`,
+      };
+    }
+    if (!resolvesToSameRealpath(adapterSkill, canonical)) {
+      return {
+        ok: false,
+        message: `${label} skill adapter does not resolve to canonical skill`,
+      };
+    }
+    if (!existsSync(adapterCmd)) {
+      return { ok: false, message: `${label} commands directory missing: ${adapterCmd}` };
+    }
+    if (!resolvesToSameRealpath(adapterCmd, canonicalCmd)) {
+      return {
+        ok: false,
+        message: `${label} commands directory does not resolve to canonical commands`,
+      };
+    }
+  }
+
+  for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const [label, adapterCmd] of [
+      ["Cursor", cursorCmd],
+      ["Claude", claudeCmd],
+    ]) {
+      const result = assertAdapterStubResolves(adapterCmd, canonicalCmd, stubFileName);
+      if (!result.ok) {
+        return { ok: false, message: `${label}: ${result.message}` };
+      }
+    }
+  }
+
+  const registryPath = join(canonicalCmd, "registry.md");
+  for (const [label, adapterCmd] of [
+    ["Cursor", cursorCmd],
+    ["Claude", claudeCmd],
+  ]) {
+    const adapterRegistry = join(adapterCmd, "registry.md");
+    if (!existsSync(adapterRegistry)) {
+      return { ok: false, message: `${label} registry.md missing at ${adapterRegistry}` };
+    }
+    if (!resolvesToSameRealpath(adapterRegistry, registryPath)) {
+      return {
+        ok: false,
+        message: `${label} registry.md does not resolve to canonical registry`,
+      };
+    }
+  }
+
+  for (const command of VAULT_COMMANDS) {
+    const canonicalStub = join(canonicalCmd, `${command}.md`);
+
+    const cursorSkillFile = cursorCommandSkillFile(root, command);
+    if (!existsSync(cursorSkillFile)) {
+      return {
+        ok: false,
+        message: `Cursor per-command skill missing: ${cursorSkillFile}`,
+      };
+    }
+    if (!resolvesToSameRealpath(cursorSkillFile, canonicalStub)) {
+      return {
+        ok: false,
+        message: `Cursor per-command skill does not resolve to canonical stub: ${cursorSkillFile}`,
+      };
+    }
+
+    const claudeFile = claudeCommandFile(root, command);
+    if (!existsSync(claudeFile)) {
+      return {
+        ok: false,
+        message: `Claude per-command file missing: ${claudeFile}`,
+      };
+    }
+    if (!resolvesToSameRealpath(claudeFile, canonicalStub)) {
+      return {
+        ok: false,
+        message: `Claude per-command file does not resolve to canonical stub: ${claudeFile}`,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 export const MVP_COMMAND_STUBS = ["vault-ingest.md", "registry.md"];
@@ -182,6 +357,21 @@ export function resolvesToSameRealpath(left, right) {
  */
 export function stripYamlFrontmatter(text) {
   return text.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
+}
+
+/**
+ * Reads a scalar frontmatter field value (e.g. `name`) from a markdown document.
+ * @param {string} text
+ * @param {string} field
+ * @returns {string | null}
+ */
+export function frontmatterField(text, field) {
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!match) {
+    return null;
+  }
+  const fieldMatch = match[1].match(new RegExp(`^${field}:\\s*(.+?)\\s*$`, "m"));
+  return fieldMatch ? fieldMatch[1].trim() : null;
 }
 
 /**
@@ -755,6 +945,17 @@ export function documentsVaultSetupRouting(text) {
     text.includes("/vault-init") &&
     text.includes("/vault-bootstrap") &&
     text.includes("./knowledge/")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsRepoRootInit(text) {
+  return (
+    /\bokf-vault init\b/.test(text) &&
+    (/repo root|new repo|new repository|my-new-vault-repo/i.test(text) || /setup:link/.test(text))
   );
 }
 

@@ -69,7 +69,7 @@ function countCommitsSince(vaultRoot: string, baseHead: string): number {
 describe("ingestion loop documentation", () => {
   it("lists happy-path progress events in required order", () => {
     const doc = readFileSync(
-      join(root, ".agents", "skills", "okf-knowledge-vault", "references", "ingestion-loop.md"),
+      join(root, ".agents", "skills", "okf-vault", "references", "ingestion-loop.md"),
       "utf8",
     );
     const section = doc.slice(doc.indexOf("## Progress events — happy path order"));

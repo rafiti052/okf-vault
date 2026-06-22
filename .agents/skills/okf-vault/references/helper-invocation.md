@@ -51,11 +51,21 @@ Invoke with an **argument array**. Example shape (paths are illustrative):
 
 ### initialize
 
+From a repository root (no arguments):
+
+```
+okf-vault init
+```
+
+Creates `./knowledge/` vault layout, manifest, indexes, log, initial Git commit, and installs Cursor/Claude skill adapters plus the curator rule in the current directory.
+
+With an explicit vault path (vault only — no adapters):
+
 ```
 okf-vault init <vault-root>
 ```
 
-Creates vault layout, manifest, indexes, log, and initial Git commit.
+Creates vault layout, manifest, indexes, log, and initial Git commit at the given path.
 
 ### inspect (manifest)
 

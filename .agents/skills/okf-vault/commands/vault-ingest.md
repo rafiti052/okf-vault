@@ -1,4 +1,5 @@
 ---
+name: vault-ingest
 disable-model-invocation: true
 ---
 

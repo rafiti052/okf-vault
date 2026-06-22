@@ -1,4 +1,5 @@
 ---
+name: vault-init
 disable-model-invocation: true
 ---
 

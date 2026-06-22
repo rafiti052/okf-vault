@@ -9,7 +9,7 @@ Read [AGENTS.md](../../AGENTS.md) at the start of any vault-related task.
 
 ## Workflow
 
-Use the **okf-knowledge-vault** skill at `.agents/skills/okf-knowledge-vault/SKILL.md` for `initialize`, `ingest`, `organize`, `validate`, and `visualize` modes. Follow phase order and curator interaction rules defined there.
+Use the  **okf-vault** skill at `.agents/skills/okf-vault/SKILL.md` for `initialize`, `ingest`, `organize`, `validate`, and `visualize` modes. Follow phase order and curator interaction rules defined there.
 
 ## TypeScript helper
 

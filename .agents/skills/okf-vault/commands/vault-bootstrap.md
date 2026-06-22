@@ -1,4 +1,5 @@
 ---
+name: vault-bootstrap
 disable-model-invocation: true
 ---
 

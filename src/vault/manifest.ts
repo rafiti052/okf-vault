@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -311,18 +312,82 @@ export function initializeVault(vaultRoot: string): InitializeVaultResult {
   };
 }
 
-export function handleInit(args: string[]): DispatchOutcome {
-  const vaultRoot = args[0];
-  if (vaultRoot === undefined) {
-    return {
-      exitCode: ExitCode.USAGE,
-      result: failure("init", "USAGE_MISSING_ARGS", "Usage: init <vault-root>"),
-      diagnostic: "Missing required argument for init.",
-    };
+const CANONICAL_SKILL_RELATIVE = join(".agents", "skills", "okf-vault");
+const CURATOR_RULE_RELATIVE = join(".cursor", "rules", "okf-vault.mdc");
+const CURATOR_RULE_TEMPLATE_RELATIVE = join(
+  CANONICAL_SKILL_RELATIVE,
+  "templates",
+  "cursor-rule.mdc",
+);
+
+export function resolveInstallRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (true) {
+    const candidate = join(dir, CANONICAL_SKILL_RELATIVE);
+    if (fs.existsSync(candidate)) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
   }
+  throw new Error("Could not resolve okf-vault install root");
+}
+
+function installRuntimeAdapters(projectRoot: string, installRoot: string): void {
+  const scriptPath = join(installRoot, "scripts", "link-runtime-adapters.mjs");
+  const canonicalSkillRoot = join(installRoot, CANONICAL_SKILL_RELATIVE);
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, "--project-root", projectRoot, "--canonical-skill-root", canonicalSkillRoot],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    const detail = result.stderr?.trim() || result.stdout?.trim() || "unknown error";
+    throw new Error(`Failed to install runtime adapters: ${detail}`);
+  }
+}
+
+function installCuratorRule(projectRoot: string, installRoot: string): boolean {
+  const rulePath = join(projectRoot, CURATOR_RULE_RELATIVE);
+  if (fs.existsSync(rulePath)) {
+    return false;
+  }
+  const templatePath = join(installRoot, CURATOR_RULE_TEMPLATE_RELATIVE);
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Missing curator rule template at ${templatePath}`);
+  }
+  fs.mkdirSync(dirname(rulePath), { recursive: true });
+  fs.copyFileSync(templatePath, rulePath);
+  return true;
+}
+
+export function handleInit(args: string[]): DispatchOutcome {
+  const explicitVaultRoot = args[0];
+  const repoRootBootstrap = explicitVaultRoot === undefined;
+  const projectRoot = resolve(process.cwd());
+  const vaultRoot = repoRootBootstrap ? join(projectRoot, "knowledge") : explicitVaultRoot;
 
   try {
     const data = initializeVault(vaultRoot);
+    if (repoRootBootstrap) {
+      const installRoot = resolveInstallRoot();
+      installRuntimeAdapters(projectRoot, installRoot);
+      const curatorRuleInstalled = installCuratorRule(projectRoot, installRoot);
+      return {
+        exitCode: ExitCode.SUCCESS,
+        result: success("init", {
+          ...data,
+          vault_root: resolve(vaultRoot),
+          project_root: projectRoot,
+          adapters_installed: true,
+          curator_rule_installed: curatorRuleInstalled,
+        }),
+      };
+    }
+
     return {
       exitCode: ExitCode.SUCCESS,
       result: success("init", { ...data }),

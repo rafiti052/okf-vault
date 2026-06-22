@@ -93,4 +93,4 @@ Fix conversion output and re-validate; do not commit until exit 0.
 
 ## Semantic acceptance
 
-Compare staged output against [gold notes](../../../../test/fixtures/notes/gold/panel/) before declaring ingest success for a new panel profile revision. Gold notes demonstrate speaker attribution, timestamp binding, and topic-neutral wording without invented participants.
+Compare staged output against [gold notes](../../../../../test/fixtures/notes/gold/panel/) before declaring ingest success for a new panel profile revision. Gold notes demonstrate speaker attribution, timestamp binding, and topic-neutral wording without invented participants.

@@ -1,4 +1,5 @@
 ---
+name: vault-validate
 disable-model-invocation: true
 ---
 

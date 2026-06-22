@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readFileSync, existsSync, lstatSync, readdirSync } from "node:fs";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -13,6 +13,7 @@ import {
   parseRegistryCommandRows,
   documentsIngestFirstRouting,
   documentsVaultSetupRouting,
+  documentsRepoRootInit,
   documentsSkillModeTriggers,
 } from "./workflow-contract.mjs";
 
@@ -20,9 +21,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
 const skillDir = skillRoot(root);
 const agentsPath = join(root, "AGENTS.md");
+const readmePath = join(root, "README.md");
 const skillPath = join(skillDir, "SKILL.md");
 const registryPath = join(skillDir, "commands", "registry.md");
 const ingestWizardPath = join(skillDir, "references", "ingest-wizard.md");
+const packageJsonPath = join(root, "package.json");
+const oldCanonicalPathPattern = /\.agents\/skills\/okf-knowledge-vault/g;
+const allowedOldCanonicalPathFiles = new Set([
+  join("scripts", "managed-artifacts.mjs"),
+  join("test", "workflows", "managed-artifacts.test.mjs"),
+]);
+const scanExclusions = new Set([
+  ".git",
+  ".compozy",
+  "coverage",
+  "dist",
+  "dist-test",
+  "node_modules",
+]);
 
 /**
  * @param {string} markdown
@@ -47,11 +63,63 @@ function agentsLinkResolves(markdown, linkTarget) {
   return pattern.test(markdown);
 }
 
+/**
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function listFiles(dir) {
+  const files = [];
+  for (const entry of readdirSync(dir)) {
+    if (scanExclusions.has(entry)) {
+      continue;
+    }
+    const path = join(dir, entry);
+    const stats = lstatSync(path);
+    if (stats.isDirectory()) {
+      files.push(...listFiles(path));
+    } else if (stats.isFile()) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
+/**
+ * @param {string} markdown
+ * @returns {string[]}
+ */
+function extractMarkdownLinkTargets(markdown) {
+  const targets = [];
+  const pattern = /\[[^\]]+\]\(([^)]+)\)/g;
+  for (const match of markdown.matchAll(pattern)) {
+    targets.push(match[1]);
+  }
+  return targets;
+}
+
+/**
+ * @param {string} target
+ * @returns {boolean}
+ */
+function isExternalOrAnchorOnly(target) {
+  return (
+    target.startsWith("http://") ||
+    target.startsWith("https://") ||
+    target.startsWith("mailto:") ||
+    target.startsWith("#")
+  );
+}
+
 describe("discoverability contract (unit)", () => {
   const agentsText = readFileSync(agentsPath, "utf8");
   const skillText = readFileSync(skillPath, "utf8");
   const registryText = readFileSync(registryPath, "utf8");
   const frontmatterDescription = extractYamlDescription(skillText);
+
+  it("skillRoot resolves to the canonical okf-vault skill", () => {
+    assert.equal(skillDir, join(root, ".agents", "skills", "okf-vault"));
+    assert.ok(existsSync(skillPath));
+  });
 
   it("AGENTS.md recommends /vault-ingest as entry for new content", () => {
     assert.equal(documentsIngestFirstRouting(agentsText), true);
@@ -88,6 +156,48 @@ describe("discoverability contract (unit)", () => {
 
   it("AGENTS.md cross-links commands/registry.md", () => {
     assert.match(agentsText, /commands\/registry\.md/);
+  });
+
+  it("package format:check checks the okf-vault skill tree", () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+    const formatCheck = packageJson.scripts["format:check"];
+    assert.match(formatCheck, /\.agents\/skills\/okf-vault/);
+    assert.doesNotMatch(formatCheck, /\.agents\/skills\/okf-knowledge-vault/);
+  });
+});
+
+describe("README discoverability contract (unit)", () => {
+  const readmeText = readFileSync(readmePath, "utf8");
+
+  it("README recommends /vault-ingest as entry for new content", () => {
+    assert.equal(documentsIngestFirstRouting(readmeText), true);
+    assert.match(readmeText, /\/vault-ingest/);
+    assert.match(readmeText.toLowerCase(), /start here|recommended|new content/);
+  });
+
+  it("README lists all seven /vault-* commands", () => {
+    for (const command of VAULT_COMMANDS) {
+      assert.match(readmeText, new RegExp(`/${command}`), `missing /${command} in README`);
+    }
+  });
+
+  it("README documents pnpm run setup", () => {
+    assert.match(readmeText, /pnpm run setup/);
+  });
+
+  it("README documents repo-root okf-vault init workflow", () => {
+    assert.equal(documentsRepoRootInit(readmeText), true);
+    assert.match(readmeText, /\bokf-vault init\b/);
+    assert.match(readmeText, /setup:link/);
+  });
+
+  it("README mentions both Cursor and Claude Code", () => {
+    assert.match(readmeText, /Cursor/i);
+    assert.match(readmeText, /Claude Code/i);
+  });
+
+  it("README links to commands/registry.md", () => {
+    assert.match(readmeText, /commands\/registry\.md/);
   });
 });
 
@@ -142,7 +252,7 @@ describe("discoverability contract (integration)", () => {
   });
 
   it("ingest-wizard.md link in AGENTS.md resolves to an existing file", () => {
-    const linkTarget = ".agents/skills/okf-knowledge-vault/references/ingest-wizard.md";
+    const linkTarget = ".agents/skills/okf-vault/references/ingest-wizard.md";
     assert.equal(agentsLinkResolves(agentsText, linkTarget), true);
     assert.ok(existsSync(ingestWizardPath));
     assert.ok(existsSync(resolve(root, linkTarget)));
@@ -165,5 +275,45 @@ describe("discoverability contract (integration)", () => {
       const resolved = resolve(registryDir, filePart);
       assert.ok(existsSync(resolved), `Broken registry link "${target}" → ${resolved}`);
     }
+  });
+
+  it("all relative markdown links resolve inside the canonical skill tree", () => {
+    const markdownFiles = listFiles(skillDir).filter((file) => extname(file) === ".md");
+    assert.ok(markdownFiles.length > 0);
+
+    for (const markdownFile of markdownFiles) {
+      const markdown = readFileSync(markdownFile, "utf8");
+      const markdownDir = dirname(markdownFile);
+      for (const target of extractMarkdownLinkTargets(markdown)) {
+        if (isExternalOrAnchorOnly(target)) {
+          continue;
+        }
+        const filePart = target.split("#")[0];
+        if (!filePart) {
+          continue;
+        }
+        const resolved = resolve(markdownDir, filePart);
+        assert.ok(
+          existsSync(resolved),
+          `Broken link in ${relative(root, markdownFile)}: "${target}" → ${resolved}`,
+        );
+      }
+    }
+  });
+
+  it("does not reintroduce the old canonical skill path outside legacy manifest coverage", () => {
+    const offenders = [];
+    for (const file of listFiles(root)) {
+      const relativePath = relative(root, file);
+      if (allowedOldCanonicalPathFiles.has(relativePath)) {
+        continue;
+      }
+      const text = readFileSync(file, "utf8");
+      if (oldCanonicalPathPattern.test(text)) {
+        offenders.push(relativePath);
+      }
+      oldCanonicalPathPattern.lastIndex = 0;
+    }
+    assert.deepEqual(offenders, []);
   });
 });

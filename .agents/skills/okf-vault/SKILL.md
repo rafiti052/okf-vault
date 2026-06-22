@@ -1,5 +1,5 @@
 ---
-name: okf-knowledge-vault
+name: okf-vault
 description: >-
   Provider-neutral OKF Knowledge Vault workflow. Commands: /vault-ingest (ingest
   wizard, recommended for new content), /vault-init (initialize ./knowledge/),

@@ -66,4 +66,4 @@ Fix conversion output and re-validate; do not commit until exit 0.
 
 ## Semantic acceptance
 
-Compare staged output against [gold notes](../../../../test/fixtures/notes/gold/article/) before declaring ingest success for a new article profile revision. Gold notes demonstrate acceptable claim density, evidence linkage, and topic-neutral wording.
+Compare staged output against [gold notes](../../../../../test/fixtures/notes/gold/article/) before declaring ingest success for a new article profile revision. Gold notes demonstrate acceptable claim density, evidence linkage, and topic-neutral wording.

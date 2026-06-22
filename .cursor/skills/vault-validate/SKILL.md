@@ -1,0 +1,1 @@
+../../../.agents/skills/okf-vault/commands/vault-validate.md

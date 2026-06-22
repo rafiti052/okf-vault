@@ -59,8 +59,8 @@ function captureRun(argv: string[], options: { stdoutIsTTY?: boolean } = {}) {
 }
 
 describe("package metadata", () => {
-  it("declares Node 24, exact pnpm version, private package, and one helper bin", () => {
-    assert.equal(packageJson.engines.node, "24.x");
+  it("declares Node >= 24, exact pnpm version, private package, and one helper bin", () => {
+    assert.equal(packageJson.engines.node, ">=24");
     assert.equal(packageJson.packageManager, "pnpm@11.8.0");
     assert.equal(packageJson.private, true);
     assert.deepEqual(Object.keys(packageJson.bin), ["okf-vault"]);
@@ -95,6 +95,9 @@ describe("CLI parsing and dispatch", () => {
     ]);
     for (const command of RESERVED_COMMANDS) {
       const outcome = dispatch(parseArgs([command]));
+      if (command === "init") {
+        continue;
+      }
       if (implementedWithoutArgs.has(command)) {
         assert.equal(outcome.exitCode, ExitCode.USAGE);
       } else {
@@ -111,11 +114,10 @@ describe("CLI parsing and dispatch", () => {
   });
 
   it("maps usage, validation, and success outcomes to exit statuses 2, 3, and 0", () => {
-    assert.equal(run([]), ExitCode.USAGE);
-    assert.equal(run(["init"]), ExitCode.USAGE);
-    assert.equal(run(["commit"]), ExitCode.USAGE);
-    assert.equal(run(["recover"]), ExitCode.USAGE);
-    assert.equal(run(["--version"]), ExitCode.SUCCESS);
+    assert.equal(captureRun([]).exitCode, ExitCode.USAGE);
+    assert.equal(captureRun(["commit"]).exitCode, ExitCode.USAGE);
+    assert.equal(captureRun(["recover"]).exitCode, ExitCode.USAGE);
+    assert.equal(captureRun(["--version"]).exitCode, ExitCode.SUCCESS);
   });
 
   it("serializes JSON envelopes without diagnostic contamination on stdout", () => {
@@ -164,7 +166,7 @@ describe("CLI parsing and dispatch", () => {
     assert.equal(ttyJson.stdout, pipedJson.stdout);
     assert.equal(
       ttyJson.stdout,
-      `{"status":"ok","command":"version","data":{"version":"0.1.0"}}\n`,
+      `${JSON.stringify({ status: "ok", command: "version", data: { version: "0.1.0" } })}\n`,
     );
   });
 
@@ -177,11 +179,12 @@ describe("CLI parsing and dispatch", () => {
     assert.doesNotMatch(result.stderr, /^\{/);
   });
 
-  it("includes reserved commands in help text", () => {
+  it("includes reserved commands and init usage in help text", () => {
     const text = helpText();
     for (const command of RESERVED_COMMANDS) {
       assert.match(text, new RegExp(command));
     }
+    assert.match(text, /init \[vault-root\]/);
   });
 });
 

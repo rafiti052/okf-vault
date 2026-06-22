@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  lstatSync,
+  realpathSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -130,5 +138,77 @@ describe("init and inspect CLI integration", () => {
     assert.equal(result.status, ExitCode.SUCCESS);
     assert.match(result.stdout, /"status":"ok"/);
     assert.equal(existsSync(join(vaultRoot, MANIFEST_RELATIVE_PATH)), true);
+  });
+
+  it("no-arg init from repo root creates knowledge vault and installs adapters", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-project-init-"));
+    const originalCwd = process.cwd();
+    const canonicalSkill = join(root, ".agents", "skills", "okf-vault");
+
+    try {
+      process.chdir(projectRoot);
+      const outcome = dispatch(parseArgs(["init"]));
+      assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+
+      const data = (outcome.result as CliSuccess).data as {
+        vault_root: string;
+        project_root: string;
+        adapters_installed: boolean;
+        curator_rule_installed: boolean;
+      };
+      assert.equal(data.adapters_installed, true);
+      assert.equal(data.curator_rule_installed, true);
+      assert.equal(realpathSync(data.project_root), realpathSync(projectRoot));
+      assert.equal(realpathSync(data.vault_root), realpathSync(join(projectRoot, "knowledge")));
+      assert.equal(existsSync(join(projectRoot, "knowledge", MANIFEST_RELATIVE_PATH)), true);
+
+      const cursorSkill = join(projectRoot, ".cursor", "skills", "okf-vault");
+      const claudeSkill = join(projectRoot, ".claude", "skills", "okf-vault");
+      assert.equal(existsSync(cursorSkill), true);
+      assert.equal(existsSync(claudeSkill), true);
+      assert.equal(lstatSync(cursorSkill).isSymbolicLink(), true);
+      assert.equal(lstatSync(claudeSkill).isSymbolicLink(), true);
+      assert.equal(realpathSync(cursorSkill), realpathSync(canonicalSkill));
+      assert.equal(realpathSync(claudeSkill), realpathSync(canonicalSkill));
+      assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okf-vault.mdc")), true);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("explicit init path creates vault only without adapters", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-explicit-init-"));
+    const vaultRoot = join(projectRoot, "custom-vault");
+    const outcome = dispatch(parseArgs(["init", vaultRoot]));
+    assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+
+    const data = (outcome.result as CliSuccess).data as { adapters_installed?: boolean };
+    assert.equal(data.adapters_installed, undefined);
+    assert.equal(existsSync(join(vaultRoot, MANIFEST_RELATIVE_PATH)), true);
+    assert.equal(existsSync(join(projectRoot, ".cursor", "skills", "okf-vault")), false);
+  });
+
+  it("no-arg init is idempotent on re-run", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-project-reinit-"));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(projectRoot);
+      const first = dispatch(parseArgs(["init"]));
+      assert.equal(first.exitCode, ExitCode.SUCCESS);
+      const firstData = (first.result as CliSuccess).data as { curator_rule_installed: boolean };
+      assert.equal(firstData.curator_rule_installed, true);
+
+      const second = dispatch(parseArgs(["init"]));
+      assert.equal(second.exitCode, ExitCode.SUCCESS);
+      const secondData = (second.result as CliSuccess).data as {
+        idempotent: boolean;
+        curator_rule_installed: boolean;
+      };
+      assert.equal(secondData.idempotent, true);
+      assert.equal(secondData.curator_rule_installed, false);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });

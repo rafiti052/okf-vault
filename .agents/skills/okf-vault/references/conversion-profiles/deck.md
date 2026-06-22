@@ -80,4 +80,4 @@ Fix and re-validate; do not commit until exit 0.
 
 ## Semantic acceptance
 
-Compare staged output against [gold notes](../../../../test/fixtures/notes/gold/deck/) before declaring ingest success for a new deck profile revision. Gold notes demonstrate full slide coverage, speaker-note usage, preserved numeric tokens, and narrative reconstruction rather than transcription.
+Compare staged output against [gold notes](../../../../../test/fixtures/notes/gold/deck/) before declaring ingest success for a new deck profile revision. Gold notes demonstrate full slide coverage, speaker-note usage, preserved numeric tokens, and narrative reconstruction rather than transcription.

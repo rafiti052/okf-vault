@@ -1,4 +1,5 @@
 ---
+name: vault-organize
 disable-model-invocation: true
 ---
 

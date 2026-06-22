@@ -136,19 +136,25 @@ export function parseArgs(argv: string[]): ParsedArgs {
 }
 
 export function helpText(): string {
-  const commands = RESERVED_COMMANDS.map((name) => `  ${name}`).join("\n");
+  const otherCommands = RESERVED_COMMANDS.filter((name) => name !== "init")
+    .map((name) => `  ${name}`)
+    .join("\n");
   return [
     "okf-vault — OKF Knowledge Vault deterministic helper",
     "",
     "Usage:",
     "  okf-vault [--help] [--version] <command> [args...]",
     "",
-    "Reserved commands (handlers registered in later tasks):",
-    commands,
+    "Commands:",
+    "  init [vault-root]  From repo root: create ./knowledge/ and install skill adapters.",
+    "                     With vault-root: initialize vault only (no adapters).",
+    otherCommands,
     "",
     "Global flags:",
     "  -h, --help       Show help",
     "  -V, --version    Show version",
+    "  --json           Emit machine-readable JSON",
+    "  --human          Emit human-readable text",
   ].join("\n");
 }
 

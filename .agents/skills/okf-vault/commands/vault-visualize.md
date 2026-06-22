@@ -1,4 +1,5 @@
 ---
+name: vault-visualize
 disable-model-invocation: true
 ---
 
