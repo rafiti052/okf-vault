@@ -9,3 +9,11 @@ dist-test/
 .claude/settings.local.json
 .claude/settings.local.*
 *.tsbuildinfo
+
+# Compozy workflow tooling
+.agents/
+.claude/skills/compozy
+.claude/skills/cy-*
+
+# Dry-run vault artifacts
+--dry-run/
