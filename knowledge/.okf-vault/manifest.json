@@ -45,6 +45,17 @@
       "note_path": "notes/adocao-arquitetura.md",
       "commit": "cd18ea89ca88a610945f160ee2ab69fdeb0c05ed",
       "processed_at": "2026-06-26T17:17:57.970Z"
+    },
+    {
+      "source_key": "granola:bcdb364f-daf6-4b7b-8a12-21591d2aa8fe",
+      "kind": "granola",
+      "origin": "granola:bcdb364f-daf6-4b7b-8a12-21591d2aa8fe",
+      "content_sha256": "974ee7262919c95398d28d68e5ba4a1c25086ffd14dbaa7ce281aa8008feb227",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/missing-interface-ai.md",
+      "commit": "9f871604268b920785e2b8ac11b4faeacf7614e2",
+      "processed_at": "2026-06-26T17:18:21.976Z"
     }
   ]
 }

@@ -16,3 +16,7 @@
 ## 2026-06-26T17:17:57.970Z — granola:96005a00-60e4-42ce-89a7-df78fe06dba9
 
 - note: notes/adocao-arquitetura.md
+
+## 2026-06-26T17:18:21.976Z — granola:bcdb364f-daf6-4b7b-8a12-21591d2aa8fe
+
+- note: notes/missing-interface-ai.md
