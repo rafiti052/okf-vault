@@ -78,6 +78,17 @@
       "note_path": "notes/missing-interface-ai.md",
       "commit": "9f871604268b920785e2b8ac11b4faeacf7614e2",
       "processed_at": "2026-06-26T17:18:21.976Z"
+    },
+    {
+      "source_key": "granola:e0e2de1a-2470-4452-a0cf-aaeacf0a7beb",
+      "kind": "granola",
+      "origin": "granola:e0e2de1a-2470-4452-a0cf-aaeacf0a7beb",
+      "content_sha256": "1a785eb00bc145acbef5eb1ab62108f895abddfc9097893791ef05efcd198c9a",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/sapia-ia-america-latina.md",
+      "commit": "e5b32bb0f097a93a1c001e8767417a8df284a3cb",
+      "processed_at": "2026-06-26T17:21:51.198Z"
     }
   ]
 }

@@ -28,3 +28,7 @@
 ## 2026-06-26T17:19:42.242Z — granola:52ba23b0-5a23-41d9-b0a9-a3e0b7d3676b
 
 - note: notes/agentic-ai.md
+
+## 2026-06-26T17:21:51.198Z — granola:e0e2de1a-2470-4452-a0cf-aaeacf0a7beb
+
+- note: notes/sapia-ia-america-latina.md
