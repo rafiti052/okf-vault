@@ -1,1 +1,0 @@
-../../../.agents/skills/okf-vault/commands/vault-ingest.md

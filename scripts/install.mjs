@@ -3,21 +3,56 @@
  * Cross-platform setup: install deps, build helper CLI, link runtime adapters, verify, smoke test.
  */
 import { readFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { verifyRuntimeAdapters } from "../test/workflows/workflow-contract.mjs";
 import { linkRuntimeAdapters } from "./link-runtime-adapters.mjs";
 import { assertPnpmGlobalBinOnPath, PNPM_GLOBAL_LINK_ARGS } from "./pnpm-global-path.mjs";
 
+export { verifyRuntimeAdapters };
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const linkGlobal = args.includes("--link");
-const filteredArgs = args.filter((arg) => arg !== "--link");
+const dryRun = args.includes("--dry-run");
+const json = args.includes("--json");
+const human = args.includes("--human");
+
+function argValue(flag, fallback) {
+  const index = args.indexOf(flag);
+  if (index === -1) {
+    return fallback;
+  }
+  const value = args[index + 1];
+  if (value === undefined) {
+    fail(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
+const projectRoot = argValue("--project-root", root);
+const canonicalSkillRoot = argValue(
+  "--canonical-skill-root",
+  join(root, ".agents", "skills", "okf-vault"),
+);
+const filteredArgs = args.filter(
+  (arg, index) =>
+    arg !== "--link" &&
+    arg !== "--dry-run" &&
+    arg !== "--json" &&
+    arg !== "--human" &&
+    arg !== "--project-root" &&
+    arg !== "--canonical-skill-root" &&
+    args[index - 1] !== "--project-root" &&
+    args[index - 1] !== "--canonical-skill-root",
+);
 
 if (filteredArgs.length > 0) {
   console.error(`Unknown argument(s): ${filteredArgs.join(", ")}`);
-  console.error("Usage: node scripts/install.mjs [--link]");
+  console.error(
+    "Usage: node scripts/install.mjs [--link] [--dry-run] [--json|--human] [--project-root <path>] [--canonical-skill-root <path>]",
+  );
   process.exit(1);
 }
 
@@ -106,32 +141,64 @@ function checkPnpmGlobalBinOnPath() {
   console.log(`ok: pnpm global bin on PATH (${check.globalBinDir})`);
 }
 
-console.log("OKF Knowledge Vault setup\n");
+function reportRemovedArtifacts(removed, rootPath) {
+  if (json) {
+    return;
+  }
+  console.log("\nLegacy artifacts removed:");
+  if (removed.length === 0) {
+    console.log("  none");
+    return;
+  }
+  console.log("  path");
+  console.log("  ----");
+  for (const path of removed) {
+    console.log(`  ${relative(rootPath, path)}`);
+  }
+}
 
-checkNodeVersion();
-checkPnpm();
+function writeJsonSummary(data) {
+  process.stdout.write(`${JSON.stringify({ status: "ok", command: "setup", data })}\n`);
+}
 
-runStep("Installing dependencies", "pnpm", ["install"]);
-runStep("Building helper CLI", "pnpm", ["run", "build"]);
+if (!json) {
+  console.log("OKV setup\n");
+}
 
-console.log("\n→ Installing runtime adapters");
-linkRuntimeAdapters({
-  projectRoot: root,
-  canonicalSkillRoot: join(root, ".agents", "skills", "okf-vault"),
+if (!dryRun) {
+  checkNodeVersion();
+  checkPnpm();
+
+  runStep("Installing dependencies", "pnpm", ["install"]);
+  runStep("Building helper CLI", "pnpm", ["run", "build"]);
+}
+
+if (!json) {
+  console.log("\n→ Installing runtime adapters");
+}
+const adapterResult = linkRuntimeAdapters({
+  projectRoot,
+  canonicalSkillRoot,
+  quiet: json,
 });
+reportRemovedArtifacts(adapterResult.removed, projectRoot);
 
-const adapterCheck = verifyRuntimeAdapters(root);
+const adapterCheck = verifyRuntimeAdapters(projectRoot, { canonicalSkillRoot });
 if (!adapterCheck.ok) {
   fail(
     adapterCheck.message,
     "Remediation: ensure Git symlink support (`git config core.symlinks true`), then re-run `pnpm run setup`.",
   );
 }
-console.log("ok: Cursor and Claude runtime adapters verified");
+if (!json) {
+  console.log("ok: Cursor and Claude runtime adapters verified");
+}
 
-runStep("Smoke test helper CLI", "node", ["dist/main.js", "--version"]);
+if (!dryRun) {
+  runStep("Smoke test helper CLI", "node", ["dist/main.js", "--version"]);
+}
 
-if (linkGlobal) {
+if (linkGlobal && !dryRun) {
   checkPnpmGlobalBinOnPath();
   runStep("Linking okf-vault globally", "pnpm", PNPM_GLOBAL_LINK_ARGS);
 
@@ -150,13 +217,22 @@ if (linkGlobal) {
 
 const cliHelp = linkGlobal ? "okf-vault --help" : "node dist/main.js --help";
 
-if (!linkGlobal) {
+if (!linkGlobal && !json) {
   console.warn(
     "\n[WARN] Setup completed without global link. Cross-project use requires `pnpm run setup:link`.",
   );
 }
 
-console.log(`
+if (json) {
+  writeJsonSummary({
+    linked: adapterResult.linked,
+    skipped: adapterResult.skipped,
+    removed: adapterResult.removed,
+    adapters_verified: true,
+    dry_run: dryRun,
+  });
+} else if (human || !json) {
+  console.log(`
 Setup complete.
 
 Each \`/okv-*\` command is now installed as an individual slash entry in both runtimes
@@ -165,7 +241,6 @@ Reload the editor window after the first install so the new commands appear.
 
 ## Cursor
 Open this repo in Cursor and type \`/okv-ingest\` (or any \`/okv-*\`).
-Project rule auto-applies from \`.cursor/rules/okf-vault.mdc\`.
 
 ## Claude Code
 Open this repo in Claude Code. Skill at \`.claude/skills/okf-vault\`; type \`/okv-ingest\`.
@@ -177,3 +252,4 @@ Recommended first command: \`/okv-ingest\`.
 New vault at \`./knowledge/\`: \`/okv-bootstrap\` or \`/okv-init\`.
 Full slash-command list: .agents/skills/okf-vault/commands/registry.md
 `);
+}

@@ -313,12 +313,18 @@ export function initializeVault(vaultRoot: string): InitializeVaultResult {
 }
 
 const CANONICAL_SKILL_RELATIVE = join(".agents", "skills", "okf-vault");
-const CURATOR_RULE_RELATIVE = join(".cursor", "rules", "okf-vault.mdc");
+const CURATOR_RULE_RELATIVE = join(".cursor", "rules", "okv.mdc");
 const CURATOR_RULE_TEMPLATE_RELATIVE = join(
   CANONICAL_SKILL_RELATIVE,
   "templates",
   "cursor-rule.mdc",
 );
+
+interface RuntimeAdapterInstallResult {
+  linked: string[];
+  skipped: string[];
+  removed: string[];
+}
 
 export function resolveInstallRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -336,18 +342,41 @@ export function resolveInstallRoot(): string {
   throw new Error("Could not resolve okf-vault install root");
 }
 
-function installRuntimeAdapters(projectRoot: string, installRoot: string): void {
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function installRuntimeAdapters(
+  projectRoot: string,
+  installRoot: string,
+): RuntimeAdapterInstallResult {
   const scriptPath = join(installRoot, "scripts", "link-runtime-adapters.mjs");
   const canonicalSkillRoot = join(installRoot, CANONICAL_SKILL_RELATIVE);
   const result = spawnSync(
     process.execPath,
-    [scriptPath, "--project-root", projectRoot, "--canonical-skill-root", canonicalSkillRoot],
+    [
+      scriptPath,
+      "--json",
+      "--project-root",
+      projectRoot,
+      "--canonical-skill-root",
+      canonicalSkillRoot,
+    ],
     { encoding: "utf8" },
   );
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.stdout?.trim() || "unknown error";
     throw new Error(`Failed to install runtime adapters: ${detail}`);
   }
+  const parsed = JSON.parse(result.stdout) as {
+    data?: { linked?: unknown; skipped?: unknown; removed?: unknown };
+  };
+  const data = parsed.data ?? {};
+  return {
+    linked: isStringArray(data.linked) ? data.linked : [],
+    skipped: isStringArray(data.skipped) ? data.skipped : [],
+    removed: isStringArray(data.removed) ? data.removed : [],
+  };
 }
 
 function installCuratorRule(projectRoot: string, installRoot: string): boolean {
@@ -374,7 +403,7 @@ export function handleInit(args: string[]): DispatchOutcome {
     const data = initializeVault(vaultRoot);
     if (repoRootBootstrap) {
       const installRoot = resolveInstallRoot();
-      installRuntimeAdapters(projectRoot, installRoot);
+      const adapters = installRuntimeAdapters(projectRoot, installRoot);
       const curatorRuleInstalled = installCuratorRule(projectRoot, installRoot);
       return {
         exitCode: ExitCode.SUCCESS,
@@ -384,6 +413,9 @@ export function handleInit(args: string[]): DispatchOutcome {
           project_root: projectRoot,
           adapters_installed: true,
           curator_rule_installed: curatorRuleInstalled,
+          linked: adapters.linked,
+          skipped: adapters.skipped,
+          removed: adapters.removed,
         }),
       };
     }

@@ -352,6 +352,29 @@ function uninstallSummary(data: JsonRecord, context: PresenterContext): string {
   return table.length > 0 ? table.toString() : keyValueSummary(data, context);
 }
 
+function initSummary(data: JsonRecord, context: PresenterContext): string {
+  const summaryFields: JsonRecord = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "linked" || key === "skipped" || key === "removed") {
+      continue;
+    }
+    summaryFields[key] = value;
+  }
+
+  const sections = [keyValueSummary(summaryFields, context)];
+  const removed = Array.isArray(data.removed) ? data.removed : [];
+  const table = createTable(["removed legacy path"], context);
+  if (removed.length === 0) {
+    table.push(["none"]);
+  } else {
+    for (const path of removed) {
+      table.push([normalizeCell(path)]);
+    }
+  }
+  sections.push(table.toString());
+  return sections.join("\n\n");
+}
+
 function helpSummary(data: JsonRecord): string {
   return typeof data.text === "string" ? data.text : "No help text available.";
 }
@@ -397,7 +420,10 @@ function bodyFor(outcome: DispatchOutcome, context: PresenterContext): string {
   if (result.command === "uninstall") {
     return uninstallSummary(data, context);
   }
-  if (result.command === "init" || result.command === "inspect") {
+  if (result.command === "init") {
+    return initSummary(data, context);
+  }
+  if (result.command === "inspect") {
     return keyValueSummary(data, context);
   }
   return keyValueSummary(data, context);

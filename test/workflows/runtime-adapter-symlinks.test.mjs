@@ -1,7 +1,19 @@
-import { readFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  readFileSync,
+  existsSync,
+  readdirSync,
+  mkdtempSync,
+  rmSync,
+  mkdirSync,
+  writeFileSync,
+  symlinkSync,
+  readlinkSync,
+  lstatSync,
+} from "node:fs";
+import { dirname, join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,7 +24,6 @@ import {
   claudeSkillDir,
   cursorCommandSkillFile,
   claudeCommandFile,
-  cursorRulePath,
   skillRoot,
   ALL_VAULT_COMMAND_STUBS,
   PIPELINE_COMMANDS,
@@ -24,8 +35,15 @@ import {
   hasDisableModelInvocationFrontmatter,
   isDuplicateStubBody,
   stripYamlFrontmatter,
+  verifyRuntimeAdapters,
 } from "./workflow-contract.mjs";
-import { linkRuntimeAdapters, OKV_COMMANDS } from "../../scripts/link-runtime-adapters.mjs";
+import {
+  ensureSymlink,
+  linkRuntimeAdapters,
+  OKV_COMMANDS,
+  sweepLegacyArtifacts,
+} from "../../scripts/link-runtime-adapters.mjs";
+import { listLegacyArtifacts, listManagedArtifacts } from "../../scripts/managed-artifacts.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -35,6 +53,44 @@ const cursorDir = cursorCommandsDir(root);
 const claudeDir = claudeCommandsDir(root);
 const cursorSkill = cursorSkillDir(root);
 const claudeSkill = claudeSkillDir(root);
+
+function existsOrSymlink(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function seedLegacyStubs(projectRoot) {
+  const cursorStub = join(projectRoot, ".cursor", "skills", "vault-ingest", "SKILL.md");
+  mkdirSync(dirname(cursorStub), { recursive: true });
+  writeFileSync(cursorStub, "# /vault-ingest\n", "utf8");
+
+  const claudeBroken = join(projectRoot, ".claude", "commands", "vault-init.md");
+  mkdirSync(dirname(claudeBroken), { recursive: true });
+  symlinkSync(join(projectRoot, "missing", "vault-init.md"), claudeBroken);
+
+  const legacyUmbrella = join(projectRoot, ".cursor", "skills", "okf-knowledge-vault");
+  symlinkSync(join(projectRoot, "missing", "okf-knowledge-vault"), legacyUmbrella);
+}
+
+function assertNoLegacyArtifacts(projectRoot) {
+  for (const artifact of listLegacyArtifacts(projectRoot)) {
+    if (artifact.path !== undefined) {
+      assert.equal(
+        existsOrSymlink(artifact.path),
+        false,
+        `legacy artifact remains: ${artifact.path}`,
+      );
+    }
+  }
+}
+
+function countManagedSymlinks(projectRoot) {
+  return listManagedArtifacts(projectRoot).filter((artifact) => artifact.kind === "symlink").length;
+}
 
 describe("runtime adapter symlink helpers (unit)", () => {
   it("stripYamlFrontmatter removes YAML header", () => {
@@ -79,6 +135,74 @@ describe("runtime adapter symlink helpers (unit)", () => {
   });
 });
 
+describe("legacy sweep helpers (unit)", () => {
+  it("sweepLegacyArtifacts removes Cursor vault-ingest stub and reports it", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-sweep-"));
+    try {
+      seedLegacyStubs(tempProjectRoot);
+      const cursorStub = join(tempProjectRoot, ".cursor", "skills", "vault-ingest", "SKILL.md");
+
+      const result = sweepLegacyArtifacts(tempProjectRoot);
+
+      assert.equal(existsOrSymlink(cursorStub), false);
+      assert.equal(existsOrSymlink(dirname(cursorStub)), false);
+      assert.ok(result.removed.includes(cursorStub));
+      assert.ok(
+        result.removed.some((path) => path.endsWith(join(".claude", "commands", "vault-init.md"))),
+      );
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("sweepLegacyArtifacts is idempotent on a clean tree", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-sweep-clean-"));
+    try {
+      const first = sweepLegacyArtifacts(tempProjectRoot);
+      const second = sweepLegacyArtifacts(tempProjectRoot);
+      assert.deepEqual(first.removed, []);
+      assert.deepEqual(second.removed, []);
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("ensureSymlink skips a valid existing link on idempotent re-run", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-link-"));
+    try {
+      const canonicalPath = join(tempProjectRoot, "canonical.md");
+      const linkPath = join(tempProjectRoot, "adapter", "SKILL.md");
+      writeFileSync(canonicalPath, "# canonical\n", "utf8");
+      const first = { linked: [], skipped: [] };
+      ensureSymlink({
+        linkPath,
+        canonicalPath,
+        label: "test adapter",
+        projectRoot: tempProjectRoot,
+        quiet: true,
+        linked: first.linked,
+        skipped: first.skipped,
+      });
+      const second = { linked: [], skipped: [] };
+      ensureSymlink({
+        linkPath,
+        canonicalPath,
+        label: "test adapter",
+        projectRoot: tempProjectRoot,
+        quiet: true,
+        linked: second.linked,
+        skipped: second.skipped,
+      });
+
+      assert.deepEqual(first.linked, [linkPath]);
+      assert.deepEqual(second.linked, []);
+      assert.deepEqual(second.skipped, [linkPath]);
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("runtime adapter symlinks (unit)", () => {
   it("Cursor skill directory is a symlink to canonical skill", () => {
     assert.ok(existsSync(cursorSkill));
@@ -102,8 +226,9 @@ describe("runtime adapter symlinks (unit)", () => {
     assert.equal(resolvesToSameRealpath(claudeDir, canonicalDir), true);
   });
 
-  it(".cursor/rules/okf-vault.mdc exists", () => {
-    assert.ok(existsSync(cursorRulePath(root)));
+  it("legacy runtime artifacts are absent from the repository adapter trees", () => {
+    assertNoLegacyArtifacts(root);
+    assert.equal(existsSync(join(root, ".cursor", "rules", "okf-vault.mdc")), false);
   });
 
   it("all seven OKV command stubs resolve through Cursor and Claude adapter paths", () => {
@@ -202,7 +327,12 @@ describe("foreign-repo init (integration)", () => {
       canonicalSkillRoot: canonicalSkill,
       quiet: true,
     });
-    assert.ok(result.linked.length + result.skipped.length >= 16);
+    assert.equal(result.linked.length + result.skipped.length, 16);
+    assert.equal(countManagedSymlinks(tempProjectRoot), 16);
+    const verification = verifyRuntimeAdapters(tempProjectRoot, {
+      canonicalSkillRoot: canonicalSkill,
+    });
+    assert.equal(verification.ok, true, verification.ok ? "" : verification.message);
 
     for (const command of VAULT_COMMANDS) {
       const canonicalStub = join(canonicalDir, `${command}.md`);
@@ -222,6 +352,7 @@ describe("foreign-repo init (integration)", () => {
   it("foreign-repo umbrella skill symlinks resolve to the canonical skill", () => {
     assert.equal(resolvesToSameRealpath(cursorSkillDir(tempProjectRoot), canonicalSkill), true);
     assert.equal(resolvesToSameRealpath(claudeSkillDir(tempProjectRoot), canonicalSkill), true);
+    assert.equal(isAbsolute(readlinkSync(cursorSkillDir(tempProjectRoot))), true);
   });
 
   it("foreign-repo re-run is idempotent (all links skipped on second pass)", () => {
@@ -232,6 +363,79 @@ describe("foreign-repo init (integration)", () => {
     });
     assert.equal(second.linked.length, 0);
     assert.equal(second.skipped.length, 16);
+  });
+});
+
+describe("setup adapter installation (integration)", () => {
+  it("link-runtime-adapters CLI keeps JSON stdout clean while verbose sweep logs to stderr", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-link-cli-"));
+    try {
+      seedLegacyStubs(tempProjectRoot);
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(root, "scripts", "link-runtime-adapters.mjs"),
+          "--json",
+          "--project-root",
+          tempProjectRoot,
+          "--canonical-skill-root",
+          canonicalSkill,
+        ],
+        {
+          encoding: "utf8",
+          env: { ...process.env, OKV_VERBOSE: "1" },
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stderr, /removed legacy artifact:/);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.status, "ok");
+      assert.equal(payload.command, "link-runtime-adapters");
+      assert.equal(payload.data.linked.length, 16);
+      assert.ok(
+        payload.data.removed.some((path) =>
+          path.endsWith(join(".cursor", "skills", "vault-ingest", "SKILL.md")),
+        ),
+      );
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("install.mjs dry invocation reports removed legacy paths and verifies adapters", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-setup-"));
+    try {
+      seedLegacyStubs(tempProjectRoot);
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(root, "scripts", "install.mjs"),
+          "--dry-run",
+          "--json",
+          "--project-root",
+          tempProjectRoot,
+          "--canonical-skill-root",
+          canonicalSkill,
+        ],
+        { encoding: "utf8" },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.status, "ok");
+      assert.equal(payload.command, "setup");
+      assert.equal(payload.data.adapters_verified, true);
+      assert.equal(payload.data.linked.length, 16);
+      assert.ok(
+        payload.data.removed.some((path) =>
+          path.endsWith(join(".cursor", "skills", "vault-ingest", "SKILL.md")),
+        ),
+      );
+      assertNoLegacyArtifacts(tempProjectRoot);
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
   });
 });
 

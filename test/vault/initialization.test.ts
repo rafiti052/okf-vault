@@ -170,7 +170,8 @@ describe("init and inspect CLI integration", () => {
       assert.equal(lstatSync(claudeSkill).isSymbolicLink(), true);
       assert.equal(realpathSync(cursorSkill), realpathSync(canonicalSkill));
       assert.equal(realpathSync(claudeSkill), realpathSync(canonicalSkill));
-      assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okf-vault.mdc")), true);
+      assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okv.mdc")), true);
+      assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okf-vault.mdc")), false);
     } finally {
       process.chdir(originalCwd);
     }

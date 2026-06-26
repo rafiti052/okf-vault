@@ -128,7 +128,7 @@ export function claudeCommandsDir(root) {
  * @returns {string}
  */
 export function cursorRulePath(root) {
-  return join(root, ".cursor", "rules", "okf-vault.mdc");
+  return join(root, ".cursor", "rules", "okv.mdc");
 }
 
 /**
@@ -173,21 +173,16 @@ export function claudeCommandFile(root, command) {
 /**
  * Verifies Cursor and Claude runtime adapters resolve to the canonical skill and commands.
  * @param {string} root
+ * @param {{ canonicalSkillRoot?: string }} [options]
  * @returns {{ ok: true } | { ok: false; message: string }}
  */
-export function verifyRuntimeAdapters(root) {
-  const canonical = skillRoot(root);
-  const canonicalCmd = canonicalCommandsDir(root);
+export function verifyRuntimeAdapters(root, options = {}) {
+  const canonical = options.canonicalSkillRoot ?? skillRoot(root);
+  const canonicalCmd = join(canonical, "commands");
   const cursorSkill = cursorSkillDir(root);
   const claudeSkill = claudeSkillDir(root);
   const cursorCmd = cursorCommandsDir(root);
   const claudeCmd = claudeCommandsDir(root);
-  const rulePath = cursorRulePath(root);
-
-  if (!existsSync(rulePath)) {
-    return { ok: false, message: `Missing Cursor rule: ${rulePath}` };
-  }
-
   for (const [label, adapterSkill, adapterCmd] of [
     ["Cursor", cursorSkill, cursorCmd],
     ["Claude", claudeSkill, claudeCmd],
