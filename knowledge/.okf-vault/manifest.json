@@ -23,6 +23,17 @@
       "note_path": "notes/o-novo-dev.md",
       "commit": "5953667440beea9e64d17f7fa12004189ce9ba31",
       "processed_at": "2026-06-26T17:17:36.608Z"
+    },
+    {
+      "source_key": "granola:8fc079ac-2881-419c-b54b-53a458af9ff5",
+      "kind": "granola",
+      "origin": "granola:8fc079ac-2881-419c-b54b-53a458af9ff5",
+      "content_sha256": "ba7c3f2cdd122b06c8a28ee4687535afc9f87adbd4df5c43771e8d85fc026250",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/cloud-code-norms.md",
+      "commit": "3e35324e8378283ef2f18da2e64a5a98efb38439",
+      "processed_at": "2026-06-26T17:17:43.896Z"
     }
   ]
 }
