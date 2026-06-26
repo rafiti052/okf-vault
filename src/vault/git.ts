@@ -31,38 +31,61 @@ export function isGitRepository(vaultRoot: string): boolean {
   return existsSync(join(vaultRoot, ".git"));
 }
 
-export function initRepository(vaultRoot: string): void {
+export function initRepository(vaultRoot: string): boolean {
   if (isGitRepository(vaultRoot)) {
-    return;
+    return false;
   }
   const result = runGit(vaultRoot, ["init"]);
   if (result.status !== 0) {
     throw new Error(`git init failed: ${result.stderr || result.stdout}`);
   }
+  return true;
 }
 
-export function ensureGitignore(vaultRoot: string): void {
+export function ensureGitignore(vaultRoot: string): boolean {
   const gitignorePath = join(vaultRoot, GITIGNORE_PATH);
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, `${GITIGNORE_ENTRY}\n`, "utf8");
-    return;
+    return true;
   }
   const existing = readFileSync(gitignorePath, "utf8");
   if (!existing.split("\n").some((line) => line.trim() === GITIGNORE_ENTRY)) {
     const suffix = existing.endsWith("\n") ? "" : "\n";
     writeFileSync(gitignorePath, `${existing}${suffix}${GITIGNORE_ENTRY}\n`, "utf8");
+    return true;
   }
+  return false;
 }
 
-export function ensureInitDirectories(vaultRoot: string): void {
-  mkdirSync(join(vaultRoot, "notes"), { recursive: true });
-  mkdirSync(join(vaultRoot, "topics"), { recursive: true });
-  mkdirSync(join(vaultRoot, REVIEWS_DIR), { recursive: true });
-  mkdirSync(join(vaultRoot, TMP_DIR), { recursive: true });
+export interface InitDirectoryResult {
+  updated: boolean;
+  filesCreated: string[];
+}
+
+function ensureDirectory(vaultRoot: string, relativePath: string): boolean {
+  const fullPath = join(vaultRoot, relativePath);
+  if (existsSync(fullPath)) {
+    return false;
+  }
+  mkdirSync(fullPath, { recursive: true });
+  return true;
+}
+
+export function ensureInitDirectories(vaultRoot: string): InitDirectoryResult {
+  let updated = false;
+  updated = ensureDirectory(vaultRoot, "notes") || updated;
+  updated = ensureDirectory(vaultRoot, "topics") || updated;
+  updated = ensureDirectory(vaultRoot, REVIEWS_DIR) || updated;
+  updated = ensureDirectory(vaultRoot, TMP_DIR) || updated;
+
+  const filesCreated: string[] = [];
   const gitkeepPath = join(vaultRoot, REVIEWS_GITKEEP);
   if (!existsSync(gitkeepPath)) {
     writeFileSync(gitkeepPath, "", "utf8");
+    filesCreated.push(REVIEWS_GITKEEP);
+    updated = true;
   }
+  return { updated, filesCreated };
 }
 
 export interface InitCommitResult {
@@ -70,8 +93,15 @@ export interface InitCommitResult {
   commit?: string;
 }
 
-export function commitInitializationBaseline(vaultRoot: string): InitCommitResult {
-  for (const pathspec of INIT_STAGED_PATHS) {
+export function commitInitializationBaseline(
+  vaultRoot: string,
+  paths: readonly string[] = INIT_STAGED_PATHS,
+): InitCommitResult {
+  if (paths.length === 0) {
+    return { committed: false };
+  }
+
+  for (const pathspec of paths) {
     const add = runGit(vaultRoot, ["add", "--", pathspec]);
     if (add.status !== 0) {
       throw new Error(`git add failed for ${pathspec}: ${add.stderr || add.stdout}`);

@@ -8,6 +8,7 @@ import {
   mkdirSync,
   lstatSync,
   realpathSync,
+  rmSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -17,6 +18,7 @@ import { dirname } from "node:path";
 import {
   GITIGNORE_ENTRY,
   MANIFEST_RELATIVE_PATH,
+  NOTE_CONTRACT_VERSION,
   NOTES_INDEX_PATH,
   ROOT_INDEX_PATH,
   TOPICS_INDEX_PATH,
@@ -26,6 +28,7 @@ import {
   saveManifest,
   createEmptyManifest,
   installCuratorRule,
+  loadManifest,
 } from "../../dist/vault/manifest.js";
 import { isGitRepository, runGit } from "../../dist/vault/git.js";
 import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
@@ -66,15 +69,62 @@ describe("vault initialization", () => {
     assert.equal(status.stdout.trim(), "");
   });
 
-  it("is idempotent and fails closed on conflicting managed files", () => {
+  it("is idempotent and preserves existing vault content and manifest records", () => {
     const vaultRoot = mkdtempSync(join(tmpdir(), "okf-reinit-"));
     initializeVault(vaultRoot);
-    const second = initializeVault(vaultRoot);
-    assert.equal(second.idempotent, true);
+
+    const notePath = join(vaultRoot, "notes", "custom-note.md");
+    writeFileSync(notePath, "# Custom note\n\nPreserve this.\n", "utf8");
+    saveManifest(vaultRoot, {
+      ...createEmptyManifest(),
+      sources: [
+        {
+          source_key: "local:/tmp/custom-note.md",
+          kind: "local",
+          origin: "/tmp/custom-note.md",
+          content_sha256: VALID_SHA,
+          contract_version: NOTE_CONTRACT_VERSION,
+          status: "committed",
+          note_path: "notes/custom-note.md",
+          commit: "abc1234",
+          processed_at: VALID_TS,
+        },
+      ],
+    });
+    const beforeManifest = loadManifest(vaultRoot);
+    const beforeRevision = beforeManifest.sources[0]!.source_key;
 
     writeFileSync(join(vaultRoot, ROOT_INDEX_PATH), "# user content\n", "utf8");
+    const second = initializeVault(vaultRoot);
+
+    assert.equal(second.idempotent, true);
+    assert.equal(second.committed, false);
+    assert.equal(readFileSync(join(vaultRoot, ROOT_INDEX_PATH), "utf8"), "# user content\n");
+    assert.equal(readFileSync(notePath, "utf8"), "# Custom note\n\nPreserve this.\n");
+    const afterManifest = loadManifest(vaultRoot);
+    assert.deepEqual(afterManifest, beforeManifest);
+    assert.equal(afterManifest.sources[0]!.source_key, beforeRevision);
+  });
+
+  it("still fails closed on conflicting managed files before a manifest exists", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-new-conflict-"));
+    writeFileSync(join(vaultRoot, ROOT_INDEX_PATH), "# user content\n", "utf8");
+
     assert.throws(() => initializeVault(vaultRoot), /Managed file conflict/);
-    assert.notEqual(readFileSync(join(vaultRoot, ROOT_INDEX_PATH), "utf8"), "# overwritten\n");
+    assert.equal(readFileSync(join(vaultRoot, ROOT_INDEX_PATH), "utf8"), "# user content\n");
+  });
+
+  it("repairs missing layout files on an existing vault without replacing custom files", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-repair-layout-"));
+    initializeVault(vaultRoot);
+    writeFileSync(join(vaultRoot, ROOT_INDEX_PATH), "# custom index\n", "utf8");
+    rmSync(join(vaultRoot, "log.md"));
+
+    const result = initializeVault(vaultRoot);
+
+    assert.equal(result.idempotent, false);
+    assert.equal(existsSync(join(vaultRoot, "log.md")), true);
+    assert.equal(readFileSync(join(vaultRoot, ROOT_INDEX_PATH), "utf8"), "# custom index\n");
   });
 
   it("never stages or commits unrelated files in an existing repository", () => {
@@ -102,6 +152,19 @@ describe("init and inspect CLI integration", () => {
     assert.match(readFileSync(rulePath, "utf8"), /\/okv-ingest/);
     assert.match(readFileSync(rulePath, "utf8"), /okv <command> --json/);
 
+    assert.equal(installCuratorRule(projectRoot, root), false);
+  });
+
+  it("installCuratorRule updates an outdated Cursor rule from the canonical template", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-rule-update-"));
+    const rulePath = join(projectRoot, ".cursor", "rules", "okv.mdc");
+    const templatePath = join(root, ".agents", "skills", "okf-vault", "templates", "okv.mdc");
+
+    mkdirSync(dirname(rulePath), { recursive: true });
+    writeFileSync(rulePath, "outdated rule\n", "utf8");
+
+    assert.equal(installCuratorRule(projectRoot, root), true);
+    assert.equal(readFileSync(rulePath, "utf8"), readFileSync(templatePath, "utf8"));
     assert.equal(installCuratorRule(projectRoot, root), false);
   });
 
@@ -307,6 +370,61 @@ describe("init and inspect CLI integration", () => {
       assert.deepEqual(secondData.legacy_removed, []);
       assert.equal(secondData.linked.length, 0);
       assert.equal(secondData.skipped.length, 16);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("no-arg init restores a missing Cursor rule and reports a non-idempotent repair", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-project-rule-repair-"));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(projectRoot);
+      assert.equal(dispatch(parseArgs(["init"])).exitCode, ExitCode.SUCCESS);
+      const rulePath = join(projectRoot, ".cursor", "rules", "okv.mdc");
+      rmSync(rulePath);
+
+      const outcome = dispatch(parseArgs(["init"]));
+      assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+      const data = (outcome.result as CliSuccess).data as {
+        idempotent: boolean;
+        curator_rule_installed: boolean;
+      };
+      assert.equal(data.idempotent, false);
+      assert.equal(data.curator_rule_installed, true);
+      assert.equal(existsSync(rulePath), true);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("no-arg init repairs a missing IDE adapter and reports a non-idempotent repair", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-project-adapter-repair-"));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(projectRoot);
+      assert.equal(dispatch(parseArgs(["init"])).exitCode, ExitCode.SUCCESS);
+      const cursorSkill = join(projectRoot, ".cursor", "skills", "okf-vault");
+      rmSync(cursorSkill, { recursive: true, force: true });
+
+      const outcome = dispatch(parseArgs(["init"]));
+      assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+      const data = (outcome.result as CliSuccess).data as {
+        idempotent: boolean;
+        adapter_links_created: number;
+        adapter_links_skipped: number;
+        linked: string[];
+      };
+      assert.equal(data.idempotent, false);
+      assert.equal(data.adapter_links_created, 1);
+      assert.equal(data.adapter_links_skipped, 15);
+      assert.deepEqual(
+        data.linked.map((path) => realpathSync(dirname(path))),
+        [realpathSync(dirname(cursorSkill))],
+      );
+      assert.equal(lstatSync(cursorSkill).isSymbolicLink(), true);
     } finally {
       process.chdir(originalCwd);
     }

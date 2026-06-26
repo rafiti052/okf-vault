@@ -271,41 +271,52 @@ export interface InitializeVaultResult {
 
 export function initializeVault(vaultRoot: string): InitializeVaultResult {
   const root = resolve(vaultRoot);
-  let wroteManagedFiles = false;
+  let updated = false;
+  const updatedPaths = new Set<string>();
+  const manifestPath = join(root, MANIFEST_RELATIVE_PATH);
+  const existingManifest = fs.existsSync(manifestPath);
 
   for (const [relativePath, expectedContent] of Object.entries(MANAGED_INIT_FILES)) {
     const fullPath = join(root, relativePath);
     if (fs.existsSync(fullPath)) {
       const existing = fs.readFileSync(fullPath, "utf8");
-      if (existing !== expectedContent) {
+      if (!existingManifest && existing !== expectedContent) {
         throw new ManagedFileConflictError(relativePath);
       }
       continue;
     }
     fs.mkdirSync(dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, expectedContent, "utf8");
-    wroteManagedFiles = true;
+    updated = true;
+    updatedPaths.add(relativePath);
   }
 
-  ensureInitDirectories(root);
+  const directoryResult = ensureInitDirectories(root);
+  updated = directoryResult.updated || updated;
+  for (const relativePath of directoryResult.filesCreated) {
+    updatedPaths.add(relativePath);
+  }
 
-  const manifestPath = join(root, MANIFEST_RELATIVE_PATH);
   let manifest: Manifest;
   if (!fs.existsSync(manifestPath)) {
     manifest = createEmptyManifest();
     saveManifest(root, manifest);
-    wroteManagedFiles = true;
+    updated = true;
+    updatedPaths.add(MANIFEST_RELATIVE_PATH);
   } else {
     manifest = loadManifest(root);
   }
 
-  ensureGitignore(root);
-  initRepository(root);
-  const commitResult = commitInitializationBaseline(root);
+  if (ensureGitignore(root)) {
+    updated = true;
+    updatedPaths.add(".gitignore");
+  }
+  updated = initRepository(root) || updated;
+  const commitResult = commitInitializationBaseline(root, [...updatedPaths]);
 
   return {
     vault_root: root,
-    idempotent: !wroteManagedFiles && !commitResult.committed,
+    idempotent: !updated && !commitResult.committed,
     committed: commitResult.committed,
     ...(commitResult.commit !== undefined ? { commit: commitResult.commit } : {}),
     revision: manifestRevision(manifest),
@@ -377,12 +388,16 @@ function installRuntimeAdapters(
 
 export function installCuratorRule(projectRoot: string, installRoot: string): boolean {
   const rulePath = join(projectRoot, CURATOR_RULE_RELATIVE);
-  if (fs.existsSync(rulePath)) {
-    return false;
-  }
   const templatePath = join(installRoot, CURATOR_RULE_TEMPLATE_RELATIVE);
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Missing curator rule template at ${templatePath}`);
+  }
+  if (fs.existsSync(rulePath)) {
+    const existing = fs.readFileSync(rulePath, "utf8");
+    const expected = fs.readFileSync(templatePath, "utf8");
+    if (existing === expected) {
+      return false;
+    }
   }
   fs.mkdirSync(dirname(rulePath), { recursive: true });
   fs.copyFileSync(templatePath, rulePath);
@@ -402,10 +417,13 @@ export function handleInit(args: string[]): DispatchOutcome {
       const adapters = installRuntimeAdapters(projectRoot, installRoot);
       const curatorRuleInstalled = installCuratorRule(projectRoot, installRoot);
       const legacyRemoved = adapters.removed;
+      const alignmentUpdated =
+        curatorRuleInstalled || adapters.linked.length > 0 || legacyRemoved.length > 0;
       return {
         exitCode: ExitCode.SUCCESS,
         result: success("init", {
           ...data,
+          idempotent: data.idempotent && !alignmentUpdated,
           vault_root: resolve(vaultRoot),
           project_root: projectRoot,
           adapters_installed: true,
