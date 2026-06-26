@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExitCode, dispatch, parseArgs } from "../../dist/cli.js";
+import { ExitCode, dispatch, parseArgs } from "../../dist/cli/cli.js";
 import { LOG_PATH, MANIFEST_RELATIVE_PATH } from "../../dist/vault/constants.js";
 import { initializeVault, loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
 import { runGit } from "../../dist/vault/git.js";

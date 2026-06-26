@@ -1,14 +1,14 @@
-import { handleDossier } from "./vault/dossier.js";
-import { handleValidateGraph } from "./vault/graph.js";
-import { handleInit, handleInspect } from "./vault/manifest.js";
-import { handleValidateProposals } from "./vault/proposals.js";
-import { handleValidate } from "./vault/quality-gate.js";
-import { handleCommit, handleRecover } from "./vault/transaction.js";
-import { handleUninstall } from "./vault/uninstall.js";
-import { handleValidateStaged } from "./vault/validation.js";
-import { handleVisualize } from "./vault/visualizer.js";
-import { type OutputMode, resolveOutputMode } from "./cli/output-mode.js";
-import { presentHuman } from "./cli/present.js";
+import { handleDossier } from "../vault/dossier.js";
+import { handleValidateGraph } from "../vault/graph.js";
+import { handleInit, handleInspect } from "../vault/manifest.js";
+import { handleValidateProposals } from "../vault/proposals.js";
+import { handleValidate } from "../vault/quality-gate.js";
+import { handleCommit, handleRecover } from "../vault/transaction.js";
+import { handleUninstall } from "../vault/uninstall.js";
+import { handleValidateStaged } from "../vault/validation.js";
+import { handleVisualize } from "../vault/visualizer.js";
+import { type OutputMode, resolveOutputMode } from "./output-mode.js";
+import { presentHuman } from "./present.js";
 
 /** Stable process exit classes for the okf-vault helper. */
 export const ExitCode = {

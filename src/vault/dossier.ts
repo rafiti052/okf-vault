@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { join, resolve } from "node:path";
-import { type DispatchOutcome, ExitCode, failure, success } from "../cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import {
   buildVaultLinkGraph,
   checkVaultInitialization,

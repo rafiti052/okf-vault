@@ -1,7 +1,7 @@
 import boxen from "boxen";
 import Table from "cli-table3";
 import pc from "picocolors";
-import { type CliError, type CliResult, type DispatchOutcome, type ExitCodeValue } from "../cli.js";
+import { type CliError, type CliResult, type DispatchOutcome, type ExitCodeValue } from "./cli.js";
 import type { OutputMode } from "./output-mode.js";
 
 export interface PresentOptions {

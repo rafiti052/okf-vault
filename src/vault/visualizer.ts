@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { type DispatchOutcome, ExitCode, failure, success } from "../cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 
 export const VISUALIZER_CONFIG_RELATIVE_PATH = ".okf-vault/visualizer.json" as const;
 export const VISUALIZER_SCHEMA_VERSION = "okf-vault-visualizer-config/1.0.0" as const;

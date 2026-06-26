@@ -28,7 +28,7 @@ import {
   installCuratorRule,
 } from "../../dist/vault/manifest.js";
 import { isGitRepository, runGit } from "../../dist/vault/git.js";
-import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli.js";
+import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");

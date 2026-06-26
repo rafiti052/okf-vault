@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli.js";
+import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
 import { LOG_PATH, MANIFEST_RELATIVE_PATH } from "../../dist/vault/constants.js";
 import { initializeVault, loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
 import { runGit } from "../../dist/vault/git.js";

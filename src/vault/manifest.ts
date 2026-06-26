@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020Import from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
 import type { ErrorObject, ValidateFunction } from "ajv";
-import { type DispatchOutcome, ExitCode, failure, success } from "../cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import {
   MANAGED_INIT_FILES,
   MANIFEST_RELATIVE_PATH,

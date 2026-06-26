@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli.js";
+import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
 import {
   type ManagedArtifact,
   type UninstallResult,

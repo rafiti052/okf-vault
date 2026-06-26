@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { run } from "../../dist/cli.js";
+import { run } from "../../dist/cli/cli.js";
 import { loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

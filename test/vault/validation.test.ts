@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExitCode, dispatch, parseArgs } from "../../dist/cli.js";
+import { ExitCode, dispatch, parseArgs } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
 import { MANIFEST_RELATIVE_PATH, NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
 import {

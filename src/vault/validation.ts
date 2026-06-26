@@ -5,7 +5,7 @@ import Ajv2020Import from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { parse as parseYaml } from "yaml";
-import { type DispatchOutcome, ExitCode, failure, success } from "../cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import { NOTE_CONTRACT_VERSION } from "./constants.js";
 import { loadManifest } from "./manifest.js";
 

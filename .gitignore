@@ -11,7 +11,10 @@ dist-test/
 *.tsbuildinfo
 
 # Compozy workflow tooling
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/okf-vault/
 .claude/skills/compozy
 .claude/skills/cy-*
 

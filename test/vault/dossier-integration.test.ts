@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExitCode } from "../../dist/cli.js";
+import { ExitCode } from "../../dist/cli/cli.js";
 import {
   DOSSIER_BOUNDS,
   dossierContainsCredentialKeys,

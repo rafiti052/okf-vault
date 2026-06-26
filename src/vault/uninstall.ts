@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ExitCode, type DispatchOutcome, failure, success } from "../cli.js";
+import { ExitCode, type DispatchOutcome, failure, success } from "../cli/cli.js";
 
 type ManagedArtifactKind = "symlink" | "file-copy" | "global-bin";
 

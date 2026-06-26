@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ExitCode, helpText, type CliResult, type DispatchOutcome } from "../../dist/cli.js";
+import { ExitCode, helpText, type CliResult, type DispatchOutcome } from "../../dist/cli/cli.js";
 import { presentHuman, type PresentOptions } from "../../dist/cli/present.js";
 
 const noColorOptions: PresentOptions = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseArgs } from "../../dist/cli.js";
+import { parseArgs } from "../../dist/cli/cli.js";
 import { resolveOutputMode } from "../../dist/cli/output-mode.js";
 
 function resolve(options: { argv?: string[]; env?: NodeJS.ProcessEnv; stdoutIsTTY?: boolean }) {

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
-import { type DispatchOutcome, ExitCode, failure, success } from "../cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import {
   MANIFEST_RELATIVE_PATH,
   NOTE_CONTRACT_VERSION,
