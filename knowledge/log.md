@@ -12,3 +12,7 @@
 ## 2026-06-26T17:17:43.896Z — granola:8fc079ac-2881-419c-b54b-53a458af9ff5
 
 - note: notes/cloud-code-norms.md
+
+## 2026-06-26T17:17:57.970Z — granola:96005a00-60e4-42ce-89a7-df78fe06dba9
+
+- note: notes/adocao-arquitetura.md

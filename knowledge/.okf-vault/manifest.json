@@ -34,6 +34,17 @@
       "note_path": "notes/cloud-code-norms.md",
       "commit": "3e35324e8378283ef2f18da2e64a5a98efb38439",
       "processed_at": "2026-06-26T17:17:43.896Z"
+    },
+    {
+      "source_key": "granola:96005a00-60e4-42ce-89a7-df78fe06dba9",
+      "kind": "granola",
+      "origin": "granola:96005a00-60e4-42ce-89a7-df78fe06dba9",
+      "content_sha256": "6d5e1e4872316574ee392831ee54802a2836e8ce2c894393de473df956829ac6",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/adocao-arquitetura.md",
+      "commit": "cd18ea89ca88a610945f160ee2ab69fdeb0c05ed",
+      "processed_at": "2026-06-26T17:17:57.970Z"
     }
   ]
 }
