@@ -45,6 +45,7 @@ const SUCCESS_NEXT_BY_COMMAND: Record<string, string> = {
   visualize: "review the generated graph visualization.",
   recover: "retry the interrupted transaction or rerun validate.",
   uninstall: "verify no managed artifacts remain.",
+  doctor: "review any warnings or failures; rerun doctor after repairs.",
   help: "run a command with --human for an interactive summary or --json for agent output.",
   version: "run okv --help to see available commands.",
 };
@@ -415,7 +416,7 @@ function bodyFor(outcome: DispatchOutcome, context: PresenterContext): string {
   if (result.command === "version") {
     return versionSummary(data);
   }
-  if (result.command.startsWith("validate")) {
+  if (result.command.startsWith("validate") || result.command === "doctor") {
     return validationSummary(result, context);
   }
   if (result.command === "commit" || result.command === "recover") {

@@ -1,4 +1,5 @@
 import { handleDossier } from "../vault/dossier.js";
+import { handleDoctor } from "../vault/doctor.js";
 import { handleValidateGraph } from "../vault/graph.js";
 import { handleInit, handleInspect } from "../vault/manifest.js";
 import { handleValidateProposals } from "../vault/proposals.js";
@@ -55,6 +56,7 @@ export const RESERVED_COMMANDS = [
   "visualize",
   "recover",
   "uninstall",
+  "doctor",
 ] as const;
 
 export type ReservedCommand = (typeof RESERVED_COMMANDS)[number];
@@ -65,6 +67,18 @@ export function isReservedCommand(value: string): value is ReservedCommand {
 
 export function writeJsonStdout(result: CliResult): void {
   process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+function writeDoctorJsonStdout(result: CliResult): boolean {
+  if (result.status !== "ok" || result.command !== "doctor") {
+    return false;
+  }
+  const report = result.data.report;
+  if (typeof report !== "object" || report === null || Array.isArray(report)) {
+    return false;
+  }
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+  return true;
 }
 
 export function writeDiagnostic(message: string): void {
@@ -245,6 +259,10 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
     return handleUninstall(parsed.positional.slice(1));
   }
 
+  if (parsed.command === "doctor") {
+    return handleDoctor(parsed.positional.slice(1), parsed.outputModeFlag);
+  }
+
   return {
     exitCode: ExitCode.VALIDATION,
     result: failure(
@@ -272,7 +290,9 @@ export function run(argv: string[]): ExitCodeValue {
 
   if (outcome.result !== undefined) {
     if (mode === "json") {
-      writeJsonStdout(outcome.result);
+      if (!writeDoctorJsonStdout(outcome.result)) {
+        writeJsonStdout(outcome.result);
+      }
     } else {
       // TODO(task 11): Document that human --help/--version intentionally render text;
       // --json preserves the historical JSON envelopes for agent callers.

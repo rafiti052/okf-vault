@@ -99,6 +99,7 @@ describe("CLI parsing and dispatch", () => {
       "recover",
       "dossier",
       "validate-proposals",
+      "doctor",
     ]);
     for (const command of RESERVED_COMMANDS) {
       if (command === "init" || command === "uninstall") {
@@ -106,7 +107,12 @@ describe("CLI parsing and dispatch", () => {
       }
       const outcome = dispatch(parseArgs([command]));
       if (implementedWithoutArgs.has(command)) {
-        assert.equal(outcome.exitCode, ExitCode.USAGE);
+        if (command === "doctor") {
+          assert.equal(outcome.exitCode, ExitCode.VALIDATION);
+          assert.equal(outcome.result?.status, "ok");
+        } else {
+          assert.equal(outcome.exitCode, ExitCode.USAGE);
+        }
       } else {
         assert.equal(outcome.exitCode, ExitCode.VALIDATION);
         assert.equal(outcome.result?.status, "error");
