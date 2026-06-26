@@ -185,3 +185,8 @@ Nota de transcrição: este é um monólogo de único narrador sem marcadores de
 
 **Them [speaker-012]** — audit your noisiest workflow:
 > "pick your noisiest workflow... Ask, is this still really serving? What's the purpose of there?... there was a team I was on, where we used to have this weekly review... 50 people... everybody's on their laptops except for when their time to give status report... we canceled it."
+
+# Related Notes
+
+- [Adoção de arquitetura](adocao-arquitetura.md) — táticas de codebase complementares: padronização, custo de abstração, liderança técnica na era da IA (prop-L001)
+- [O Novo Dev](o-novo-dev.md) — evolução da revisão de código e do perfil esperado do engineer sênior (prop-L008)

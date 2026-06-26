@@ -150,3 +150,8 @@ Nota de transcrição: este é um monólogo de único narrador sem marcadores de
 
 **Them [speaker-011]** — Exemplo Airbnb — contexto integrado salva tempo:
 > "I made a reservation for an Airbnb in Rio de Janeiro. I was traveling with two other people. The host asked me to send my passport and the passport of the other guests. So instead of doing it myself, I simply asked Sapia: go into my Google Drive, find my passport, talk to my two coworkers coming to the apartment as well, ask them for their passports in WhatsApp, and then send it to the host. And all of this probably saved me one hour of my time."
+
+# Related Notes
+
+- [Agentic AI](agentic-ai.md) — framework estratégico para os agentes autônomos e adoção no Brasil (prop-L003)
+- [The Missing Interface for AI](missing-interface-ai.md) — WhatsApp como interface dominante no Brasil; governance e intencionalidade como princípios compartilhados (prop-L009)

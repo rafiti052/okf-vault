@@ -180,3 +180,9 @@ Dados-chave:
 
 **Them [speaker-012]** — Por que é caminho sem volta:
 > "Não é uma bolha que estoura. É uma curva de adoção que a maioria ainda está subindo do jeito errado. Quem trata a IA como redesenho de processo e amplificação das pessoas é quem está no grupo dos vinte e nove por cento que [vê] ROI."
+
+# Related Notes
+
+- [Agentic AI](agentic-ai.md) — framework de governança e caso Elfa como contraponto: o que ROI positivo parece na prática (prop-L004)
+- [O Novo Dev](o-novo-dev.md) — prescrição de como superar o plateau de produtividade que este note diagnostica empiricamente (prop-L010)
+- [The Missing Interface for AI](missing-interface-ai.md) — governance como a camada ausente que explica o gap de ROI organizacional (prop-L011)

@@ -166,3 +166,9 @@ Transcript note: painel multi-speaker capturado via AssemblyAI, sem timestamps. 
 
 **Them [speaker-011]** — 28% de crescimento com 20% menos pessoas — evidência concreta do impacto:
 > "Hoje a minha empresa está projetada para esse ano, a gente já cumpriu o Q1, um crescimento de 28%, com 20% a menos de pessoas. Isso nunca, na minha história de 30 anos de empresa, isso aconteceu. É uma empresa integradora, focada em serviços."
+
+# Related Notes
+
+- [AI is not a tool](ai-not-tool.md) — fundamentação filosófica da mesma tese: intencionalidade humana como dimensão não-delegável (prop-L007)
+- [Sapia e IA na América Latina](sapia-ia-america-latina.md) — WhatsApp como interface de menor fricção no Brasil; casos de uso conversacionais (prop-L009)
+- [ROI em IA](roi-em-ia.md) — governance como gargalo do ROI organizacional; dados sobre o custo da ausência de processo (prop-L011)

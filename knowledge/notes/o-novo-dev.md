@@ -176,3 +176,11 @@ Nota de transcrição: este é um monólogo de único narrador sem marcadores de
 
 **Them [speaker-012]** — Evolução do papel de QA: de testador manual para plataforma e mentoria:
 > "O papel de QA com, eu acho que a gente já vem tendo essa mudança como indústria assim mesmo antes da era de IA. A gente já estava movendo como indústria de pessoas de qualidade, que são muito mais dentro da organização assim. E muitas empresas AI native, elas não têm o papel do QA. O QA, a qualidade é parte da entrega do desenvolvedor, o desenvolvedor vai olhar pra qualidade."
+
+# Related Notes
+
+- [Adoção de arquitetura](adocao-arquitetura.md) — táticas arquiteturais práticas para o developer que adota IA: monolito modular, custo de abstração (prop-L002)
+- [Agentic AI](agentic-ai.md) — framework estratégico de adoção e impacto na força de trabalho (prop-L005)
+- [AI is not a tool](ai-not-tool.md) — fundamentação filosófica do perfil metacognitivo que este note concretiza como product engineer (prop-L006)
+- [Cloud Code team norms](cloud-code-norms.md) — como o time da Anthropic implementou o que este note descreve como o novo padrão de review e ownership (prop-L008)
+- [ROI em IA](roi-em-ia.md) — dados empíricos sobre o plateau de produtividade e por que não escala para o nível organizacional (prop-L010)

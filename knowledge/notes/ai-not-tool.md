@@ -161,3 +161,8 @@ Transcript note: single-narrator talk, no timestamps available. Claims bound to 
 
 **Them [speaker-010]** — Real challenge: techno-feudalism, digital terrorism, loss of meaning:
 > "O desafio não é máquinas conscientes. O desafio é o desafio que a gente mesmo cria pra gente, um digital terrorismo, um techno-feudalismo e com o desaparecimento do significado com a delegação sem desejo, sem intenção, sem intuição humana e do tribunal."
+
+# Related Notes
+
+- [O Novo Dev](o-novo-dev.md) — concretização do trabalhador metacognitivo no perfil product engineer: bases técnicas + visão de produto (prop-L006)
+- [The Missing Interface for AI](missing-interface-ai.md) — expressão prática da mesma tese: intencionalidade humana como requisito não-negociável (prop-L007)

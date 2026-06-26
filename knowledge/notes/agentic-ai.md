@@ -173,3 +173,9 @@ Transcript note: single-narrator talk, no timestamps available. Claims bound to 
 
 **Them [speaker-011]** — Brasil como grande player de IA: potencial gigantesco e orgulho do ecossistema local:
 > "Eu vejo isso de uma forma extremamente positiva — a tecnologia vai ajudar na área de saúde, na área de segurança, na área de educação. O Brasil tem um potencial gigantesco de ser um grande player nesse mercado. O fato de termos treinado um milhão de pessoas no Brasil, o fato de eu ver aqui várias empresas desenvolvendo e trazendo negócios, acho que isso é que dá orgulho de ser brasileiro."
+
+# Related Notes
+
+- [Sapia e IA na América Latina](sapia-ia-america-latina.md) — caso de produto real: agentes autônomos no WhatsApp, dinâmicas LATAM, princípio de aprovação humana (prop-L003)
+- [ROI em IA](roi-em-ia.md) — diagnóstico empírico do gap entre métricas de agentes e ROI organizacional (prop-L004)
+- [O Novo Dev](o-novo-dev.md) — fase de adoção, impacto na força de trabalho e produtividade (prop-L005)

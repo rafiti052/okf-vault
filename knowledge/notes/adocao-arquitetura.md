@@ -178,3 +178,8 @@ Nota de transcrição: este é um monólogo de único narrador sem marcadores de
 
 **Them [speaker-010]** — Technical leadership in AI era — spread knowledge, guard architectural standards, avoid hero culture:
 > "O que que uma pessoa liderando time tem que fazer? Líder técnico? Fazer todo o em volta pra garantir que as pessoas não saiam do que foi concordado. Então é com o quê? Documentar nos agents ponto m d nas olha esse aí aqui é os padrões do nosso projeto. Tu implementar algo diferente, tu tem que comunicar e explicar o porquê que está fazendo isso. Assim tu evita que as pessoas simplesmente aceitem o que é IA dar de output."
+
+# Related Notes
+
+- [Cloud Code team norms](cloud-code-norms.md) — como a Anthropic reorganizou revisão, planejamento e ownership quando codificar deixou de ser o gargalo (prop-L001)
+- [O Novo Dev](o-novo-dev.md) — perspectiva de carreira e pipeline agêntico para o developer que adota IA (prop-L002)
