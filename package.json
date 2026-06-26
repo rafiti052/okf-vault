@@ -1,11 +1,12 @@
 {
-  "name": "okf-knowledge-vault",
+  "name": "okf-vault",
   "version": "0.1.0",
   "private": true,
   "description": "OKF Knowledge Vault deterministic helper CLI",
   "type": "module",
   "bin": {
-    "okf-vault": "./dist/main.js"
+    "okv": "./dist/main.js",
+    "okf-vault": "./dist/tombstone.js"
   },
   "engines": {
     "node": ">=24"
@@ -26,7 +27,7 @@
     "ajv-formats": "^3.0.1",
     "boxen": "8.0.1",
     "cli-table3": "0.6.5",
-    "okf-knowledge-vault": "link:",
+    "okf-vault": "link:",
     "picocolors": "1.1.1",
     "yaml": "^2.8.0"
   },

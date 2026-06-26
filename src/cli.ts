@@ -142,10 +142,10 @@ export function helpText(): string {
     .map((name) => `  ${name}`)
     .join("\n");
   return [
-    "okf-vault — OKF Knowledge Vault deterministic helper",
+    "okv — Open Knowledge Vault deterministic helper",
     "",
     "Usage:",
-    "  okf-vault [--help] [--version] <command> [args...]",
+    "  okv [--help] [--version] <command> [args...]",
     "",
     "Commands:",
     "  init [vault-root]  From repo root: create ./knowledge/ and install skill adapters.",

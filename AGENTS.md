@@ -50,7 +50,7 @@ Invoke as a child process with an **argument array** — never shell-interpolate
 node dist/main.js <command> [args...]
 ```
 
-The binary name is `okf-vault` when installed via `pnpm run setup:link`; during development use `node dist/main.js` directly.
+The binary name is `okv` when installed via `pnpm run setup:link`; during development use `node dist/main.js` directly.
 
 ### Init from a new repository
 
@@ -59,10 +59,10 @@ The binary name is `okf-vault` when installed via `pnpm run setup:link`; during 
 pnpm run setup:link
 
 # in your new repo root
-okf-vault init
+okv init
 ```
 
-No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/okv-*` is individually discoverable. Explicit `okf-vault init <vault-root>` initializes the vault only (backward compatible).
+No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/okv-*` is individually discoverable. Explicit `okv init <vault-root>` initializes the vault only (backward compatible).
 
 ## Key contracts
 

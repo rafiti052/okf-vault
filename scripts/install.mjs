@@ -200,22 +200,22 @@ if (!dryRun) {
 
 if (linkGlobal && !dryRun) {
   checkPnpmGlobalBinOnPath();
-  runStep("Linking okf-vault globally", "pnpm", PNPM_GLOBAL_LINK_ARGS);
+  runStep("Linking okv globally", "pnpm", PNPM_GLOBAL_LINK_ARGS);
 
-  if (!commandExists("okf-vault")) {
+  if (!commandExists("okv") || !commandExists("okf-vault")) {
     const postLinkCheck = assertPnpmGlobalBinOnPath();
     fail(
-      "okf-vault not found on PATH after global link",
+      "okv and/or okf-vault not found on PATH after global link",
       postLinkCheck.ok
         ? "Hint: restart your shell, then retry `pnpm run setup:link`."
         : postLinkCheck.message,
     );
   }
 
-  runStep("Smoke test global binary", "okf-vault", ["--version"]);
+  runStep("Smoke test global binary", "okv", ["--version"]);
 }
 
-const cliHelp = linkGlobal ? "okf-vault --help" : "node dist/main.js --help";
+const cliHelp = linkGlobal ? "okv --help" : "node dist/main.js --help";
 
 if (!linkGlobal && !json) {
   console.warn(

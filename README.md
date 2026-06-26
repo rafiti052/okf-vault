@@ -1,6 +1,6 @@
-# OKF Knowledge Vault
+# OKV — Open Knowledge Vault
 
-AI-assisted ingestion for OKF knowledge vaults. A **provider-neutral workflow skill** orchestrates acquisition and conversion; a **deterministic TypeScript CLI** (`okf-vault`) validates notes, manages the manifest, runs graph checks, and performs Git transactions.
+AI-assisted ingestion for OKF knowledge vaults. A **provider-neutral workflow skill** orchestrates acquisition and conversion; a **deterministic TypeScript CLI** (`okv`) validates notes, manages the manifest, runs graph checks, and performs Git transactions.
 
 See [AGENTS.md](AGENTS.md) for cross-agent onboarding.
 
@@ -10,7 +10,7 @@ See [AGENTS.md](AGENTS.md) for cross-agent onboarding.
 flowchart LR
   Agent[Agent runtime] --> Skill[okf-vault skill]
   Skill --> Acquire[Acquire and convert]
-  Skill --> Helper[okf-vault CLI]
+  Skill --> Helper[okv CLI]
   Helper --> Vault[Managed vault files]
   Helper --> Git[Git transactions]
 ```
@@ -26,7 +26,7 @@ The skill decides *what* to process; the helper decides *whether* staged output 
 Two layers work together:
 
 - **Slash commands** (`/okv-*`) — agent orchestration via the skill and ingest wizard
-- **`okf-vault` CLI** — deterministic validation, manifest mutation, graph checks, and Git transactions
+- **`okv` CLI** — deterministic validation, manifest mutation, graph checks, and Git transactions
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ Two layers work together:
 
 ```bash
 git clone <repo-url>
-cd okf-knowledge-vault
+cd okf-vault
 pnpm run setup          # build CLI + install Cursor and Claude adapters + per-command /okv-* slash entries
 ```
 
@@ -49,22 +49,22 @@ pnpm run setup          # build CLI + install Cursor and Claude adapters + per-c
 One-time, from the okf-vault clone (links the global CLI):
 
 ```bash
-pnpm run setup:link     # links okf-vault into pnpm's global bin directory
+pnpm run setup:link     # links okv into pnpm's global bin directory
 ```
 
 Then, from your target repository:
 
 ```bash
 cd ~/my-new-vault-repo
-okf-vault init          # creates ./knowledge/ + Cursor/Claude adapters + curator rule
+okv init          # creates ./knowledge/ + Cursor/Claude adapters + curator rule
 ```
 
 `setup:link` requires the pnpm global bin directory (`pnpm bin -g`) on your `PATH`. If linking fails, run `pnpm setup` and restart your shell, or add `export PATH="$(pnpm bin -g):$PATH"` to your shell profile.
 
 | Command | Scope |
 | ------- | ----- |
-| `okf-vault init` (no args, from repo root) | Vault at `./knowledge/` plus Cursor/Claude adapters and per-command slash entries |
-| `okf-vault init <vault-root>` | Vault only at the given path (scripting, tests, custom layouts) |
+| `okv init` (no args, from repo root) | Vault at `./knowledge/` plus Cursor/Claude adapters and per-command slash entries |
+| `okv init <vault-root>` | Vault only at the given path (scripting, tests, custom layouts) |
 
 ### Simple flow
 

@@ -59,11 +59,11 @@ function captureRun(argv: string[], options: { stdoutIsTTY?: boolean } = {}) {
 }
 
 describe("package metadata", () => {
-  it("declares Node >= 24, exact pnpm version, private package, and one helper bin", () => {
+  it("declares Node >= 24, exact pnpm version, private package, and dual bins", () => {
     assert.equal(packageJson.engines.node, ">=24");
     assert.equal(packageJson.packageManager, "pnpm@11.8.0");
     assert.equal(packageJson.private, true);
-    assert.deepEqual(Object.keys(packageJson.bin), ["okf-vault"]);
+    assert.deepEqual(Object.keys(packageJson.bin).sort(), ["okf-vault", "okv"].sort());
   });
 });
 

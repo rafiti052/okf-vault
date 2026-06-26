@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  okf-knowledge-vault: 'link:'
+  okf-vault: 'link:'
 
 importers:
 
@@ -23,7 +23,7 @@ importers:
       cli-table3:
         specifier: 0.6.5
         version: 0.6.5
-      okf-knowledge-vault:
+      okf-vault:
         specifier: 'link:'
         version: 'link:'
       picocolors:

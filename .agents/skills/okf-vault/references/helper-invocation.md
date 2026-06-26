@@ -54,7 +54,7 @@ Invoke with an **argument array**. Example shape (paths are illustrative):
 From a repository root (no arguments):
 
 ```
-okf-vault init
+okv init
 ```
 
 Creates `./knowledge/` vault layout, manifest, indexes, log, initial Git commit, and installs Cursor/Claude skill adapters plus the curator rule in the current directory.
@@ -62,7 +62,7 @@ Creates `./knowledge/` vault layout, manifest, indexes, log, initial Git commit,
 With an explicit vault path (vault only — no adapters):
 
 ```
-okf-vault init <vault-root>
+okv init <vault-root>
 ```
 
 Creates vault layout, manifest, indexes, log, and initial Git commit at the given path.
@@ -70,7 +70,7 @@ Creates vault layout, manifest, indexes, log, and initial Git commit at the give
 ### inspect (manifest)
 
 ```
-okf-vault inspect <vault-root> <kind> <origin-locator> <content-sha256>
+okv inspect <vault-root> <kind> <origin-locator> <content-sha256>
 ```
 
 Returns `new`, `already_processed`, or `changed_conflict` in stdout JSON.
@@ -78,7 +78,7 @@ Returns `new`, `already_processed`, or `changed_conflict` in stdout JSON.
 ### validate-staged
 
 ```
-okf-vault validate-staged <vault-root> <staging-dir> <envelope-json-path>
+okv validate-staged <vault-root> <staging-dir> <envelope-json-path>
 ```
 
 Validates staged notes against note contract and envelope anchors before commit.
@@ -86,7 +86,7 @@ Validates staged notes against note contract and envelope anchors before commit.
 ### commit
 
 ```
-okf-vault commit <vault-root> <staging-dir> <envelope-json-path> <run-id>
+okv commit <vault-root> <staging-dir> <envelope-json-path> <run-id>
 ```
 
 Atomic per-source install and Git commit (ADR-009). On success, stdout includes commit identifier for `source_committed` events.
@@ -94,7 +94,7 @@ Atomic per-source install and Git commit (ADR-009). On success, stdout includes 
 ### validate-graph
 
 ```
-okf-vault validate-graph <vault-root>
+okv validate-graph <vault-root>
 ```
 
 Zero-orphan and two-hop root-index reachability checks.
@@ -102,7 +102,7 @@ Zero-orphan and two-hop root-index reachability checks.
 ### validate
 
 ```
-okf-vault validate <vault-root>
+okv validate <vault-root>
 ```
 
 Consolidated quality gate: committed-note contract, manifest consistency, indexes, graph, transaction state, curation dispositions, and gold-note reviews. Exit **3** when the gate fails.
@@ -110,7 +110,7 @@ Consolidated quality gate: committed-note contract, manifest consistency, indexe
 ### visualize
 
 ```
-okf-vault visualize <vault-root>
+okv visualize <vault-root>
 ```
 
 Invokes `.okf-vault/visualizer.json` command array; derived output only.
@@ -118,7 +118,7 @@ Invokes `.okf-vault/visualizer.json` command array; derived output only.
 ### recover
 
 ```
-okf-vault recover <vault-root>
+okv recover <vault-root>
 ```
 
 Restores managed paths after interrupted transactions; run when preflight detects a pending journal or exit 5 occurs.
@@ -126,7 +126,7 @@ Restores managed paths after interrupted transactions; run when preflight detect
 ### dossier
 
 ```
-okf-vault dossier <vault-root>
+okv dossier <vault-root>
 ```
 
 Bounded note dossiers for organize analysis.
@@ -134,7 +134,7 @@ Bounded note dossiers for organize analysis.
 ### validate-proposals
 
 ```
-okf-vault validate-proposals <vault-root> <proposals.json>
+okv validate-proposals <vault-root> <proposals.json>
 ```
 
 Structural validation gate before curator presentation.
