@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   PROVIDER_TOOL_PATTERN,
-  VAULT_COMMANDS,
+  OKV_COMMANDS,
   PIPELINE_COMMANDS,
   skillRoot,
   usesVaultPrefixOnly,
@@ -14,7 +14,7 @@ import {
   documentsDisableModelInvocationGuidance,
   registryLinksToStub,
   brokenMarkdownLinks,
-  ALL_VAULT_COMMAND_STUBS,
+  ALL_OKV_COMMAND_STUBS,
   PHASE_1B_PIPELINE_COMMAND_STUBS,
   PIPELINE_STUB_SECTION_ANCHORS,
   linksToPipelineSection,
@@ -69,10 +69,10 @@ describe("Phase 1b pipeline stub helpers (unit)", () => {
 
 describe("Phase 1b pipeline command stubs (unit)", () => {
   it("all seven OKV command stub files exist in canonical commands/", () => {
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       assert.ok(existsSync(stubPath(stubFileName)), `missing ${stubFileName}`);
     }
-    assert.equal(ALL_VAULT_COMMAND_STUBS.length, 7);
+    assert.equal(ALL_OKV_COMMAND_STUBS.length, 7);
   });
 
   for (const stubFileName of PHASE_1B_PIPELINE_COMMAND_STUBS) {
@@ -140,7 +140,7 @@ describe("Phase 1b pipeline command stubs (integration)", () => {
 
   it("registry.md lists all seven commands with consistent /okv-* naming", () => {
     const slugs = [...rows.keys()].sort();
-    assert.deepEqual(slugs, [...VAULT_COMMANDS].sort());
+    assert.deepEqual(slugs, [...OKV_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);
   });
 

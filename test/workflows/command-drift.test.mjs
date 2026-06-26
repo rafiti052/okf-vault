@@ -5,14 +5,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   PROVIDER_TOOL_PATTERN,
-  VAULT_COMMANDS,
+  OKV_COMMANDS,
   skillRoot,
   canonicalCommandsDir,
   cursorCommandsDir,
   claudeCommandsDir,
   usesVaultPrefixOnly,
   parseRegistryCommandRows,
-  ALL_VAULT_COMMAND_STUBS,
+  ALL_OKV_COMMAND_STUBS,
   MODE_STUB_SKILL_ANCHORS,
   PHASE_1B_MODE_COMMAND_STUBS,
   PHASE_1B_PIPELINE_COMMAND_STUBS,
@@ -77,7 +77,7 @@ describe("F8 command drift helpers (unit)", () => {
 
   it("listCommandStubs returns exactly seven OKV command stub files", () => {
     const stubs = listCommandStubs(commandsDir);
-    assert.deepEqual(stubs, [...ALL_VAULT_COMMAND_STUBS].sort());
+    assert.deepEqual(stubs, [...ALL_OKV_COMMAND_STUBS].sort());
     assert.equal(stubs.length, 7);
     assert.deepEqual(stubs, [
       "okv-bootstrap.md",
@@ -138,7 +138,7 @@ describe("F8 command drift helpers (unit)", () => {
 });
 
 describe("F8 command stub linkage (unit)", () => {
-  for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+  for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
     describe(stubFileName, () => {
       const stubText = readStub(stubFileName);
 
@@ -197,9 +197,9 @@ describe("F8 registry completeness (integration)", () => {
 
     assert.equal(stubs.length, 7);
     assert.equal(rows.size, 7);
-    assert.deepEqual([...rows.keys()].sort(), [...VAULT_COMMANDS].sort());
+    assert.deepEqual([...rows.keys()].sort(), [...OKV_COMMANDS].sort());
 
-    for (const command of VAULT_COMMANDS) {
+    for (const command of OKV_COMMANDS) {
       assert.ok(rows.has(command), `registry missing /${command}`);
       assert.ok(stubs.includes(`${command}.md`), `missing stub for /${command}`);
     }
@@ -218,7 +218,7 @@ describe("F8 registry completeness (integration)", () => {
   });
 
   it("each registry row links to its on-disk stub file", () => {
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       assert.match(registryText, new RegExp(`\\]\\(${stubFileName}\\)`));
     }
   });
@@ -226,7 +226,7 @@ describe("F8 registry completeness (integration)", () => {
 
 describe("F8 runtime adapter symlink paths (integration)", () => {
   it("Cursor and Claude adapter paths exist for all seven command stubs", () => {
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       for (const runtimeDir of [cursorDir, claudeDir]) {
         const adapterPath = join(runtimeDir, stubFileName);
         assert.ok(existsSync(adapterPath), `missing ${adapterPath}`);
@@ -235,7 +235,7 @@ describe("F8 runtime adapter symlink paths (integration)", () => {
   });
 
   it("all seven stubs resolve through Cursor and Claude adapter trees to canonical stubs", () => {
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       const cursorResult = assertAdapterStubResolves(cursorDir, commandsDir, stubFileName);
       assert.equal(cursorResult.ok, true, cursorResult.ok ? "" : cursorResult.message);
       const claudeResult = assertAdapterStubResolves(claudeDir, commandsDir, stubFileName);
@@ -244,7 +244,7 @@ describe("F8 runtime adapter symlink paths (integration)", () => {
   });
 
   it("runtime-visible stub headings match /okv-* slash command names", () => {
-    for (const command of VAULT_COMMANDS) {
+    for (const command of OKV_COMMANDS) {
       const stubFileName = `${command}.md`;
       for (const runtimeDir of [cursorDir, claudeDir]) {
         const heading = readFileSync(join(runtimeDir, stubFileName), "utf8")

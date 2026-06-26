@@ -25,10 +25,10 @@ import {
   cursorCommandSkillFile,
   claudeCommandFile,
   skillRoot,
-  ALL_VAULT_COMMAND_STUBS,
+  ALL_OKV_COMMAND_STUBS,
   PIPELINE_COMMANDS,
   SHIPPED_COMMAND_STUBS,
-  VAULT_COMMANDS,
+  OKV_COMMANDS as HARNESS_OKV_COMMANDS,
   pathIsSymlink,
   resolvesToSameRealpath,
   assertAdapterStubResolves,
@@ -232,8 +232,8 @@ describe("runtime adapter symlinks (unit)", () => {
   });
 
   it("all seven OKV command stubs resolve through Cursor and Claude adapter paths", () => {
-    assert.equal(ALL_VAULT_COMMAND_STUBS.length, 7);
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    assert.equal(ALL_OKV_COMMAND_STUBS.length, 7);
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       const cursorResult = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
       assert.equal(cursorResult.ok, true, cursorResult.ok ? "" : cursorResult.message);
       const claudeResult = assertAdapterStubResolves(claudeDir, canonicalDir, stubFileName);
@@ -257,7 +257,7 @@ describe("runtime adapter symlinks (unit)", () => {
   }
 
   it("Cursor-visible stubs for all seven commands include disable-model-invocation frontmatter", () => {
-    for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+    for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       const cursorText = readFileSync(join(cursorDir, stubFileName), "utf8");
       assert.equal(
         hasDisableModelInvocationFrontmatter(cursorText),
@@ -306,7 +306,7 @@ describe("runtime adapter symlinks (unit)", () => {
 
 describe("per-command discoverable unit contract (unit)", () => {
   it("exports exactly seven OKV command slugs for adapter scripts", () => {
-    assert.deepEqual(OKV_COMMANDS, VAULT_COMMANDS);
+    assert.deepEqual(OKV_COMMANDS, HARNESS_OKV_COMMANDS);
     assert.equal(OKV_COMMANDS.length, 7);
     for (const command of OKV_COMMANDS) {
       assert.match(command, /^okv-/);
@@ -334,7 +334,7 @@ describe("foreign-repo init (integration)", () => {
     });
     assert.equal(verification.ok, true, verification.ok ? "" : verification.message);
 
-    for (const command of VAULT_COMMANDS) {
+    for (const command of HARNESS_OKV_COMMANDS) {
       const canonicalStub = join(canonicalDir, `${command}.md`);
 
       const cursorSkillFile = cursorCommandSkillFile(tempProjectRoot, command);
@@ -460,7 +460,7 @@ describe("runtime adapter symlinks (integration)", () => {
   });
 
   it("all seven /okv-* slash entries are discoverable at expected runtime paths", () => {
-    for (const command of VAULT_COMMANDS) {
+    for (const command of HARNESS_OKV_COMMANDS) {
       const stubFileName = `${command}.md`;
       for (const runtimeDir of [cursorDir, claudeDir]) {
         const stubPath = join(runtimeDir, stubFileName);

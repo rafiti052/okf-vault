@@ -40,7 +40,7 @@ export interface CliError {
 
 export type CliResult<T = Record<string, unknown>> = CliSuccess<T> | CliError;
 
-export const PACKAGE_VERSION = "0.1.0";
+export const PACKAGE_VERSION = "okv/0.1.0";
 
 /** Reserved subcommands registered by later vault modules. */
 export const RESERVED_COMMANDS = [

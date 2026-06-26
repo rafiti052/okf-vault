@@ -166,7 +166,7 @@ describe("CLI parsing and dispatch", () => {
     assert.equal(ttyJson.stdout, pipedJson.stdout);
     assert.equal(
       ttyJson.stdout,
-      `${JSON.stringify({ status: "ok", command: "version", data: { version: "0.1.0" } })}\n`,
+      `${JSON.stringify({ status: "ok", command: "version", data: { version: "okv/0.1.0" } })}\n`,
     );
   });
 
@@ -205,7 +205,7 @@ describe("compiled executable integration", () => {
 
     const version = spawnSync(process.execPath, [bin, "--version", "--json"], { encoding: "utf8" });
     assert.equal(version.status, ExitCode.SUCCESS);
-    assert.match(version.stdout, /"version":"0.1.0"/);
+    assert.match(version.stdout, /"version":"okv\/0.1.0"/);
 
     const unknown = spawnSync(process.execPath, [bin, "missing", "--json"], { encoding: "utf8" });
     assert.equal(unknown.status, ExitCode.USAGE);
@@ -221,7 +221,7 @@ describe("compiled executable integration", () => {
     assert.deepEqual(JSON.parse(version.stdout) as unknown, {
       status: "ok",
       command: "version",
-      data: { version: "0.1.0" },
+      data: { version: "okv/0.1.0" },
     });
   });
 

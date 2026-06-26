@@ -49,7 +49,7 @@ export const OKV_COMMANDS = [
   "okv-ingest-check",
 ];
 
-export const VAULT_COMMANDS = OKV_COMMANDS;
+
 
 export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
 
@@ -213,7 +213,7 @@ export function verifyRuntimeAdapters(root, options = {}) {
     }
   }
 
-  for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
+  for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
     for (const [label, adapterCmd] of [
       ["Cursor", cursorCmd],
       ["Claude", claudeCmd],
@@ -242,7 +242,7 @@ export function verifyRuntimeAdapters(root, options = {}) {
     }
   }
 
-  for (const command of VAULT_COMMANDS) {
+  for (const command of OKV_COMMANDS) {
     const canonicalStub = join(canonicalCmd, `${command}.md`);
 
     const cursorSkillFile = cursorCommandSkillFile(root, command);
@@ -289,7 +289,7 @@ export const PHASE_1B_MODE_COMMAND_STUBS = [
 export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["okv-bootstrap.md", "okv-ingest-check.md"];
 
 /** All seven `/okv-*` command stub files (excludes registry.md). */
-export const ALL_VAULT_COMMAND_STUBS = [
+export const ALL_OKV_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  VAULT_COMMANDS,
+  OKV_COMMANDS,
   SKILL_MODES,
   PIPELINE_COMMANDS,
   skillRoot,
@@ -134,14 +134,14 @@ describe("discoverability contract (unit)", () => {
 
   it("registry.md lists exactly seven /okv-* commands with no /okf-* references", () => {
     const slugs = extractVaultCommandSlugs(registryText);
-    assert.deepEqual(slugs, [...VAULT_COMMANDS].sort());
+    assert.deepEqual(slugs, [...OKV_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);
     assert.doesNotMatch(registryText, /\/okf-/i);
   });
 
   it("SKILL.md frontmatter includes trigger phrases for ingest wizard and other modes", () => {
     assert.equal(documentsSkillModeTriggers(frontmatterDescription), true);
-    for (const command of VAULT_COMMANDS) {
+    for (const command of OKV_COMMANDS) {
       assert.match(frontmatterDescription, new RegExp(`/${command}`));
     }
     for (const mode of SKILL_MODES) {
@@ -176,7 +176,7 @@ describe("README discoverability contract (unit)", () => {
   });
 
   it("README lists all seven /okv-* commands", () => {
-    for (const command of VAULT_COMMANDS) {
+    for (const command of OKV_COMMANDS) {
       assert.match(readmeText, new RegExp(`/${command}`), `missing /${command} in README`);
     }
   });
@@ -208,9 +208,9 @@ describe("discoverability contract (integration)", () => {
   const rows = parseRegistryCommandRows(registryText);
 
   it("every registry command maps to a documented skill mode or pipeline placeholder", () => {
-    assert.equal(rows.size, VAULT_COMMANDS.length);
+    assert.equal(rows.size, OKV_COMMANDS.length);
 
-    for (const command of VAULT_COMMANDS) {
+    for (const command of OKV_COMMANDS) {
       const row = rows.get(command);
       assert.ok(row, `missing registry row for ${command}`);
 
