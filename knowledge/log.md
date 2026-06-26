@@ -24,3 +24,7 @@
 ## 2026-06-26T17:19:25.381Z — granola:3a9930ff-3332-42a9-b86d-685f3f5aec30
 
 - note: notes/ai-not-tool.md
+
+## 2026-06-26T17:19:42.242Z — granola:52ba23b0-5a23-41d9-b0a9-a3e0b7d3676b
+
+- note: notes/agentic-ai.md

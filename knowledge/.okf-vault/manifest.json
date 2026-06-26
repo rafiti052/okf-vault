@@ -14,6 +14,17 @@
       "processed_at": "2026-06-26T17:19:25.381Z"
     },
     {
+      "source_key": "granola:52ba23b0-5a23-41d9-b0a9-a3e0b7d3676b",
+      "kind": "granola",
+      "origin": "granola:52ba23b0-5a23-41d9-b0a9-a3e0b7d3676b",
+      "content_sha256": "44a6a0ad9d5582e5b25137a7dc581dad187dfc0d98a68ba1526dd2e314e237f4",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/agentic-ai.md",
+      "commit": "9c26367aae0bdb798accfe51f2b33e24e6b82710",
+      "processed_at": "2026-06-26T17:19:42.242Z"
+    },
+    {
       "source_key": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",
       "kind": "granola",
       "origin": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",
