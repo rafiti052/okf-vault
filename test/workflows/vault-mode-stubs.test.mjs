@@ -51,9 +51,9 @@ describe("Phase 1b mode stub helpers (unit)", () => {
   });
 
   it("registryMarksPhase1bShipped reads availability column", () => {
-    const sample = "| `/vault-init` | purpose | mode | **Phase 1b shipped** |";
-    assert.equal(registryMarksPhase1bShipped(sample, "vault-init"), true);
-    assert.equal(registryMarksPhase1bShipped(sample, "vault-bootstrap"), false);
+    const sample = "| `/okv-init` | purpose | mode | **Phase 1b shipped** |";
+    assert.equal(registryMarksPhase1bShipped(sample, "okv-init"), true);
+    assert.equal(registryMarksPhase1bShipped(sample, "okv-bootstrap"), false);
   });
 });
 
@@ -73,7 +73,7 @@ describe("Phase 1b mode command stubs (unit)", () => {
         assert.ok(existsSync(path));
       });
 
-      it("first heading references the /vault-* command and not /okf-*", () => {
+      it("first heading references the /okv-* command and not /okf-*", () => {
         assert.ok(firstHeading);
         assert.match(firstHeading, new RegExp(`/${commandSlug}`));
         assert.equal(usesVaultPrefixOnly(stubText), true);
@@ -121,8 +121,8 @@ describe("Phase 1b mode command stubs (unit)", () => {
     });
   }
 
-  it("vault-init.md references ./knowledge/ as initialize target", () => {
-    const initText = readFileSync(stubPath("vault-init.md"), "utf8");
+  it("okv-init.md references ./knowledge/ as initialize target", () => {
+    const initText = readFileSync(stubPath("okv-init.md"), "utf8");
     assert.match(initText, /\.\/knowledge\/|knowledge\//);
   });
 

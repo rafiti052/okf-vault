@@ -22,11 +22,10 @@ import {
   resolvesToSameRealpath,
   assertAdapterStubResolves,
   hasDisableModelInvocationFrontmatter,
-  frontmatterField,
   isDuplicateStubBody,
   stripYamlFrontmatter,
 } from "./workflow-contract.mjs";
-import { linkRuntimeAdapters } from "../../scripts/link-runtime-adapters.mjs";
+import { linkRuntimeAdapters, OKV_COMMANDS } from "../../scripts/link-runtime-adapters.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -46,7 +45,7 @@ describe("runtime adapter symlink helpers (unit)", () => {
   it("hasDisableModelInvocationFrontmatter detects true frontmatter", () => {
     assert.equal(
       hasDisableModelInvocationFrontmatter(
-        "---\ndisable-model-invocation: true\n---\n# /vault-ingest",
+        "---\ndisable-model-invocation: true\n---\n# /okv-ingest",
       ),
       true,
     );
@@ -54,7 +53,7 @@ describe("runtime adapter symlink helpers (unit)", () => {
   });
 
   it("isDuplicateStubBody flags copied bodies but not frontmatter-only differences", () => {
-    const body = "# /vault-ingest\n\nGuided ingest wizard.";
+    const body = "# /okv-ingest\n\nGuided ingest wizard.";
     const canonical = `---\ndisable-model-invocation: true\n---\n${body}`;
     const duplicate = body;
     const wrapper = `---\ndisable-model-invocation: true\n---\n# See canonical stub`;
@@ -64,7 +63,7 @@ describe("runtime adapter symlink helpers (unit)", () => {
 
   it("resolvesToSameRealpath returns false for mismatched targets", () => {
     assert.equal(
-      resolvesToSameRealpath(join(cursorDir, "vault-ingest.md"), join(root, "missing.md")),
+      resolvesToSameRealpath(join(cursorDir, "okv-ingest.md"), join(root, "missing.md")),
       false,
     );
   });
@@ -73,7 +72,7 @@ describe("runtime adapter symlink helpers (unit)", () => {
     const result = assertAdapterStubResolves(
       cursorDir,
       join(root, "nonexistent", "commands"),
-      "vault-ingest.md",
+      "okv-ingest.md",
     );
     assert.equal(result.ok, false);
     assert.match(result.message, /does not resolve|Missing canonical/);
@@ -107,7 +106,7 @@ describe("runtime adapter symlinks (unit)", () => {
     assert.ok(existsSync(cursorRulePath(root)));
   });
 
-  it("all seven vault command stubs resolve through Cursor and Claude adapter paths", () => {
+  it("all seven OKV command stubs resolve through Cursor and Claude adapter paths", () => {
     assert.equal(ALL_VAULT_COMMAND_STUBS.length, 7);
     for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
       const cursorResult = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
@@ -180,52 +179,14 @@ describe("runtime adapter symlinks (unit)", () => {
   });
 });
 
-describe("per-command discoverable units (unit)", () => {
-  it("exposes 14 per-command discoverable units (7 Cursor skills + 7 Claude commands)", () => {
-    assert.equal(VAULT_COMMANDS.length, 7);
-    let count = 0;
-    for (const command of VAULT_COMMANDS) {
-      assert.ok(existsSync(cursorCommandSkillFile(root, command)));
-      assert.ok(existsSync(claudeCommandFile(root, command)));
-      count += 2;
+describe("per-command discoverable unit contract (unit)", () => {
+  it("exports exactly seven OKV command slugs for adapter scripts", () => {
+    assert.deepEqual(OKV_COMMANDS, VAULT_COMMANDS);
+    assert.equal(OKV_COMMANDS.length, 7);
+    for (const command of OKV_COMMANDS) {
+      assert.match(command, /^okv-/);
     }
-    assert.equal(count, 14);
   });
-
-  for (const command of VAULT_COMMANDS) {
-    const canonicalStub = join(canonicalDir, `${command}.md`);
-
-    it(`Cursor .cursor/skills/${command}/SKILL.md resolves to canonical stub`, () => {
-      const skillFile = cursorCommandSkillFile(root, command);
-      assert.ok(existsSync(skillFile), `missing ${skillFile}`);
-      assert.equal(pathIsSymlink(skillFile), true);
-      assert.equal(resolvesToSameRealpath(skillFile, canonicalStub), true);
-    });
-
-    it(`Cursor /${command} SKILL.md carries name matching its folder and disable-model-invocation`, () => {
-      const skillFile = cursorCommandSkillFile(root, command);
-      const text = readFileSync(skillFile, "utf8");
-      const folderName = dirname(skillFile).split("/").pop();
-      assert.equal(folderName, command);
-      assert.equal(
-        frontmatterField(text, "name"),
-        command,
-        `name frontmatter must equal folder ${command}`,
-      );
-      assert.equal(
-        hasDisableModelInvocationFrontmatter(text),
-        true,
-        `missing disable-model-invocation in ${command}`,
-      );
-    });
-
-    it(`Claude .claude/commands/${command}.md resolves to canonical stub`, () => {
-      const claudeFile = claudeCommandFile(root, command);
-      assert.ok(existsSync(claudeFile), `missing ${claudeFile}`);
-      assert.equal(pathIsSymlink(claudeFile), true);
-      assert.equal(resolvesToSameRealpath(claudeFile, canonicalStub), true);
-    });
-  }
 });
 
 describe("foreign-repo init (integration)", () => {
@@ -288,13 +249,13 @@ describe("runtime adapter symlinks (integration)", () => {
     const broken = assertAdapterStubResolves(
       cursorDir,
       join(root, "renamed-stub-tree"),
-      "vault-ingest.md",
+      "okv-ingest.md",
     );
     assert.equal(broken.ok, false);
     assert.match(broken.message, /Missing canonical|does not resolve/);
   });
 
-  it("all seven /vault-* slash entries are discoverable at expected runtime paths", () => {
+  it("all seven /okv-* slash entries are discoverable at expected runtime paths", () => {
     for (const command of VAULT_COMMANDS) {
       const stubFileName = `${command}.md`;
       for (const runtimeDir of [cursorDir, claudeDir]) {

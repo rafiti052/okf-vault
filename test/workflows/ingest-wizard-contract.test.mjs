@@ -139,7 +139,7 @@ describe("ingest-wizard contract", () => {
     assert.match(text, /`not_initialized`/);
     assert.match(text, /resolveVaultRoot/);
     assert.match(text, /does not.*ask.*vault path|does not\*\* ask the curator for a vault path/i);
-    assert.match(text, /\/vault-init/);
+    assert.match(text, /\/okv-init/);
   });
 
   it("cross-links capability names for MCP and local branches", () => {
@@ -201,10 +201,7 @@ describe("ingest-wizard contract", () => {
   it("requires explicit curator confirmation before suggesting validate after skip or abort", () => {
     assert.match(text, /Post-commit suggestion gating \(skip and abort\)/i);
     assert.match(text, /explicitly confirms.*validate|explicit confirmation on skip\/abort/i);
-    assert.match(
-      text,
-      /not\*\* include `\/vault-validate`|Do \*\*not\*\* include `\/vault-validate`/i,
-    );
+    assert.match(text, /not\*\* include `\/okv-validate`|Do \*\*not\*\* include `\/okv-validate`/i);
   });
 
   it("documents session write triggers for run_completed, run_failed, skip, and abort", () => {
@@ -277,22 +274,22 @@ describe("ingest-wizard contract integration", () => {
     }
   });
 
-  it("lists post-commit suggestions with /vault-ingest before /vault-validate before session end", () => {
-    const ingestIdx = indexOfSuggestion(text, "/vault-ingest");
-    const validateIdx = indexOfSuggestion(text, "/vault-validate");
+  it("lists post-commit suggestions with /okv-ingest before /okv-validate before session end", () => {
+    const ingestIdx = indexOfSuggestion(text, "/okv-ingest");
+    const validateIdx = indexOfSuggestion(text, "/okv-validate");
     const sessionEndIdx = text.toLowerCase().indexOf("session end");
 
-    assert.ok(ingestIdx >= 0, "missing /vault-ingest suggestion");
-    assert.ok(validateIdx >= 0, "missing /vault-validate suggestion");
+    assert.ok(ingestIdx >= 0, "missing /okv-ingest suggestion");
+    assert.ok(validateIdx >= 0, "missing /okv-validate suggestion");
     assert.ok(sessionEndIdx >= 0, "missing session end suggestion");
 
     const postCommitSection = text.slice(text.indexOf("## 6. post_commit"));
-    const sectionIngest = indexOfSuggestion(postCommitSection, "/vault-ingest");
-    const sectionValidate = indexOfSuggestion(postCommitSection, "/vault-validate");
+    const sectionIngest = indexOfSuggestion(postCommitSection, "/okv-ingest");
+    const sectionValidate = indexOfSuggestion(postCommitSection, "/okv-validate");
     const sectionEnd = postCommitSection.toLowerCase().indexOf("session end");
 
-    assert.ok(sectionIngest < sectionValidate, "/vault-ingest must precede /vault-validate");
-    assert.ok(sectionValidate < sectionEnd, "/vault-validate must precede session end");
+    assert.ok(sectionIngest < sectionValidate, "/okv-ingest must precede /okv-validate");
+    assert.ok(sectionValidate < sectionEnd, "/okv-validate must precede session end");
   });
 
   it("wizard handoff with google_drive pending_source matches delegate_ingest contract fields", () => {

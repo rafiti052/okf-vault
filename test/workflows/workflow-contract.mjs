@@ -39,19 +39,21 @@ export const CAPABILITY_NAMES = [
   "invoke_process",
 ];
 
-export const VAULT_COMMANDS = [
-  "vault-ingest",
-  "vault-init",
-  "vault-organize",
-  "vault-validate",
-  "vault-visualize",
-  "vault-bootstrap",
-  "vault-ingest-check",
+export const OKV_COMMANDS = [
+  "okv-ingest",
+  "okv-init",
+  "okv-organize",
+  "okv-validate",
+  "okv-visualize",
+  "okv-bootstrap",
+  "okv-ingest-check",
 ];
+
+export const VAULT_COMMANDS = OKV_COMMANDS;
 
 export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
 
-export const PIPELINE_COMMANDS = ["vault-bootstrap", "vault-ingest-check"];
+export const PIPELINE_COMMANDS = ["okv-bootstrap", "okv-ingest-check"];
 
 export const PIPELINE_NAMES = ["bootstrap", "ingest-check"];
 
@@ -280,27 +282,27 @@ export function verifyRuntimeAdapters(root) {
   return { ok: true };
 }
 
-export const MVP_COMMAND_STUBS = ["vault-ingest.md", "registry.md"];
+export const MVP_COMMAND_STUBS = ["okv-ingest.md", "registry.md"];
 
 export const PHASE_1B_MODE_COMMAND_STUBS = [
-  "vault-init.md",
-  "vault-organize.md",
-  "vault-validate.md",
-  "vault-visualize.md",
+  "okv-init.md",
+  "okv-organize.md",
+  "okv-validate.md",
+  "okv-visualize.md",
 ];
 
-export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["vault-bootstrap.md", "vault-ingest-check.md"];
+export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["okv-bootstrap.md", "okv-ingest-check.md"];
 
-/** All seven `/vault-*` command stub files (excludes registry.md). */
+/** All seven `/okv-*` command stub files (excludes registry.md). */
 export const ALL_VAULT_COMMAND_STUBS = [
-  "vault-ingest.md",
+  "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
 ];
 
 /** Canonical command stubs shipped through MVP and Phase 1b (includes pipeline stubs). */
 export const SHIPPED_COMMAND_STUBS = [
-  "vault-ingest.md",
+  "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
   "registry.md",
@@ -308,25 +310,25 @@ export const SHIPPED_COMMAND_STUBS = [
 
 /** Maps mode stub filenames to SKILL.md mode section anchors. */
 export const MODE_STUB_SKILL_ANCHORS = {
-  "vault-init.md": "initialize",
-  "vault-organize.md": "organize",
-  "vault-validate.md": "validate",
-  "vault-visualize.md": "visualize",
+  "okv-init.md": "initialize",
+  "okv-organize.md": "organize",
+  "okv-validate.md": "validate",
+  "okv-visualize.md": "visualize",
 };
 
 /** Maps pipeline stub filenames to pipelines.md section anchors. */
 export const PIPELINE_STUB_SECTION_ANCHORS = {
-  "vault-bootstrap.md": "bootstrap",
-  "vault-ingest-check.md": "ingest-check",
+  "okv-bootstrap.md": "bootstrap",
+  "okv-ingest-check.md": "ingest-check",
 };
 
 export const PHASE_1B_SHIPPED_COMMANDS = [
-  "vault-init",
-  "vault-organize",
-  "vault-validate",
-  "vault-visualize",
-  "vault-bootstrap",
-  "vault-ingest-check",
+  "okv-init",
+  "okv-organize",
+  "okv-validate",
+  "okv-visualize",
+  "okv-bootstrap",
+  "okv-ingest-check",
 ];
 
 export const PHASE_1B_PLANNED_COMMANDS = [];
@@ -880,7 +882,7 @@ export function documentsOrganizePathMoveRejection(text) {
  * @returns {boolean}
  */
 export function usesVaultPrefixOnly(text) {
-  return !/\/okf-/i.test(text);
+  return !/\/(?:vault|okf)-/i.test(text);
 }
 
 /**
@@ -889,10 +891,10 @@ export function usesVaultPrefixOnly(text) {
  */
 export function extractVaultCommandSlugs(text) {
   const slugs = new Set();
-  const pattern = /\/vault-([a-z-]+)/g;
+  const pattern = /\/okv-([a-z-]+)/g;
   let match;
   while ((match = pattern.exec(text)) !== null) {
-    slugs.add(`vault-${match[1]}`);
+    slugs.add(`okv-${match[1]}`);
   }
   return [...slugs].sort();
 }
@@ -904,7 +906,7 @@ export function extractVaultCommandSlugs(text) {
 export function parseRegistryCommandRows(registryText) {
   const rows = new Map();
   for (const line of registryText.split("\n")) {
-    if (!line.includes("`/vault-")) {
+    if (!line.includes("`/okv-")) {
       continue;
     }
     const cells = line
@@ -914,9 +916,13 @@ export function parseRegistryCommandRows(registryText) {
     if (cells.length < 4) {
       continue;
     }
-    const command = cells[0].replace(/^`\/vault-/, "vault-").replace(/`$/, "");
+    const commandMatch = cells[0].match(/`\/(okv-[a-z-]+)`/);
+    if (!commandMatch) {
+      continue;
+    }
+    const command = commandMatch[1];
     const mode = cells[2];
-    const availability = cells[3];
+    const availability = cells[4] ?? cells[3];
     rows.set(command, { mode, availability });
   }
   return rows;
@@ -929,7 +935,7 @@ export function parseRegistryCommandRows(registryText) {
 export function documentsIngestFirstRouting(text) {
   const lower = text.toLowerCase();
   return (
-    text.includes("/vault-ingest") &&
+    text.includes("/okv-ingest") &&
     (lower.includes("recommended") ||
       lower.includes("new content") ||
       lower.includes("starting point"))
@@ -942,9 +948,7 @@ export function documentsIngestFirstRouting(text) {
  */
 export function documentsVaultSetupRouting(text) {
   return (
-    text.includes("/vault-init") &&
-    text.includes("/vault-bootstrap") &&
-    text.includes("./knowledge/")
+    text.includes("/okv-init") && text.includes("/okv-bootstrap") && text.includes("./knowledge/")
   );
 }
 
@@ -968,7 +972,7 @@ export function documentsSkillModeTriggers(frontmatterDescription) {
   const modeHits = ["initializing", "ingesting", "organizing", "validating", "visualizing"].filter(
     (phrase) => lower.includes(phrase),
   );
-  return modeHits.length >= 4 && lower.includes("/vault-ingest");
+  return modeHits.length >= 4 && lower.includes("/okv-ingest");
 }
 
 export const INGESTION_LOOP_HAPPY_PATH_EVENTS = [
@@ -1200,7 +1204,7 @@ export function documentsIngestRunInputHandoff(text, fields = INGEST_RUN_INPUT_F
 export function documentsNotInitializedRoutesAway(text) {
   return (
     text.includes("`not_initialized`") &&
-    /\/vault-init/.test(text) &&
+    /\/okv-init/.test(text) &&
     /do not.*delegate|not.*ingest|routes to/i.test(text)
   );
 }
@@ -1342,7 +1346,7 @@ export function resolveMarkdownAnchor(markdownText, anchor) {
  */
 export function listCommandStubs(commandsDir) {
   return readdirSync(commandsDir)
-    .filter((entry) => entry.startsWith("vault-") && entry.endsWith(".md"))
+    .filter((entry) => entry.startsWith("okv-") && entry.endsWith(".md"))
     .sort();
 }
 
@@ -1549,7 +1553,7 @@ export function documentsBootstrapVaultResolution(text) {
   return (
     section.includes("./knowledge/") &&
     section.includes("`not_initialized`") &&
-    /\/vault-init/.test(section)
+    /\/okv-init/.test(section)
   );
 }
 
@@ -1621,7 +1625,7 @@ export function parsePipelineRegistrySectionLinks(registryText) {
   const links = new Map();
   for (const command of PIPELINE_COMMANDS) {
     const pattern = new RegExp(
-      `\\| \`/${command}\`[^\\n]*pipelines\\.md\\)\\s+(bootstrap|ingest-check)`,
+      `\\| [^\\n]*\`/${command}\`[^\\n]*pipelines\\.md\\)\\s+(bootstrap|ingest-check)`,
       "i",
     );
     const match = registryText.match(pattern);
@@ -1630,7 +1634,7 @@ export function parsePipelineRegistrySectionLinks(registryText) {
       continue;
     }
     const fallback = new RegExp(
-      `\\| \`/${command}\`[^\\n]*pipelines\\.md[^\\n]*(bootstrap|ingest-check)`,
+      `\\| [^\\n]*\`/${command}\`[^\\n]*pipelines\\.md[^\\n]*(bootstrap|ingest-check)`,
       "i",
     );
     const fallbackMatch = registryText.match(fallback);

@@ -47,7 +47,7 @@ describe("skill ingest wizard delegation (unit)", () => {
   it("documentsNotInitializedRoutesAway detects initialize routing copy", () => {
     assert.equal(
       documentsNotInitializedRoutesAway(
-        "`not_initialized` routes to /vault-init — do not delegate to ingest mode",
+        "`not_initialized` routes to /okv-init — do not delegate to ingest mode",
       ),
       true,
     );
@@ -57,7 +57,7 @@ describe("skill ingest wizard delegation (unit)", () => {
   it("SKILL.md ingest mode links to references/ingest-wizard.md", () => {
     assert.match(ingestSection, /ingest-wizard\.md/);
     assert.match(ingestSection, /Command-driven/i);
-    assert.match(ingestSection, /\/vault-ingest/);
+    assert.match(ingestSection, /\/okv-ingest/);
   });
 
   it("SKILL.md ingest mode does not duplicate the full wizard step list", () => {

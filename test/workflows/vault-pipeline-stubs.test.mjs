@@ -59,16 +59,16 @@ describe("Phase 1b pipeline stub helpers (unit)", () => {
 
   it("parsePipelineRegistrySectionLinks reads pipeline section names from registry rows", () => {
     const sample =
-      "| `/vault-bootstrap` | purpose | pipelines.md) bootstrap | shipped |\n" +
-      "| `/vault-ingest-check` | purpose | pipelines.md) ingest-check | shipped |";
+      "| `/okv-bootstrap` | purpose | pipelines.md) bootstrap | shipped |\n" +
+      "| `/okv-ingest-check` | purpose | pipelines.md) ingest-check | shipped |";
     const links = parsePipelineRegistrySectionLinks(sample);
-    assert.equal(links.get("vault-bootstrap"), "bootstrap");
-    assert.equal(links.get("vault-ingest-check"), "ingest-check");
+    assert.equal(links.get("okv-bootstrap"), "bootstrap");
+    assert.equal(links.get("okv-ingest-check"), "ingest-check");
   });
 });
 
 describe("Phase 1b pipeline command stubs (unit)", () => {
-  it("all seven vault command stub files exist in canonical commands/", () => {
+  it("all seven OKV command stub files exist in canonical commands/", () => {
     for (const stubFileName of ALL_VAULT_COMMAND_STUBS) {
       assert.ok(existsSync(stubPath(stubFileName)), `missing ${stubFileName}`);
     }
@@ -87,7 +87,7 @@ describe("Phase 1b pipeline command stubs (unit)", () => {
         assert.ok(existsSync(path));
       });
 
-      it("first heading references the /vault-* command and not /okf-*", () => {
+      it("first heading references the /okv-* command and not /okf-*", () => {
         assert.ok(firstHeading);
         assert.match(firstHeading, new RegExp(`/${commandSlug}`));
         assert.equal(usesVaultPrefixOnly(stubText), true);
@@ -122,13 +122,13 @@ describe("Phase 1b pipeline command stubs (unit)", () => {
     });
   }
 
-  it("vault-ingest-check.md also links to ingest-wizard.md", () => {
-    const stubText = readFileSync(stubPath("vault-ingest-check.md"), "utf8");
+  it("okv-ingest-check.md also links to ingest-wizard.md", () => {
+    const stubText = readFileSync(stubPath("okv-ingest-check.md"), "utf8");
     assert.match(stubText, /ingest-wizard\.md/);
   });
 
-  it("vault-bootstrap.md does not link to ingest-wizard.md", () => {
-    const stubText = readFileSync(stubPath("vault-bootstrap.md"), "utf8");
+  it("okv-bootstrap.md does not link to ingest-wizard.md", () => {
+    const stubText = readFileSync(stubPath("okv-bootstrap.md"), "utf8");
     assert.doesNotMatch(stubText, /ingest-wizard\.md/);
   });
 });
@@ -138,7 +138,7 @@ describe("Phase 1b pipeline command stubs (integration)", () => {
   const rows = parseRegistryCommandRows(registryText);
   const pipelineLinks = parsePipelineRegistrySectionLinks(registryText);
 
-  it("registry.md lists all seven commands with consistent /vault-* naming", () => {
+  it("registry.md lists all seven commands with consistent /okv-* naming", () => {
     const slugs = [...rows.keys()].sort();
     assert.deepEqual(slugs, [...VAULT_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);

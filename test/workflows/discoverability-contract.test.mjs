@@ -121,18 +121,18 @@ describe("discoverability contract (unit)", () => {
     assert.ok(existsSync(skillPath));
   });
 
-  it("AGENTS.md recommends /vault-ingest as entry for new content", () => {
+  it("AGENTS.md recommends /okv-ingest as entry for new content", () => {
     assert.equal(documentsIngestFirstRouting(agentsText), true);
-    assert.match(agentsText, /\/vault-ingest/);
+    assert.match(agentsText, /\/okv-ingest/);
     assert.match(agentsText.toLowerCase(), /recommended|new content|starting point/);
   });
 
-  it("AGENTS.md decision tree routes new vault setup to /vault-init and /vault-bootstrap at ./knowledge/", () => {
+  it("AGENTS.md decision tree routes new vault setup to /okv-init and /okv-bootstrap at ./knowledge/", () => {
     assert.equal(documentsVaultSetupRouting(agentsText), true);
     assert.match(agentsText, /Choose the right command/i);
   });
 
-  it("registry.md lists exactly seven /vault-* commands with no /okf-* references", () => {
+  it("registry.md lists exactly seven /okv-* commands with no /okf-* references", () => {
     const slugs = extractVaultCommandSlugs(registryText);
     assert.deepEqual(slugs, [...VAULT_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);
@@ -169,13 +169,13 @@ describe("discoverability contract (unit)", () => {
 describe("README discoverability contract (unit)", () => {
   const readmeText = readFileSync(readmePath, "utf8");
 
-  it("README recommends /vault-ingest as entry for new content", () => {
+  it("README recommends /okv-ingest as entry for new content", () => {
     assert.equal(documentsIngestFirstRouting(readmeText), true);
-    assert.match(readmeText, /\/vault-ingest/);
+    assert.match(readmeText, /\/okv-ingest/);
     assert.match(readmeText.toLowerCase(), /start here|recommended|new content/);
   });
 
-  it("README lists all seven /vault-* commands", () => {
+  it("README lists all seven /okv-* commands", () => {
     for (const command of VAULT_COMMANDS) {
       assert.match(readmeText, new RegExp(`/${command}`), `missing /${command} in README`);
     }
@@ -217,11 +217,11 @@ describe("discoverability contract (integration)", () => {
       if (PIPELINE_COMMANDS.includes(command)) {
         assert.match(row.mode, /pipelines\.md/i);
         assert.match(registryText, /pipelines\.md/);
-      } else if (command === "vault-ingest") {
+      } else if (command === "okv-ingest") {
         assert.match(row.mode, /ingest-wizard\.md/i);
         assert.match(registryText, /ingest-wizard\.md/);
       } else {
-        const mode = command.replace("vault-", "");
+        const mode = command.replace("okv-", "");
         const skillMode = mode === "init" ? "initialize" : mode;
         assert.ok(SKILL_MODES.includes(skillMode), `unknown mode for ${command}`);
         assert.match(row.mode, new RegExp(skillMode, "i"));
@@ -232,17 +232,17 @@ describe("discoverability contract (integration)", () => {
   });
 
   it("registry availability labels distinguish MVP shipped and Phase 1b shipped", () => {
-    const ingestRow = rows.get("vault-ingest");
+    const ingestRow = rows.get("okv-ingest");
     assert.ok(ingestRow);
     assert.match(ingestRow.availability, /MVP/i);
 
     for (const command of [
-      "vault-init",
-      "vault-organize",
-      "vault-validate",
-      "vault-visualize",
-      "vault-bootstrap",
-      "vault-ingest-check",
+      "okv-init",
+      "okv-organize",
+      "okv-validate",
+      "okv-visualize",
+      "okv-bootstrap",
+      "okv-ingest-check",
     ]) {
       const row = rows.get(command);
       assert.ok(row);

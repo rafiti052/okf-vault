@@ -2,10 +2,10 @@
 
 **Boundary:** This file defines **exactly two** fixed composed pipelines per ADR-001 and PRD F4. Pipelines are ordered **mode references** with explicit curator handoff gates — not a general composer and not inline orchestration in command stubs.
 
-| Pipeline         | Command               | Mode sequence             |
-| ---------------- | --------------------- | ------------------------- |
-| **bootstrap**    | `/vault-bootstrap`    | `initialize` → `validate` |
-| **ingest-check** | `/vault-ingest-check` | `ingest` → `validate`     |
+| Pipeline         | Command             | Mode sequence             |
+| ---------------- | ------------------- | ------------------------- |
+| **bootstrap**    | `/okv-bootstrap`    | `initialize` → `validate` |
+| **ingest-check** | `/okv-ingest-check` | `ingest` → `validate`     |
 
 **Non-goal:** `ingest → organize` and arbitrary mode chaining are out of scope for V1. Command stubs under `commands/` link here; they **must not** paraphrase phase order from [`SKILL.md`](../SKILL.md) or [`ingest-wizard.md`](ingest-wizard.md).
 
@@ -15,16 +15,16 @@ Each mode leg in a pipeline emits its own **`run_started`** / **`run_completed`*
 
 **Purpose:** Initialize a new vault at `./knowledge/` then run a quality gate on vault health in one guided session.
 
-**Command:** `/vault-bootstrap`
+**Command:** `/okv-bootstrap`
 
 ### Vault path resolution (first leg)
 
 Before any mode delegation, confirm vault path resolution at **`./knowledge/`** using `resolveVaultRoot()` (ADR-006):
 
-| Status            | Pipeline action                                                                                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `not_initialized` | **Stop pipeline**; suggest **`/vault-init`** to create layout, manifest, indexes, and Git at `./knowledge/`. Do not delegate to initialize mode until a subsequent run resolves `found`. |
-| `found`           | Confirm resolved `vault_root` to curator; proceed to initialize leg only when curator confirms new-vault setup intent.                                                                   |
+| Status            | Pipeline action                                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_initialized` | **Stop pipeline**; suggest **`/okv-init`** to create layout, manifest, indexes, and Git at `./knowledge/`. Do not delegate to initialize mode until a subsequent run resolves `found`. |
+| `found`           | Confirm resolved `vault_root` to curator; proceed to initialize leg only when curator confirms new-vault setup intent.                                                                 |
 
 When status is `not_initialized`, present initialize routing copy — do **not** auto-start validate.
 
@@ -63,7 +63,7 @@ On curator confirmation to proceed:
 
 **Purpose:** Ingest one or more explicit sources then validate vault health in one guided session.
 
-**Command:** `/vault-ingest-check`
+**Command:** `/okv-ingest-check`
 
 ### Ingest leg (acquisition + orchestration)
 
@@ -113,7 +113,7 @@ Pipeline behavior depends on ingest batch outcomes (ADR-009 failure-stop):
 
 When any ingest source was skipped or the ingest run aborted:
 
-1. Present retry, another explicit source (`/vault-ingest` or continue ingest-check ingest leg), or session end.
+1. Present retry, another explicit source (`/okv-ingest` or continue ingest-check ingest leg), or session end.
 2. Do **not** include validate in numbered suggestions until the curator **explicitly confirms** they want a quality gate on a partial or failed batch.
 3. After explicit confirmation only: start validate with a **fresh `run_id`**; retain ingest `run_id` in session for correlation.
 
@@ -121,7 +121,7 @@ When any ingest source was skipped or the ingest run aborted:
 
 When all sources in the ingest batch committed successfully:
 
-1. Suggest **`/vault-validate`** (or continue the ingest-check validate leg) as the next step.
+1. Suggest **`/okv-validate`** (or continue the ingest-check validate leg) as the next step.
 2. Curator **confirms** to proceed or **opts out** — no automatic validate without confirmation.
 3. On confirmation, assign a **fresh `run_id`** for validate and delegate to [`SKILL.md`](../SKILL.md) **validate** mode.
 

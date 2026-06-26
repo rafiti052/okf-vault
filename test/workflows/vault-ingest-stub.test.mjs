@@ -19,12 +19,12 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
 const skillDir = skillRoot(root);
-const stubPath = join(skillDir, "commands", "vault-ingest.md");
+const stubPath = join(skillDir, "commands", "okv-ingest.md");
 const registryPath = join(skillDir, "commands", "registry.md");
 const ingestWizardPath = join(skillDir, "references", "ingest-wizard.md");
 const skillPath = join(skillDir, "SKILL.md");
 
-describe("vault-ingest stub helpers (unit)", () => {
+describe("okv-ingest stub helpers (unit)", () => {
   it("containsIngestionLoopPhaseOrder detects happy-path event sequences", () => {
     const violation = INGESTION_LOOP_HAPPY_PATH_EVENTS.slice(0, 3).join(" then ");
     assert.equal(containsIngestionLoopPhaseOrder(violation), true);
@@ -43,14 +43,8 @@ describe("vault-ingest stub helpers (unit)", () => {
   });
 
   it("registryLinksToStub matches markdown link targets", () => {
-    assert.equal(
-      registryLinksToStub("[`/vault-ingest`](vault-ingest.md)", "vault-ingest.md"),
-      true,
-    );
-    assert.equal(
-      registryLinksToStub("vault-ingest.md without link syntax", "vault-ingest.md"),
-      false,
-    );
+    assert.equal(registryLinksToStub("[`/okv-ingest`](okv-ingest.md)", "okv-ingest.md"), true);
+    assert.equal(registryLinksToStub("okv-ingest.md without link syntax", "okv-ingest.md"), false);
   });
 
   it("documentsDisableModelInvocationGuidance detects runtime adapter note", () => {
@@ -62,17 +56,17 @@ describe("vault-ingest stub helpers (unit)", () => {
   });
 });
 
-describe("vault-ingest stub contract (unit)", () => {
+describe("okv-ingest stub contract (unit)", () => {
   const stubText = readFileSync(stubPath, "utf8");
   const firstHeading = stubText.split("\n").find((line) => line.startsWith("#"));
 
-  it("vault-ingest.md exists at the canonical skill commands path", () => {
+  it("okv-ingest.md exists at the canonical skill commands path", () => {
     assert.ok(existsSync(stubPath));
   });
 
-  it("first heading references /vault-ingest and not /okf-ingest", () => {
+  it("first heading references /okv-ingest and not /okf-ingest", () => {
     assert.ok(firstHeading);
-    assert.match(firstHeading, /\/vault-ingest/);
+    assert.match(firstHeading, /\/okv-ingest/);
     assert.equal(usesVaultPrefixOnly(stubText), true);
     assert.doesNotMatch(stubText, /\/okf-ingest/i);
   });
@@ -101,15 +95,15 @@ describe("vault-ingest stub contract (unit)", () => {
   });
 });
 
-describe("vault-ingest stub contract (integration)", () => {
+describe("okv-ingest stub contract (integration)", () => {
   const stubText = readFileSync(stubPath, "utf8");
   const registryText = readFileSync(registryPath, "utf8");
   const rows = parseRegistryCommandRows(registryText);
   const stubDir = dirname(stubPath);
 
-  it("registry.md links to vault-ingest.md with MVP-shipped availability label", () => {
-    assert.equal(registryLinksToStub(registryText, "vault-ingest.md"), true);
-    const ingestRow = rows.get("vault-ingest");
+  it("registry.md links to okv-ingest.md with MVP-shipped availability label", () => {
+    assert.equal(registryLinksToStub(registryText, "okv-ingest.md"), true);
+    const ingestRow = rows.get("okv-ingest");
     assert.ok(ingestRow);
     assert.match(ingestRow.availability, /MVP/i);
     assert.match(registryText, /MVP shipped/);

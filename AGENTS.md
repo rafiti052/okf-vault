@@ -8,12 +8,12 @@ Use this one-screen decision tree before reading the full skill. Map MCP and fil
 
 | Your goal | Command | Notes |
 | --------- | ------- | ----- |
-| **Add new content** (recommended starting point) | **`/vault-ingest`** | Interactive ingest wizard — MCP artifact or explicit local file |
-| Set up a new vault at `./knowledge/` | `/vault-init` or `/vault-bootstrap` | `/vault-init` creates layout; `/vault-bootstrap` runs init then validate (Phase 1b) |
-| Organize notes after ingestion | `/vault-organize` | Dossiers and curation proposals (Phase 1b) |
-| Check vault health / contracts | `/vault-validate` | Contract, manifest, graph checks (Phase 1b) |
-| Inspect the knowledge graph | `/vault-visualize` | OKF visualizer (Phase 1b) |
-| Ingest then validate in one session | `/vault-ingest-check` | Composed pipeline (Phase 1b) |
+| **Add new content** (recommended starting point) | **`/okv-ingest`** | Interactive ingest wizard — MCP artifact or explicit local file |
+| Set up a new vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` | `/okv-init` creates layout; `/okv-bootstrap` runs init then validate (Phase 1b) |
+| Organize notes after ingestion | `/okv-organize` | Dossiers and curation proposals (Phase 1b) |
+| Check vault health / contracts | `/okv-validate` | Contract, manifest, graph checks (Phase 1b) |
+| Inspect the knowledge graph | `/okv-visualize` | OKF visualizer (Phase 1b) |
+| Ingest then validate in one session | `/okv-ingest-check` | Composed pipeline (Phase 1b) |
 
 Full command list with availability labels: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
@@ -62,7 +62,7 @@ pnpm run setup:link
 okf-vault init
 ```
 
-No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/vault-*` is individually discoverable. Explicit `okf-vault init <vault-root>` initializes the vault only (backward compatible).
+No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/okv-*` is individually discoverable. Explicit `okf-vault init <vault-root>` initializes the vault only (backward compatible).
 
 ## Key contracts
 

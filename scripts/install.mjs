@@ -159,21 +159,21 @@ if (!linkGlobal) {
 console.log(`
 Setup complete.
 
-Each \`/vault-*\` command is now installed as an individual slash entry in both runtimes
+Each \`/okv-*\` command is now installed as an individual slash entry in both runtimes
 (Cursor: \`.cursor/skills/<cmd>/SKILL.md\`; Claude: \`.claude/commands/<cmd>.md\`).
 Reload the editor window after the first install so the new commands appear.
 
 ## Cursor
-Open this repo in Cursor and type \`/vault-ingest\` (or any \`/vault-*\`).
+Open this repo in Cursor and type \`/okv-ingest\` (or any \`/okv-*\`).
 Project rule auto-applies from \`.cursor/rules/okf-vault.mdc\`.
 
 ## Claude Code
-Open this repo in Claude Code. Skill at \`.claude/skills/okf-vault\`; type \`/vault-ingest\`.
+Open this repo in Claude Code. Skill at \`.claude/skills/okf-vault\`; type \`/okv-ingest\`.
 
 ## Helper CLI
 Run \`${cliHelp}\` for deterministic validation, manifest, graph, and Git commands.
 
-Recommended first command: \`/vault-ingest\`.
-New vault at \`./knowledge/\`: \`/vault-bootstrap\` or \`/vault-init\`.
+Recommended first command: \`/okv-ingest\`.
+New vault at \`./knowledge/\`: \`/okv-bootstrap\` or \`/okv-init\`.
 Full slash-command list: .agents/skills/okf-vault/commands/registry.md
 `);

@@ -25,7 +25,7 @@ The skill decides *what* to process; the helper decides *whether* staged output 
 
 Two layers work together:
 
-- **Slash commands** (`/vault-*`) — agent orchestration via the skill and ingest wizard
+- **Slash commands** (`/okv-*`) — agent orchestration via the skill and ingest wizard
 - **`okf-vault` CLI** — deterministic validation, manifest mutation, graph checks, and Git transactions
 
 ## Prerequisites
@@ -41,7 +41,7 @@ Two layers work together:
 ```bash
 git clone <repo-url>
 cd okf-knowledge-vault
-pnpm run setup          # build CLI + install Cursor and Claude adapters + per-command /vault-* slash entries
+pnpm run setup          # build CLI + install Cursor and Claude adapters + per-command /okv-* slash entries
 ```
 
 ### Init in any repository
@@ -68,7 +68,7 @@ okf-vault init          # creates ./knowledge/ + Cursor/Claude adapters + curato
 
 ### Simple flow
 
-Open the repo in Cursor or Claude Code, then type `/vault-ingest` (or any other `/vault-*`). Each command appears individually after the adapters are installed. CLI fallback:
+Open the repo in Cursor or Claude Code, then type `/okv-ingest` (or any other `/okv-*`). Each command appears individually after the adapters are installed. CLI fallback:
 
 ```bash
 node dist/main.js validate ./knowledge
@@ -78,12 +78,12 @@ node dist/main.js validate ./knowledge
 
 | Goal | Command |
 | ---- | ------- |
-| Add new content (start here) | `/vault-ingest` |
-| New vault at `./knowledge/` | `/vault-init` or `/vault-bootstrap` |
-| Organize after ingestion | `/vault-organize` |
-| Health check | `/vault-validate` |
-| Graph inspection | `/vault-visualize` |
-| Ingest + validate pipeline | `/vault-ingest-check` |
+| Add new content (start here) | `/okv-ingest` |
+| New vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` |
+| Organize after ingestion | `/okv-organize` |
+| Health check | `/okv-validate` |
+| Graph inspection | `/okv-visualize` |
+| Ingest + validate pipeline | `/okv-ingest-check` |
 
 Full command list with availability labels and stub links: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
@@ -142,7 +142,7 @@ pnpm run typecheck     # TypeScript without emit
 `pnpm run setup` (and no-arg `okf-vault init`) install two kinds of symlinks, all pointing at the canonical skill under `.agents/skills/okf-vault/`:
 
 - **Umbrella skill** — `.cursor/skills/okf-vault/` and `.claude/skills/okf-vault/` → canonical skill (so `/okf-vault` auto-applies and references resolve).
-- **Per-command discoverable units** — so every `/vault-*` shows up individually:
+- **Per-command discoverable units** — so every `/okv-*` shows up individually:
   - **Cursor** — `.cursor/skills/<cmd>/SKILL.md` → canonical `commands/<cmd>.md`
   - **Claude Code** — `.claude/commands/<cmd>.md` → canonical `commands/<cmd>.md`
 

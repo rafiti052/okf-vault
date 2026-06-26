@@ -6,25 +6,17 @@
  * Emits, per project:
  * - Umbrella skill symlinks (`/okf-vault` auto-applies):
  *   `.cursor/skills/okf-vault` and `.claude/skills/okf-vault` → canonical skill.
- * - Per-command discoverable units so every `/vault-*` shows up individually:
+ * - Per-command discoverable units so every `/okv-*` shows up individually:
  *   Cursor `.cursor/skills/<cmd>/SKILL.md` and Claude `.claude/commands/<cmd>.md` → canonical `commands/<cmd>.md`.
  */
 import { existsSync, lstatSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import { OKV_COMMANDS } from "./managed-artifacts.mjs";
+
+export { OKV_COMMANDS };
 
 const defaultRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-/** The seven `/vault-*` slash commands, each shipped as a canonical stub under `commands/`. */
-export const VAULT_COMMANDS = [
-  "vault-ingest",
-  "vault-init",
-  "vault-organize",
-  "vault-validate",
-  "vault-visualize",
-  "vault-bootstrap",
-  "vault-ingest-check",
-];
 
 /**
  * True when `candidate` is the same path as, or nested under, `root`.
@@ -130,7 +122,7 @@ export function linkRuntimeAdapters({ projectRoot, canonicalSkillRoot, quiet = f
     },
   ];
 
-  for (const command of VAULT_COMMANDS) {
+  for (const command of OKV_COMMANDS) {
     const canonicalStub = join(canonicalCommandsRoot, `${command}.md`);
     links.push({
       linkPath: join(resolvedProject, ".cursor", "skills", command, "SKILL.md"),

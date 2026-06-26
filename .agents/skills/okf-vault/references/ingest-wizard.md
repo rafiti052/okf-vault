@@ -1,6 +1,6 @@
 # Ingest Wizard Interaction Contract
 
-**Boundary:** This file is the **authoritative curator-facing UX spec** for `/vault-ingest` (ADR-007). It covers vault resolution through source acquisition, confirmation, and handoff to skill ingest mode. **Orchestration after handoff** — preflight, acquire, inspect, convert, validate, commit — lives in [`SKILL.md`](../SKILL.md) ingest mode and [`ingestion-loop.md`](ingestion-loop.md). The wizard **must not** redefine post-delegation phase order.
+**Boundary:** This file is the **authoritative curator-facing UX spec** for `/okv-ingest` (ADR-007). It covers vault resolution through source acquisition, confirmation, and handoff to skill ingest mode. **Orchestration after handoff** — preflight, acquire, inspect, convert, validate, commit — lives in [`SKILL.md`](../SKILL.md) ingest mode and [`ingestion-loop.md`](ingestion-loop.md). The wizard **must not** redefine post-delegation phase order.
 
 Session and wizard state are **chat-ephemeral** (ADR-005). Types are defined in `src/vault/session.ts`; field names below match exported TypeScript identifiers without duplicating type definitions.
 
@@ -45,9 +45,9 @@ Before any acquisition prompt, call `resolveVaultRoot(repoRoot)` (ADR-006). The 
 
 When status is `not_initialized`, tell the curator:
 
-> No OKF vault is initialized at `./knowledge/` in this repository. Run **`/vault-init`** to create the vault layout, manifest, indexes, and Git repository. You may also use **`/vault-bootstrap`** for a combined new-vault plus first-ingest flow (Phase 1b).
+> No OKF vault is initialized at `./knowledge/` in this repository. Run **`/okv-init`** to create the vault layout, manifest, indexes, and Git repository. You may also use **`/okv-bootstrap`** for a combined new-vault plus first-ingest flow (Phase 1b).
 
-Do not proceed to source type selection until a subsequent `/vault-ingest` resolves `found`.
+Do not proceed to source type selection until a subsequent `/okv-ingest` resolves `found`.
 
 ### Session read
 
@@ -139,21 +139,21 @@ Runs after skill ingest mode completes (success, skip, failure resolution, or ab
 
 When the curator may have more sources to ingest, present suggestions in this **priority order**:
 
-1. **`/vault-ingest`** — ingest another explicit source (highest priority when batch work may continue).
-2. **`/vault-validate`** — run quality gate on the vault.
+1. **`/okv-ingest`** — ingest another explicit source (highest priority when batch work may continue).
+2. **`/okv-validate`** — run quality gate on the vault.
 3. **Session end** — conclude when no further vault work is planned.
 
 ### Session write
 
 Update `VaultSessionContext` after each ingest run terminal outcome. Validate structural shape with `parseVaultSessionContext()` in agent runtimes before persisting to chat state.
 
-| Field              | When written                                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `vault_root`       | After first successful `found` resolution (retain on subsequent runs)                                                               |
-| `last_run_id`      | After skill ingest run finishes — retains ingest `run_id` for correlation even when a later `/vault-validate` uses a fresh `run_id` |
-| `last_mode`        | Set to `ingest` on ingest terminal outcomes                                                                                         |
-| `last_exit_status` | `completed`, `failed`, `aborted`, or `skipped` per run outcome                                                                      |
-| `last_source_kind` | `local`, `google_drive`, or `granola` from committed or attempted source                                                            |
+| Field              | When written                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `vault_root`       | After first successful `found` resolution (retain on subsequent runs)                                                             |
+| `last_run_id`      | After skill ingest run finishes — retains ingest `run_id` for correlation even when a later `/okv-validate` uses a fresh `run_id` |
+| `last_mode`        | Set to `ingest` on ingest terminal outcomes                                                                                       |
+| `last_exit_status` | `completed`, `failed`, `aborted`, or `skipped` per run outcome                                                                    |
+| `last_source_kind` | `local`, `google_drive`, or `granola` from committed or attempted source                                                          |
 
 #### Write triggers by outcome
 
@@ -170,9 +170,9 @@ Emit the triggering progress event **before** updating session memory so `last_r
 
 When the ingest run ends with `skipped`, `aborted`, or unresolved `failed` (ADR-009 stop):
 
-1. Offer **retry**, **another explicit source** (`/vault-ingest`), or **session end**.
-2. Do **not** include `/vault-validate` in numbered suggestions until the curator **explicitly confirms** they want a quality gate on a partial or failed batch.
-3. After explicit confirmation, offer `/vault-validate` with a **fresh `run_id`** for the validate leg; retain the ingest `run_id` in `VaultSessionContext.last_run_id` for curator correlation.
+1. Offer **retry**, **another explicit source** (`/okv-ingest`), or **session end**.
+2. Do **not** include `/okv-validate` in numbered suggestions until the curator **explicitly confirms** they want a quality gate on a partial or failed batch.
+3. After explicit confirmation, offer `/okv-validate` with a **fresh `run_id`** for the validate leg; retain the ingest `run_id` in `VaultSessionContext.last_run_id` for curator correlation.
 
 When `last_exit_status` is `completed`, follow the [post-commit suggestion order](#post-commit-suggestion-order) above without extra gating.
 
@@ -180,7 +180,7 @@ When `last_exit_status` is `completed`, follow the [post-commit suggestion order
 
 Session memory is **chat-ephemeral only** — agents hold `VaultSessionContext` in conversation state. **Never** write session fields to `./knowledge/`, `.okf-vault/`, or any other managed vault path. No persistent vault profile database in V1.
 
-Validate structural updates with `parseVaultSessionContext()` from `src/vault/session.ts` before accepting session state across wizard steps or repeat `/vault-ingest` invocations.
+Validate structural updates with `parseVaultSessionContext()` from `src/vault/session.ts` before accepting session state across wizard steps or repeat `/okv-ingest` invocations.
 
 ### VaultSessionContext fields
 
@@ -201,7 +201,7 @@ Validate structural updates with `parseVaultSessionContext()` from `src/vault/se
 | `pending_source` | Populated `IngestSourceInput` before handoff            |
 | `run_id`         | Stable run identifier assigned at source type selection |
 
-### Session read (wizard start / repeat `/vault-ingest`)
+### Session read (wizard start / repeat `/okv-ingest`)
 
 At wizard start, read existing `VaultSessionContext` from chat state (validate with `parseVaultSessionContext()` when shape is uncertain):
 
@@ -211,7 +211,7 @@ At wizard start, read existing `VaultSessionContext` from chat state (validate w
 
 ### Validate `run_id` handoff
 
-When the curator chooses `/vault-validate` (after successful ingest or after explicit confirmation on skip/abort):
+When the curator chooses `/okv-validate` (after successful ingest or after explicit confirmation on skip/abort):
 
 - Start validate mode with a **fresh `run_id`** — do not reuse the ingest wizard `run_id`.
 - Retain the ingest `run_id` in `VaultSessionContext.last_run_id` until the next ingest run completes and overwrites it.

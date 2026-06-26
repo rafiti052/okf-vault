@@ -87,12 +87,12 @@ describe("pipelines contract (unit)", () => {
     }
   });
 
-  it("bootstrap confirms vault path resolution at ./knowledge/ and routes not_initialized to /vault-init", () => {
+  it("bootstrap confirms vault path resolution at ./knowledge/ and routes not_initialized to /okv-init", () => {
     assert.equal(documentsBootstrapVaultResolution(text), true);
     const bootstrapSection = text.slice(text.indexOf("## bootstrap"));
     assert.match(bootstrapSection, /\.\/knowledge\//);
     assert.match(bootstrapSection, /`not_initialized`/);
-    assert.match(bootstrapSection, /\/vault-init/);
+    assert.match(bootstrapSection, /\/okv-init/);
   });
 
   it("ingest-check reuses ingest-wizard.md acquisition through delegate_ingest", () => {
@@ -137,8 +137,8 @@ describe("pipelines contract (integration)", () => {
     const links = parsePipelineRegistrySectionLinks(registryText);
     assert.equal(links.size, PIPELINE_COMMANDS.length);
 
-    assert.equal(links.get("vault-bootstrap"), "bootstrap");
-    assert.equal(links.get("vault-ingest-check"), "ingest-check");
+    assert.equal(links.get("okv-bootstrap"), "bootstrap");
+    assert.equal(links.get("okv-ingest-check"), "ingest-check");
 
     for (const command of PIPELINE_COMMANDS) {
       const section = links.get(command);
@@ -161,7 +161,7 @@ describe("pipelines contract helpers (unit)", () => {
 ## bootstrap
 See SKILL.md initialize and validate modes.
 run_started and run_completed per leg.
-./knowledge/ with not_initialized routes to /vault-init.
+./knowledge/ with not_initialized routes to /okv-init.
 fresh run_id for validate.
 `;
 
@@ -190,7 +190,7 @@ fresh \`run_id\` for validate leg.
   it("parsePipelineRegistrySectionLinks extracts section names from registry rows", () => {
     const registryText = readFileSync(registryPath, "utf8");
     const links = parsePipelineRegistrySectionLinks(registryText);
-    assert.equal(links.get("vault-bootstrap"), "bootstrap");
-    assert.equal(links.get("vault-ingest-check"), "ingest-check");
+    assert.equal(links.get("okv-bootstrap"), "bootstrap");
+    assert.equal(links.get("okv-ingest-check"), "ingest-check");
   });
 });
