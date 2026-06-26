@@ -3,6 +3,17 @@
   "note_contract_version": "okf-note-contract/1.0.0",
   "sources": [
     {
+      "source_key": "granola:3a9930ff-3332-42a9-b86d-685f3f5aec30",
+      "kind": "granola",
+      "origin": "granola:3a9930ff-3332-42a9-b86d-685f3f5aec30",
+      "content_sha256": "d83494ba725f678e01a839093fe7e754b852ec40df6d56e7f66ad562d4b51927",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/ai-not-tool.md",
+      "commit": "fcd56a856057f122547c276fbbf43b78d17dedcc",
+      "processed_at": "2026-06-26T17:19:25.381Z"
+    },
+    {
       "source_key": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",
       "kind": "granola",
       "origin": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",

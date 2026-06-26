@@ -20,3 +20,7 @@
 ## 2026-06-26T17:18:21.976Z — granola:bcdb364f-daf6-4b7b-8a12-21591d2aa8fe
 
 - note: notes/missing-interface-ai.md
+
+## 2026-06-26T17:19:25.381Z — granola:3a9930ff-3332-42a9-b86d-685f3f5aec30
+
+- note: notes/ai-not-tool.md
