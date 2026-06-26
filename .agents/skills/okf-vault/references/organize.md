@@ -159,6 +159,6 @@ See [progress-events.md](progress-events.md) for `organize_proposals_ready` fiel
 
 ## Related ADRs
 
-- [ADR-002](../../../../.compozy/tasks/okf-knowledge-vault/adrs/adr-002.md) — Full corpus before initial organize
-- [ADR-004](../../../../.compozy/tasks/okf-knowledge-vault/adrs/adr-004.md) — Incremental manual updates
-- [ADR-007](../../../../.compozy/tasks/okf-knowledge-vault/adrs/adr-007.md) — Dossier-driven proposals
+- [ADR-002](../../../../.compozy/tasks/_archived/1782502158123-411d90b3-okf-knowledge-vault/adrs/adr-002.md) — Full corpus before initial organize
+- [ADR-004](../../../../.compozy/tasks/_archived/1782502158123-411d90b3-okf-knowledge-vault/adrs/adr-004.md) — Incremental manual updates
+- [ADR-007](../../../../.compozy/tasks/_archived/1782502158123-411d90b3-okf-knowledge-vault/adrs/adr-007.md) — Dossier-driven proposals
