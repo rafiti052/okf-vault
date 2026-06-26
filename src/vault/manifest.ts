@@ -314,11 +314,7 @@ export function initializeVault(vaultRoot: string): InitializeVaultResult {
 
 const CANONICAL_SKILL_RELATIVE = join(".agents", "skills", "okf-vault");
 const CURATOR_RULE_RELATIVE = join(".cursor", "rules", "okv.mdc");
-const CURATOR_RULE_TEMPLATE_RELATIVE = join(
-  CANONICAL_SKILL_RELATIVE,
-  "templates",
-  "cursor-rule.mdc",
-);
+const CURATOR_RULE_TEMPLATE_RELATIVE = join(CANONICAL_SKILL_RELATIVE, "templates", "okv.mdc");
 
 interface RuntimeAdapterInstallResult {
   linked: string[];
@@ -379,7 +375,7 @@ function installRuntimeAdapters(
   };
 }
 
-function installCuratorRule(projectRoot: string, installRoot: string): boolean {
+export function installCuratorRule(projectRoot: string, installRoot: string): boolean {
   const rulePath = join(projectRoot, CURATOR_RULE_RELATIVE);
   if (fs.existsSync(rulePath)) {
     return false;
@@ -405,6 +401,7 @@ export function handleInit(args: string[]): DispatchOutcome {
       const installRoot = resolveInstallRoot();
       const adapters = installRuntimeAdapters(projectRoot, installRoot);
       const curatorRuleInstalled = installCuratorRule(projectRoot, installRoot);
+      const legacyRemoved = adapters.removed;
       return {
         exitCode: ExitCode.SUCCESS,
         result: success("init", {
@@ -412,7 +409,12 @@ export function handleInit(args: string[]): DispatchOutcome {
           vault_root: resolve(vaultRoot),
           project_root: projectRoot,
           adapters_installed: true,
+          adapter_links_created: adapters.linked.length,
+          adapter_links_skipped: adapters.skipped.length,
           curator_rule_installed: curatorRuleInstalled,
+          curator_rule_path: join(projectRoot, CURATOR_RULE_RELATIVE),
+          legacy_paths_removed: legacyRemoved.length,
+          legacy_removed: legacyRemoved,
           linked: adapters.linked,
           skipped: adapters.skipped,
           removed: adapters.removed,

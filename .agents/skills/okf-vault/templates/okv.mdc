@@ -1,11 +1,11 @@
 ---
-description: OKV development workflow — follow AGENTS.md and route vault tasks through /okv-* commands
+description: OKV workflow — route vault tasks through /okv-* commands and the okf-vault skill
 alwaysApply: true
 ---
 
-# OKV Repository Workflow
+# OKV Workflow
 
-Read [AGENTS.md](../../AGENTS.md) at the start of any vault-related task in this development repository.
+Read [.cursor/skills/okf-vault/SKILL.md](.cursor/skills/okf-vault/SKILL.md) before any vault-related task in this repository.
 
 ## Command Routing
 
@@ -21,23 +21,15 @@ Read [AGENTS.md](../../AGENTS.md) at the start of any vault-related task in this
 
 ## Helper CLI
 
-- Build before invoking locally: `pnpm install` if needed, then `pnpm run build`.
-- Invoke `node dist/main.js <command> --json` during development, or `okv <command> --json` after global link setup.
-- Pass arguments as an array and never shell-interpolate curator paths.
-- Parse helper results from stdout JSON; treat stderr as diagnostics.
+- Invoke `okv` as a child process with an argument array and pass `--json` for machine-readable results.
+- Use the shape `okv <command> --json [args...]` for helper calls from agents.
+- Treat stdout JSON as the agent contract and stderr as diagnostics.
+- Do not shell-interpolate curator-supplied paths.
 
-## Curator rules (non-negotiable)
+## Curator Rules
 
 - Explicit sources only; never watch Drive, Granola, or filesystem paths automatically.
 - One source at a time; complete acquire, validate, and commit before starting another source.
 - Failure stop: after a source failure, offer retry, skip with reason, or abort. Do not silently continue.
 - Deterministic gate: do not commit notes that failed helper validation.
-
-## Failure handling
-
-- Map helper exit codes 0-5 to curator actions per `.agents/skills/okf-vault/references/helper-invocation.md`.
-- Run `recover` before re-validating when a transaction journal is present.
-
-## Git and managed paths
-
-- Helper-only Git transactions: use `commit` and `recover`; do not hand-edit managed vault files during ingestion.
+- Helper-only Git transactions: use `commit` and `recover`; do not hand-edit managed vault paths during ingestion.

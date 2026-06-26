@@ -21,7 +21,12 @@ import {
   ROOT_INDEX_PATH,
   TOPICS_INDEX_PATH,
 } from "../../dist/vault/constants.js";
-import { initializeVault, saveManifest, createEmptyManifest } from "../../dist/vault/manifest.js";
+import {
+  initializeVault,
+  saveManifest,
+  createEmptyManifest,
+  installCuratorRule,
+} from "../../dist/vault/manifest.js";
 import { isGitRepository, runGit } from "../../dist/vault/git.js";
 import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli.js";
 
@@ -30,6 +35,15 @@ const root = join(__dirname, "..", "..");
 const VALID_SHA = "a".repeat(64);
 const VALID_SHA_B = "b".repeat(64);
 const VALID_TS = "2026-06-19T12:00:00.000Z";
+const OKV_COMMANDS = [
+  "okv-ingest",
+  "okv-init",
+  "okv-organize",
+  "okv-validate",
+  "okv-visualize",
+  "okv-bootstrap",
+  "okv-ingest-check",
+] as const;
 
 describe("vault initialization", () => {
   it("creates the populated layout, ignore rules, manifest, repository, and baseline commit", () => {
@@ -77,6 +91,20 @@ describe("vault initialization", () => {
 });
 
 describe("init and inspect CLI integration", () => {
+  it("installCuratorRule writes the OKV Cursor rule from the canonical template", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-rule-install-"));
+    const rulePath = join(projectRoot, ".cursor", "rules", "okv.mdc");
+    const templatePath = join(root, ".agents", "skills", "okf-vault", "templates", "okv.mdc");
+
+    assert.equal(installCuratorRule(projectRoot, root), true);
+    assert.equal(existsSync(rulePath), true);
+    assert.equal(readFileSync(rulePath, "utf8"), readFileSync(templatePath, "utf8"));
+    assert.match(readFileSync(rulePath, "utf8"), /\/okv-ingest/);
+    assert.match(readFileSync(rulePath, "utf8"), /okv <command> --json/);
+
+    assert.equal(installCuratorRule(projectRoot, root), false);
+  });
+
   it("reports new, already-processed, and changed-conflict outcomes from persisted state", () => {
     const vaultRoot = mkdtempSync(join(tmpdir(), "okf-cli-init-"));
     const initOutcome = dispatch(parseArgs(["init", vaultRoot]));
@@ -154,10 +182,27 @@ describe("init and inspect CLI integration", () => {
         vault_root: string;
         project_root: string;
         adapters_installed: boolean;
+        adapter_links_created: number;
+        adapter_links_skipped: number;
         curator_rule_installed: boolean;
+        curator_rule_path: string;
+        legacy_paths_removed: number;
+        legacy_removed: string[];
+        linked: string[];
+        skipped: string[];
       };
       assert.equal(data.adapters_installed, true);
+      assert.equal(data.adapter_links_created, 16);
+      assert.equal(data.adapter_links_skipped, 0);
       assert.equal(data.curator_rule_installed, true);
+      assert.equal(
+        realpathSync(data.curator_rule_path),
+        realpathSync(join(projectRoot, ".cursor", "rules", "okv.mdc")),
+      );
+      assert.equal(data.legacy_paths_removed, 0);
+      assert.deepEqual(data.legacy_removed, []);
+      assert.equal(data.linked.length, 16);
+      assert.equal(data.skipped.length, 0);
       assert.equal(realpathSync(data.project_root), realpathSync(projectRoot));
       assert.equal(realpathSync(data.vault_root), realpathSync(join(projectRoot, "knowledge")));
       assert.equal(existsSync(join(projectRoot, "knowledge", MANIFEST_RELATIVE_PATH)), true);
@@ -170,6 +215,12 @@ describe("init and inspect CLI integration", () => {
       assert.equal(lstatSync(claudeSkill).isSymbolicLink(), true);
       assert.equal(realpathSync(cursorSkill), realpathSync(canonicalSkill));
       assert.equal(realpathSync(claudeSkill), realpathSync(canonicalSkill));
+      for (const command of OKV_COMMANDS) {
+        const cursorCommand = join(projectRoot, ".cursor", "skills", command, "SKILL.md");
+        const claudeCommand = join(projectRoot, ".claude", "commands", `${command}.md`);
+        assert.equal(lstatSync(cursorCommand).isSymbolicLink(), true);
+        assert.equal(lstatSync(claudeCommand).isSymbolicLink(), true);
+      }
       assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okv.mdc")), true);
       assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okf-vault.mdc")), false);
     } finally {
@@ -187,6 +238,42 @@ describe("init and inspect CLI integration", () => {
     assert.equal(data.adapters_installed, undefined);
     assert.equal(existsSync(join(vaultRoot, MANIFEST_RELATIVE_PATH)), true);
     assert.equal(existsSync(join(projectRoot, ".cursor", "skills", "okf-vault")), false);
+    assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okv.mdc")), false);
+    assert.equal(existsSync(join(projectRoot, ".claude", "skills", "okf-vault")), false);
+  });
+
+  it("no-arg init sweeps legacy curator rule and reports removed paths", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-legacy-rule-init-"));
+    const legacyRule = join(projectRoot, ".cursor", "rules", "okf-vault.mdc");
+    const originalCwd = process.cwd();
+
+    mkdirSync(dirname(legacyRule), { recursive: true });
+    writeFileSync(legacyRule, "legacy rule\n", "utf8");
+
+    try {
+      process.chdir(projectRoot);
+      const outcome = dispatch(parseArgs(["init"]));
+      assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+
+      const data = (outcome.result as CliSuccess).data as {
+        legacy_paths_removed: number;
+        legacy_removed: string[];
+        removed: string[];
+      };
+      assert.equal(data.legacy_paths_removed, 1);
+      const expectedLegacyRule = join(
+        realpathSync(projectRoot),
+        ".cursor",
+        "rules",
+        "okf-vault.mdc",
+      );
+      assert.deepEqual(data.legacy_removed, [expectedLegacyRule]);
+      assert.deepEqual(data.removed, [expectedLegacyRule]);
+      assert.equal(existsSync(legacyRule), false);
+      assert.equal(existsSync(join(projectRoot, ".cursor", "rules", "okv.mdc")), true);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   it("no-arg init is idempotent on re-run", () => {
@@ -205,9 +292,21 @@ describe("init and inspect CLI integration", () => {
       const secondData = (second.result as CliSuccess).data as {
         idempotent: boolean;
         curator_rule_installed: boolean;
+        adapter_links_created: number;
+        adapter_links_skipped: number;
+        legacy_paths_removed: number;
+        legacy_removed: string[];
+        linked: string[];
+        skipped: string[];
       };
       assert.equal(secondData.idempotent, true);
       assert.equal(secondData.curator_rule_installed, false);
+      assert.equal(secondData.adapter_links_created, 0);
+      assert.equal(secondData.adapter_links_skipped, 16);
+      assert.equal(secondData.legacy_paths_removed, 0);
+      assert.deepEqual(secondData.legacy_removed, []);
+      assert.equal(secondData.linked.length, 0);
+      assert.equal(secondData.skipped.length, 16);
     } finally {
       process.chdir(originalCwd);
     }

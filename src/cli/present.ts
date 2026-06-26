@@ -355,14 +355,18 @@ function uninstallSummary(data: JsonRecord, context: PresenterContext): string {
 function initSummary(data: JsonRecord, context: PresenterContext): string {
   const summaryFields: JsonRecord = {};
   for (const [key, value] of Object.entries(data)) {
-    if (key === "linked" || key === "skipped" || key === "removed") {
+    if (key === "linked" || key === "skipped" || key === "removed" || key === "legacy_removed") {
       continue;
     }
     summaryFields[key] = value;
   }
 
   const sections = [keyValueSummary(summaryFields, context)];
-  const removed = Array.isArray(data.removed) ? data.removed : [];
+  const removed = Array.isArray(data.legacy_removed)
+    ? data.legacy_removed
+    : Array.isArray(data.removed)
+      ? data.removed
+      : [];
   const table = createTable(["removed legacy path"], context);
   if (removed.length === 0) {
     table.push(["none"]);
