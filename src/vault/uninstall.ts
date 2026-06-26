@@ -54,6 +54,14 @@ interface StdinLike {
   isTTY?: boolean;
 }
 
+interface StdoutLike {
+  isTTY?: boolean;
+}
+
+interface CommandRunner {
+  (command: string, args: string[]): { status: number | null; stdout?: string; stderr?: string };
+}
+
 interface UninstallOptions {
   projectRoot?: string;
   manifestProvider?: (projectRoot: string) => {
@@ -63,11 +71,16 @@ interface UninstallOptions {
   legacySweeper?: (projectRoot: string) => { removed: string[] };
   fsImpl?: FsLike;
   globalBinDir?: string;
+  globalBinDirs?: string[];
   stdin?: StdinLike;
+  stdout?: StdoutLike;
+  env?: NodeJS.ProcessEnv;
+  commandRunner?: CommandRunner;
   readConfirmation?: () => string;
 }
 
 const METADATA_DIR = ".okf-vault";
+const LEGACY_GLOBAL_BINARY_NAMES = ["okf-vault", "okv-cli"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -206,6 +219,26 @@ function reportFromArtifact(
   };
 }
 
+function globalArtifacts(managed: ManagedArtifact[], legacy: ManagedArtifact[]): ManagedArtifact[] {
+  const artifacts = new Map<string, ManagedArtifact>();
+  for (const artifact of [...legacy, ...managed]) {
+    if (artifact.kind === "global-bin" && artifact.name !== undefined) {
+      artifacts.set(artifact.name, artifact);
+    }
+  }
+  for (const name of LEGACY_GLOBAL_BINARY_NAMES) {
+    if (!artifacts.has(name)) {
+      artifacts.set(name, {
+        kind: "global-bin",
+        name,
+        label: `Legacy ${name} global binary`,
+        legacy: true,
+      });
+    }
+  }
+  return [...artifacts.values()];
+}
+
 function metadataPath(projectRoot: string, fsImpl: FsLike): string {
   const knowledgeMetadata = join(projectRoot, "knowledge", METADATA_DIR);
   const rootMetadata = join(projectRoot, METADATA_DIR);
@@ -245,25 +278,134 @@ function cleanupEmptyCursorCommandDirectory(path: string, fsImpl: FsLike): void 
   }
 }
 
-function resolveGlobalBinDir(explicit?: string): string | undefined {
-  if (explicit !== undefined) {
-    return explicit;
-  }
-  if (process.env.OKV_GLOBAL_BIN_DIR !== undefined) {
-    return process.env.OKV_GLOBAL_BIN_DIR;
-  }
-  const pnpm = spawnSync("pnpm", ["bin", "-g"], {
+function defaultCommandRunner(
+  command: string,
+  args: string[],
+): {
+  status: number | null;
+  stdout?: string;
+  stderr?: string;
+} {
+  const result = spawnSync(command, args, {
     encoding: "utf8",
     shell: process.platform === "win32",
   });
-  const stdout = (pnpm.stdout ?? "").trim();
-  if (pnpm.status === 0 && stdout.length > 0) {
-    return stdout;
+  return {
+    status: result.status,
+    stdout: result.stdout ?? undefined,
+    stderr: result.stderr ?? undefined,
+  };
+}
+
+function normalizeDirectory(path: string): string | undefined {
+  const trimmed = path.trim();
+  return trimmed.length > 0 ? resolve(trimmed) : undefined;
+}
+
+function addDirectory(dirs: string[], path: string | undefined): void {
+  if (path === undefined) {
+    return;
   }
-  if (process.env.PNPM_HOME !== undefined) {
-    return join(process.env.PNPM_HOME, "bin");
+  const normalized = normalizeDirectory(path);
+  if (normalized !== undefined && !dirs.includes(normalized)) {
+    dirs.push(normalized);
   }
-  return undefined;
+}
+
+function npmBinDirFromPrefix(prefix: string): string | undefined {
+  const normalized = normalizeDirectory(prefix);
+  if (normalized === undefined) {
+    return undefined;
+  }
+  return process.platform === "win32" ? normalized : join(normalized, "bin");
+}
+
+function resolveGlobalBinDirs(options: UninstallOptions): string[] {
+  if (options.globalBinDirs !== undefined) {
+    const explicitDirs: string[] = [];
+    for (const dir of options.globalBinDirs) {
+      addDirectory(explicitDirs, dir);
+    }
+    return explicitDirs;
+  }
+
+  const dirs: string[] = [];
+  if (options.globalBinDir !== undefined) {
+    addDirectory(dirs, options.globalBinDir);
+    return dirs;
+  }
+
+  const env = options.env ?? process.env;
+  if (env.OKV_GLOBAL_BIN_DIR !== undefined) {
+    addDirectory(dirs, env.OKV_GLOBAL_BIN_DIR);
+    return dirs;
+  }
+
+  const run = options.commandRunner ?? defaultCommandRunner;
+  for (const args of [
+    ["config", "get", "global-bin-dir"],
+    ["bin", "-g"],
+  ]) {
+    const pnpm = run("pnpm", args);
+    if (pnpm.status === 0) {
+      addDirectory(dirs, pnpm.stdout);
+    }
+  }
+
+  if (env.PNPM_HOME !== undefined) {
+    addDirectory(dirs, env.PNPM_HOME);
+  }
+
+  const npm = run("npm", ["config", "get", "prefix", "-g"]);
+  if (npm.status === 0) {
+    addDirectory(dirs, npmBinDirFromPrefix(npm.stdout ?? ""));
+  }
+
+  return dirs;
+}
+
+function isCi(env: NodeJS.ProcessEnv): boolean {
+  const value = env.CI;
+  return value !== undefined && value !== "" && value.toLowerCase() !== "false";
+}
+
+function isInteractiveRun(options: UninstallOptions): boolean {
+  const stdout = options.stdout ?? process.stdout;
+  const env = options.env ?? process.env;
+  return stdout.isTTY === true && !isCi(env);
+}
+
+function requiresLegacyConfirmation(artifact: ManagedArtifact): boolean {
+  return artifact.legacy === true || artifact.name === "okf-vault" || artifact.name === "okv-cli";
+}
+
+function confirmLegacyRemoval(
+  options: UninstallOptions,
+  artifact: ManagedArtifact,
+  path: string,
+): boolean {
+  if (!isInteractiveRun(options)) {
+    return true;
+  }
+  const answer =
+    options.readConfirmation !== undefined
+      ? options.readConfirmation()
+      : readConfirmationFromStdin(
+          `Legacy binary '${artifact.name ?? artifact.label}' found at ${path}. Uninstall global conflict? [Y/n] `,
+        );
+  const normalized = answer.trim().toLowerCase();
+  return normalized === "" || normalized === "y" || normalized === "yes";
+}
+
+function readConfirmationFromStdin(prompt: string): string {
+  process.stderr.write(prompt);
+  const buffer = Buffer.alloc(32);
+  try {
+    const bytes = fs.readSync(0, buffer, 0, buffer.length, null);
+    return buffer.subarray(0, bytes).toString("utf8");
+  } catch {
+    return "n";
+  }
 }
 
 function removeLocalArtifact(
@@ -301,56 +443,71 @@ function removeLocalArtifact(
 
 function removeGlobalArtifact(
   artifact: ManagedArtifact,
-  globalBinDir: string | undefined,
+  globalBinDirs: string[],
   fsImpl: FsLike,
   result: UninstallResult,
+  options: UninstallOptions,
 ): void {
   if (artifact.name === undefined) {
     result.skipped.push(reportFromArtifact(artifact, { reason: "missing binary name" }));
     return;
   }
-  if (globalBinDir === undefined) {
+  if (globalBinDirs.length === 0) {
     result.skipped.push(
       reportFromArtifact(artifact, {
-        reason: "global bin directory unavailable; remove from PATH manually if present",
+        reason: "global bin directories unavailable; remove from PATH manually if present",
       }),
     );
     return;
   }
-  const binPath = join(globalBinDir, artifact.name);
-  const report = reportFromArtifact(artifact, { path: binPath });
-  if (!existsOrSymlink(binPath, fsImpl)) {
-    result.skipped.push({ ...report, reason: "not present" });
-    return;
-  }
-  try {
-    fsImpl.rmSync(binPath, { recursive: true, force: true });
-    result.removed.push(report);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    result.errors.push({ ...report, error: message });
+
+  for (const globalBinDir of globalBinDirs) {
+    const binPath = join(globalBinDir, artifact.name);
+    const report = reportFromArtifact(artifact, { path: binPath });
+    if (!existsOrSymlink(binPath, fsImpl)) {
+      result.skipped.push({ ...report, reason: "not present" });
+      continue;
+    }
+    if (requiresLegacyConfirmation(artifact) && !confirmLegacyRemoval(options, artifact, binPath)) {
+      result.skipped.push({ ...report, reason: "confirmation declined" });
+      continue;
+    }
+    try {
+      fsImpl.rmSync(binPath, { recursive: true, force: true });
+      result.removed.push(report);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.errors.push({ ...report, error: message });
+    }
   }
 }
 
 function previewArtifacts(
   artifacts: ManagedArtifact[],
   fsImpl: FsLike,
-  globalBinDir: string | undefined,
+  globalBinDirs: string[],
   result: UninstallResult,
 ): void {
   for (const artifact of artifacts) {
     if (artifact.kind === "global-bin") {
-      const path =
-        artifact.name !== undefined && globalBinDir !== undefined
-          ? join(globalBinDir, artifact.name)
-          : undefined;
-      result.skipped.push(
-        reportFromArtifact(artifact, {
-          ...(path !== undefined ? { path } : {}),
-          reason: "dry-run: global bin mutation skipped",
-          dry_run: true,
-        }),
-      );
+      if (artifact.name === undefined || globalBinDirs.length === 0) {
+        result.skipped.push(
+          reportFromArtifact(artifact, {
+            reason: "dry-run: global bin mutation skipped",
+            dry_run: true,
+          }),
+        );
+        continue;
+      }
+      for (const globalBinDir of globalBinDirs) {
+        result.skipped.push(
+          reportFromArtifact(artifact, {
+            path: join(globalBinDir, artifact.name),
+            reason: "dry-run: global bin mutation skipped",
+            dry_run: true,
+          }),
+        );
+      }
       continue;
     }
     if (artifact.path !== undefined && existsOrSymlink(artifact.path, fsImpl)) {
@@ -407,12 +564,13 @@ export function uninstallManagedArtifacts(
     const manifest = (options.manifestProvider ?? defaultManifestProvider)(projectRoot);
     const previewTargets = [
       ...manifest.legacy.filter((artifact) => artifact.kind !== "global-bin"),
-      ...manifest.managed,
+      ...manifest.managed.filter((artifact) => artifact.kind !== "global-bin"),
+      ...globalArtifacts(manifest.managed, manifest.legacy),
     ];
-    const globalBinDir = resolveGlobalBinDir(options.globalBinDir);
+    const globalBinDirs = resolveGlobalBinDirs(options);
 
     if (parsed.dryRun) {
-      previewArtifacts(previewTargets, fsImpl, globalBinDir, result);
+      previewArtifacts(previewTargets, fsImpl, globalBinDirs, result);
       if (parsed.purge) {
         const target = metadataPath(projectRoot, fsImpl);
         if (existsOrSymlink(target, fsImpl)) {
@@ -436,12 +594,12 @@ export function uninstallManagedArtifacts(
       });
     }
 
-    for (const artifact of manifest.managed) {
-      if (artifact.kind === "global-bin") {
-        removeGlobalArtifact(artifact, globalBinDir, fsImpl, result);
-      } else {
-        removeLocalArtifact(artifact, fsImpl, result);
-      }
+    for (const artifact of manifest.managed.filter((item) => item.kind !== "global-bin")) {
+      removeLocalArtifact(artifact, fsImpl, result);
+    }
+
+    for (const artifact of globalArtifacts(manifest.managed, manifest.legacy)) {
+      removeGlobalArtifact(artifact, globalBinDirs, fsImpl, result, options);
     }
 
     if (parsed.purge) {

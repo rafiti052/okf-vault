@@ -214,6 +214,126 @@ describe("uninstall unit behavior", () => {
     assert.equal(data.errors.length, 1);
     assert.match(data.errors[0]?.error ?? "", /permission denied/);
   });
+
+  it("sweeps npm and pnpm global directories for legacy binaries when confirmed", () => {
+    const projectRoot = tempRoot("okv-uninstall-global-confirm-");
+    const pnpmBin = join(projectRoot, "pnpm-bin");
+    const npmPrefix = join(projectRoot, "npm-prefix");
+    const npmBin = join(npmPrefix, "bin");
+    for (const dir of [pnpmBin, npmBin]) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "okv"), "#!/bin/sh\n", "utf8");
+      writeFileSync(join(dir, "okf-vault"), "#!/bin/sh\n", "utf8");
+      writeFileSync(join(dir, "okv-cli"), "#!/bin/sh\n", "utf8");
+    }
+
+    let prompts = 0;
+    const outcome = uninstallManagedArtifacts([], {
+      projectRoot,
+      manifestProvider: () => ({
+        managed: [{ kind: "global-bin", label: "Primary OKV global binary", name: "okv" }],
+        legacy: [
+          {
+            kind: "global-bin",
+            label: "Legacy full CLI global binary",
+            name: "okf-vault",
+            legacy: true,
+          },
+        ],
+      }),
+      legacySweeper: () => ({ removed: [] }),
+      stdout: { isTTY: true },
+      env: {},
+      commandRunner: (command, args) => {
+        if (command === "pnpm" && args.join(" ") === "config get global-bin-dir") {
+          return { status: 0, stdout: pnpmBin };
+        }
+        if (command === "pnpm" && args.join(" ") === "bin -g") {
+          return { status: 0, stdout: pnpmBin };
+        }
+        if (command === "npm" && args.join(" ") === "config get prefix -g") {
+          return { status: 0, stdout: npmPrefix };
+        }
+        return { status: 1, stdout: "" };
+      },
+      readConfirmation: () => {
+        prompts += 1;
+        return "yes";
+      },
+    });
+
+    assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+    assert.equal(prompts, 4);
+    for (const dir of [pnpmBin, npmBin]) {
+      assert.equal(existsSync(join(dir, "okv")), false);
+      assert.equal(existsSync(join(dir, "okf-vault")), false);
+      assert.equal(existsSync(join(dir, "okv-cli")), false);
+    }
+  });
+
+  it("bypasses legacy prompts in non-TTY and CI runs", () => {
+    for (const scenario of [
+      { label: "non-tty", stdout: { isTTY: false }, env: {} },
+      { label: "ci", stdout: { isTTY: true }, env: { CI: "true" } },
+    ]) {
+      const projectRoot = tempRoot(`okv-uninstall-headless-${scenario.label}-`);
+      const globalBin = join(projectRoot, "global-bin");
+      mkdirSync(globalBin, { recursive: true });
+      writeFileSync(join(globalBin, "okf-vault"), "#!/bin/sh\n", "utf8");
+      writeFileSync(join(globalBin, "okv-cli"), "#!/bin/sh\n", "utf8");
+
+      const outcome = uninstallManagedArtifacts([], {
+        projectRoot,
+        manifestProvider: emptyManifest,
+        legacySweeper: () => ({ removed: [] }),
+        globalBinDirs: [globalBin],
+        stdout: scenario.stdout,
+        env: scenario.env,
+        readConfirmation: () => {
+          throw new Error(`prompted during ${scenario.label}`);
+        },
+      });
+
+      assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+      assert.equal(existsSync(join(globalBin, "okf-vault")), false);
+      assert.equal(existsSync(join(globalBin, "okv-cli")), false);
+    }
+  });
+
+  it("reports global binary permission failures with unexpected exit code", () => {
+    const projectRoot = tempRoot("okv-uninstall-global-error-");
+    const globalBin = join(projectRoot, "global-bin");
+    const legacyBin = join(globalBin, "okv-cli");
+    const managed: ManagedArtifact[] = [
+      { kind: "global-bin", label: "Legacy okv-cli global binary", name: "okv-cli", legacy: true },
+    ];
+
+    const outcome = uninstallManagedArtifacts([], {
+      projectRoot,
+      manifestProvider: () => ({ managed, legacy: [] }),
+      legacySweeper: () => ({ removed: [] }),
+      globalBinDirs: [globalBin],
+      stdout: { isTTY: false },
+      fsImpl: {
+        lstatSync: ((path: string) => {
+          if (path !== legacyBin) {
+            throw new Error("missing");
+          }
+          return { isSymbolicLink: () => false, isDirectory: () => false };
+        }) as typeof lstatSync,
+        rmSync: (() => {
+          throw new Error("permission denied");
+        }) as typeof rmSync,
+        readdirSync,
+      },
+    });
+
+    assert.equal(outcome.exitCode, ExitCode.UNEXPECTED);
+    const data = (outcome.result as CliSuccess).data as UninstallResult;
+    assert.equal(data.errors.length, 1);
+    assert.equal(data.errors[0]?.path, legacyBin);
+    assert.match(data.errors[0]?.error ?? "", /permission denied/);
+  });
 });
 
 describe("uninstall integration behavior", () => {
