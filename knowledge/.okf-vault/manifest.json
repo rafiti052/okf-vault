@@ -12,6 +12,17 @@
       "note_path": "notes/roi-em-ia.md",
       "commit": "babaa160979e377ce0133ac091dd92a547ce5501",
       "processed_at": "2026-06-26T16:41:19.919Z"
+    },
+    {
+      "source_key": "granola:8c569888-c80f-44dc-8144-6ca035b32e5f",
+      "kind": "granola",
+      "origin": "granola:8c569888-c80f-44dc-8144-6ca035b32e5f",
+      "content_sha256": "47f33aba95c5b324da5cfe9d5a9a1563f1a8a7b5985aac9f742dbe00996a353a",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/o-novo-dev.md",
+      "commit": "5953667440beea9e64d17f7fa12004189ce9ba31",
+      "processed_at": "2026-06-26T17:17:36.608Z"
     }
   ]
 }
