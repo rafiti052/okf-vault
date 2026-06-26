@@ -12,11 +12,6 @@ dist-test/
 
 # Compozy workflow tooling
 .agents/*
-!.agents/skills/
-.agents/skills/*
-!.agents/skills/okf-vault/
-.claude/skills/compozy
-.claude/skills/cy-*
-
-# Dry-run vault artifacts
---dry-run/
+.claude/*
+.cursor/*
+.windsurf/*
