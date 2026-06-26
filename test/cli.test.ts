@@ -94,10 +94,10 @@ describe("CLI parsing and dispatch", () => {
       "validate-proposals",
     ]);
     for (const command of RESERVED_COMMANDS) {
-      const outcome = dispatch(parseArgs([command]));
-      if (command === "init") {
+      if (command === "init" || command === "uninstall") {
         continue;
       }
+      const outcome = dispatch(parseArgs([command]));
       if (implementedWithoutArgs.has(command)) {
         assert.equal(outcome.exitCode, ExitCode.USAGE);
       } else {

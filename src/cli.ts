@@ -4,6 +4,7 @@ import { handleInit, handleInspect } from "./vault/manifest.js";
 import { handleValidateProposals } from "./vault/proposals.js";
 import { handleValidate } from "./vault/quality-gate.js";
 import { handleCommit, handleRecover } from "./vault/transaction.js";
+import { handleUninstall } from "./vault/uninstall.js";
 import { handleValidateStaged } from "./vault/validation.js";
 import { handleVisualize } from "./vault/visualizer.js";
 import { type OutputMode, resolveOutputMode } from "./cli/output-mode.js";
@@ -53,6 +54,7 @@ export const RESERVED_COMMANDS = [
   "validate",
   "visualize",
   "recover",
+  "uninstall",
 ] as const;
 
 export type ReservedCommand = (typeof RESERVED_COMMANDS)[number];
@@ -237,6 +239,10 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "visualize") {
     return handleVisualize(parsed.positional.slice(1));
+  }
+
+  if (parsed.command === "uninstall") {
+    return handleUninstall(parsed.positional.slice(1));
   }
 
   return {
