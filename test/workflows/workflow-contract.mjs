@@ -49,8 +49,6 @@ export const OKV_COMMANDS = [
   "okv-ingest-check",
 ];
 
-
-
 export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
 
 export const PIPELINE_COMMANDS = ["okv-bootstrap", "okv-ingest-check"];

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { readFileSync } from "node:fs";
 import { run } from "../../dist/cli/cli.js";
 import { loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
 
@@ -33,7 +32,10 @@ function hasNextStep(text: string): boolean {
   return text.includes("→ next:") || text.includes("-> next:");
 }
 
-function captureRun(argv: string[], options: { stdoutIsTTY?: boolean; env?: Record<string, string> } = {}) {
+function captureRun(
+  argv: string[],
+  options: { stdoutIsTTY?: boolean; env?: Record<string, string> } = {},
+) {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
   const originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -83,20 +85,20 @@ function captureRun(argv: string[], options: { stdoutIsTTY?: boolean; env?: Reco
 describe("CLI Human Smoke (Unit)", () => {
   const env = { NO_COLOR: "1" };
 
-  it("run([\"--help\", \"--human\"]) stdout contains next step and no JSON", () => {
+  it('run(["--help", "--human"]) stdout contains next step and no JSON', () => {
     const help = captureRun(["--help", "--human"], { env });
     assert.equal(isJsonLine(help.stdout), false);
     assert.ok(hasNextStep(help.stdout));
   });
 
-  it("run([\"--version\", \"--human\"]) emits non-empty plain text version summary", () => {
+  it('run(["--version", "--human"]) emits non-empty plain text version summary', () => {
     const version = captureRun(["--version", "--human"], { env });
     assert.equal(isJsonLine(version.stdout), false);
     assert.ok(hasNextStep(version.stdout));
     assert.match(version.stdout, /version:/);
   });
 
-  it("run([\"validate\", \"--human\", ...]) against invalid fixture emits failure glyph and next step", () => {
+  it('run(["validate", "--human", ...]) against invalid fixture emits failure glyph and next step', () => {
     const missingVault = join(root, "test", "fixtures", "vaults", "resolve", "missing-vault");
     const result = captureRun(["validate", "--human", missingVault], { env });
     assert.equal(isJsonLine(result.stdout), false);
@@ -104,7 +106,7 @@ describe("CLI Human Smoke (Unit)", () => {
     assert.match(result.stdout, /[✗x] validate/);
   });
 
-  it("run([\"uninstall\", \"--dry-run\", \"--human\"]) renders table headers for removed/skipped targets", () => {
+  it('run(["uninstall", "--dry-run", "--human"]) renders table headers for removed/skipped targets', () => {
     const result = captureRun(["uninstall", "--dry-run", "--human"], { env });
     assert.equal(isJsonLine(result.stdout), false);
     assert.ok(hasNextStep(result.stdout));
@@ -142,8 +144,11 @@ describe("CLI Human Smoke (Integration)", () => {
   it("For each reserved command, spawned full CLI exits with non-JSON stdout and next steps", () => {
     for (const cmd of RESERVED_COMMANDS) {
       const args = commandArgs[cmd]!;
-      const result = spawnSync(process.execPath, [bin, ...args, "--human"], { encoding: "utf8", env });
-      
+      const result = spawnSync(process.execPath, [bin, ...args, "--human"], {
+        encoding: "utf8",
+        env,
+      });
+
       assert.ok(result.stdout.trim().length > 0, `${cmd} stdout empty`);
       assert.equal(isJsonLine(result.stdout), false, `${cmd} leaked JSON: ${result.stdout}`);
       assert.ok(hasNextStep(result.stdout), `${cmd} missing next step: ${result.stdout}`);
@@ -155,8 +160,11 @@ describe("CLI Human Smoke (Integration)", () => {
     // and exactly one line of JSON output without presentation headers.
     for (const cmd of ["validate", "inspect", "uninstall"] as const) {
       const args = commandArgs[cmd]!;
-      const result = spawnSync(process.execPath, [bin, ...args, "--json"], { encoding: "utf8", env });
-      
+      const result = spawnSync(process.execPath, [bin, ...args, "--json"], {
+        encoding: "utf8",
+        env,
+      });
+
       const lines = result.stdout.trim().split("\n");
       assert.equal(lines.length, 1, `${cmd} emitted multiple lines in JSON mode`);
       assert.doesNotThrow(() => JSON.parse(lines[0]!), `${cmd} emitted invalid JSON: ${lines[0]}`);
@@ -168,14 +176,14 @@ describe("CLI Human Smoke (Integration)", () => {
   it("Mock TTY true + --json on inspect matches non-TTY --json bytes exactly", () => {
     const origin = "/tmp/sources/sample-article.md";
     const args = ["inspect", "--json", vaultRoot, "local", origin, "a".repeat(64)];
-    
+
     const ttyJson = captureRun(args, { stdoutIsTTY: true, env: { NO_COLOR: "1" } });
     const pipedJson = captureRun(args, { stdoutIsTTY: false, env: { NO_COLOR: "1" } });
 
     assert.equal(ttyJson.exitCode, 0);
     assert.equal(pipedJson.exitCode, 0);
     assert.equal(ttyJson.stdout, pipedJson.stdout);
-    
+
     const rev = manifestRevision(loadManifest(vaultRoot));
     const expected = `${JSON.stringify({
       status: "ok",
@@ -186,7 +194,7 @@ describe("CLI Human Smoke (Integration)", () => {
         revision: rev,
       },
     })}\n`;
-    
+
     assert.equal(ttyJson.stdout, expected);
   });
 });

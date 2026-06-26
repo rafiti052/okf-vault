@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { ExitCode, RESERVED_COMMANDS, dispatch, helpText, parseArgs, run } from "../../dist/cli/cli.js";
+import {
+  ExitCode,
+  RESERVED_COMMANDS,
+  dispatch,
+  helpText,
+  parseArgs,
+  run,
+} from "../../dist/cli/cli.js";
 import { loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

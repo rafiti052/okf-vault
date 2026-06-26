@@ -17,7 +17,9 @@ test("tombstone exits code 2 and prints redirect guidance", () => {
 });
 
 test("main entry point okv works normally (regression)", () => {
-  const result = spawnSync(process.execPath, [mainPath, "--version", "--json"], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [mainPath, "--version", "--json"], {
+    encoding: "utf8",
+  });
   assert.equal(result.status, 0);
   assert.ok(result.stdout.trim().startsWith("{"));
 });
