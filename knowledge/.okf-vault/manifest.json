@@ -1,5 +1,17 @@
 {
   "schema_version": "okf-vault-manifest/1.0.0",
   "note_contract_version": "okf-note-contract/1.0.0",
-  "sources": []
+  "sources": [
+    {
+      "source_key": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",
+      "kind": "granola",
+      "origin": "granola:5c7a90e2-b50c-4ceb-85b1-32f773bfcb57",
+      "content_sha256": "8a3853bb402038c4c054bbf001166b9a2d4fb887cec9907b9089cf44dc94f7ed",
+      "contract_version": "okf-note-contract/1.0.0",
+      "status": "committed",
+      "note_path": "notes/roi-em-ia.md",
+      "commit": "babaa160979e377ce0133ac091dd92a547ce5501",
+      "processed_at": "2026-06-26T16:41:19.919Z"
+    }
+  ]
 }
