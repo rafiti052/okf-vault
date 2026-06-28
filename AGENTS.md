@@ -8,14 +8,19 @@ Use this one-screen decision tree before reading the full skill. Map MCP and fil
 
 | Your goal | Command | Notes |
 | --------- | ------- | ----- |
-| **Add new content** (recommended starting point) | **`/okv-ingest`** | Interactive ingest wizard — MCP artifact or explicit local file |
+| **Add new content** (recommended starting point) | **`/okv-ingest`** | Interactive ingest wizard — MCP artifact, explicit local file, or **YouTube URL** (transcript-dependent MVP) |
 | Set up a new vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` | `/okv-init` creates layout; `/okv-bootstrap` runs init then validate (Phase 1b) |
 | Organize notes after ingestion | `/okv-organize` | Dossiers and curation proposals (Phase 1b) |
 | Check vault health / contracts | `/okv-validate` | Contract, manifest, graph checks (Phase 1b) |
 | Inspect the knowledge graph | `/okv-visualize` | OKF visualizer (Phase 1b) |
 | Ingest then validate in one session | `/okv-ingest-check` | Composed pipeline (Phase 1b) |
+| Ask a natural-language question grounded in the vault | `/okv-ask` | Read-only retrieval with confidence and coverage signals (Phase 1c) |
 
 Full command list with availability labels: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
+
+### YouTube URL MVP (`/okv-ingest`)
+
+The ingest wizard includes a **YouTube link** path for one explicit URL at a time. This is a **reduced-scope, transcript-dependent** workflow — not broad YouTube platform coverage. The runtime fetches the default available transcript; when usable timestamp anchors are unavailable, the wizard stops before handoff with clear fallback guidance (retry, ingest a local transcript export, skip with reason, or abort). See [ingest-wizard.md](.agents/skills/okf-vault/references/ingest-wizard.md) for acquisition and failure behavior.
 
 ## Canonical skill
 
@@ -28,6 +33,7 @@ Read and follow [`.agents/skills/okf-vault/SKILL.md`](.agents/skills/okf-vault/S
 | `organize`   | Generate bounded dossiers and curation proposals after conversion    |
 | `validate`   | Run contract, manifest, graph, and recovery checks                   |
 | `visualize`  | Invoke the configured OKF visualizer for manual graph review         |
+| `ask`        | Answer a natural-language question grounded in the vault (read-only)  |
 
 The skill orchestrates acquisition, semantic conversion, and curation proposals. The helper owns validation, manifest mutation, graph analysis, dossiers, and Git transactions.
 

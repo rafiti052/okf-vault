@@ -1127,6 +1127,35 @@ export function documentsIngestFirstRouting(text) {
 }
 
 /**
+ * Curator-facing copy describes YouTube as a transcript-dependent MVP, not broad platform support.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeIngestMvp(text) {
+  const lower = text.toLowerCase();
+  return (
+    /youtube/i.test(text) &&
+    lower.includes("transcript") &&
+    (lower.includes("mvp") || lower.includes("reduced-scope") || lower.includes("reduced scope")) &&
+    lower.includes("not broad")
+  );
+}
+
+/**
+ * Curator-facing copy documents fallback when a usable YouTube transcript is unavailable.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeTranscriptFallback(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("fallback") &&
+    (lower.includes("local") || lower.includes("transcript")) &&
+    (lower.includes("unavailable") || lower.includes("retry") || lower.includes("skip"))
+  );
+}
+
+/**
  * @param {string} text
  * @returns {boolean}
  */

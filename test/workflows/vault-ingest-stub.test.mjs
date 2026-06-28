@@ -14,6 +14,8 @@ import {
   extractMarkdownLinks,
   brokenMarkdownLinks,
   INGESTION_LOOP_HAPPY_PATH_EVENTS,
+  documentsYoutubeIngestMvp,
+  documentsYoutubeTranscriptFallback,
 } from "./workflow-contract.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -87,6 +89,12 @@ describe("okv-ingest stub contract (unit)", () => {
 
   it("stub notes disable-model-invocation guidance for runtime adapters", () => {
     assert.equal(documentsDisableModelInvocationGuidance(stubText), true);
+  });
+
+  it("stub describes YouTube as transcript-dependent MVP with fallback guidance", () => {
+    assert.equal(documentsYoutubeIngestMvp(stubText), true);
+    assert.equal(documentsYoutubeTranscriptFallback(stubText), true);
+    assert.match(stubText, /YouTube URL/i);
   });
 
   it("stub stays under 30 lines", () => {
