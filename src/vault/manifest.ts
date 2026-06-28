@@ -20,7 +20,7 @@ import {
   initRepository,
 } from "./git.js";
 
-export type SourceKind = "local" | "google_drive" | "granola";
+export type SourceKind = "local" | "google_drive" | "granola" | "youtube";
 export type SourceStatus = "committed" | "skipped";
 export type InspectOutcome = "new" | "already_processed" | "changed_conflict";
 
@@ -78,6 +78,49 @@ function getManifestValidator(): ValidateFunction {
   return manifestValidator;
 }
 
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+function extractYoutubeVideoId(origin: string): string {
+  let input = origin.trim();
+  if (input.startsWith("youtube:")) {
+    input = input.slice("youtube:".length);
+  }
+
+  if (YOUTUBE_VIDEO_ID_PATTERN.test(input)) {
+    return input;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new Error(`Invalid YouTube origin: ${origin}`);
+  }
+
+  const host = url.hostname.replace(/^www\./, "");
+
+  if (host === "youtu.be") {
+    const id = url.pathname.slice(1).split("/")[0] ?? "";
+    if (YOUTUBE_VIDEO_ID_PATTERN.test(id)) {
+      return id;
+    }
+  }
+
+  if (host === "youtube.com" || host === "m.youtube.com") {
+    const fromQuery = url.searchParams.get("v");
+    if (fromQuery !== null && YOUTUBE_VIDEO_ID_PATTERN.test(fromQuery)) {
+      return fromQuery;
+    }
+
+    const pathMatch = url.pathname.match(/^\/(embed|v|shorts)\/([A-Za-z0-9_-]{11})/);
+    if (pathMatch !== null && YOUTUBE_VIDEO_ID_PATTERN.test(pathMatch[2]!)) {
+      return pathMatch[2]!;
+    }
+  }
+
+  throw new Error(`Invalid YouTube origin: ${origin}`);
+}
+
 export function deriveSourceKey(kind: SourceKind, origin: string): string {
   switch (kind) {
     case "local": {
@@ -91,6 +134,10 @@ export function deriveSourceKey(kind: SourceKind, origin: string): string {
     case "granola": {
       const id = origin.startsWith("granola:") ? origin.slice("granola:".length) : origin;
       return `granola:${id}`;
+    }
+    case "youtube": {
+      const videoId = extractYoutubeVideoId(origin);
+      return `youtube:${videoId}`;
     }
     default: {
       const exhaustive: never = kind;
@@ -529,7 +576,7 @@ export function handleInspect(args: string[]): DispatchOutcome {
     };
   }
 
-  if (kind !== "local" && kind !== "google_drive" && kind !== "granola") {
+  if (kind !== "local" && kind !== "google_drive" && kind !== "granola" && kind !== "youtube") {
     return {
       exitCode: ExitCode.USAGE,
       result: failure("inspect", "USAGE_INVALID_KIND", `Unsupported source kind: ${kind}`),

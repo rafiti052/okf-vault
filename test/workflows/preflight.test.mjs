@@ -199,6 +199,35 @@ describe("preflight contract", () => {
       "fetch_granola_transcript",
       "invoke_process",
     ]);
+    assert.deepEqual(capabilityRequirements("youtube"), [
+      "fetch_youtube_transcript",
+      "invoke_process",
+    ]);
+  });
+
+  it("reports preflight_passed for youtube source when transcript capability is mapped", () => {
+    const vaultRoot = join(root, "test", "fixtures", "vaults", "navigation", "pass");
+    const helperPath = join(root, "dist", "main.js");
+
+    const result = runPreflight({
+      vaultRoot,
+      gitAvailable: true,
+      helperPath,
+      capabilities: ["fetch_youtube_transcript", "invoke_process"],
+      sources: [
+        {
+          kind: "youtube",
+          locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          content_type: "text/vtt",
+        },
+      ],
+      runId: "integration-preflight-youtube",
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok && result.event) {
+      assert.equal(result.event.event, "preflight_passed");
+    }
   });
 });
 

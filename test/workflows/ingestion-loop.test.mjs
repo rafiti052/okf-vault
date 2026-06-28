@@ -41,4 +41,11 @@ describe("ingestion-loop contract", () => {
       assert.match(text, new RegExp(`conversion-profiles/${profile}\\.md`));
     }
   });
+
+  it("documents youtube as a valid source kind and MVP profile routing", () => {
+    const text = readFileSync(ingestionLoop, "utf8");
+    assert.match(text, /`youtube`/);
+    assert.match(text, /YouTube MVP profile routing/i);
+    assert.match(text, /ingest-wizard\.md.*acquire_youtube|acquire_youtube/i);
+  });
 });

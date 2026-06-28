@@ -68,7 +68,7 @@ okv init          # creates ./knowledge/ + Cursor/Claude adapters + curator rule
 
 ### Simple flow
 
-Open the repo in Cursor or Claude Code, then type `/okv-ingest` (or any other `/okv-*`). Each command appears individually after the adapters are installed. CLI fallback:
+Open the repo in Cursor or Claude Code, then type `/okv-ingest` (or any other `/okv-*`). Each command appears individually after the adapters are installed. The ingest wizard accepts one explicit source at a time — including a **YouTube link** when the runtime can retrieve a default transcript with usable timestamps. This is a reduced-scope MVP, not broad YouTube platform support; when no usable transcript is available, the wizard stops with fallback guidance to retry or ingest a local transcript export. CLI fallback:
 
 ```bash
 node dist/main.js validate ./knowledge
@@ -78,7 +78,7 @@ node dist/main.js validate ./knowledge
 
 | Goal | Command |
 | ---- | ------- |
-| Add new content (start here) | `/okv-ingest` |
+| Add new content (start here) | `/okv-ingest` — MCP artifact, local file, or YouTube URL (transcript-dependent MVP) |
 | New vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` |
 | Organize after ingestion | `/okv-organize` |
 | Health check | `/okv-validate` |

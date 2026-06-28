@@ -15,6 +15,8 @@ import {
   documentsVaultSetupRouting,
   documentsRepoRootInit,
   documentsSkillModeTriggers,
+  documentsYoutubeIngestMvp,
+  documentsYoutubeTranscriptFallback,
 } from "./workflow-contract.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +26,7 @@ const agentsPath = join(root, "AGENTS.md");
 const readmePath = join(root, "README.md");
 const skillPath = join(skillDir, "SKILL.md");
 const registryPath = join(skillDir, "commands", "registry.md");
+const ingestStubPath = join(skillDir, "commands", "okv-ingest.md");
 const ingestWizardPath = join(skillDir, "references", "ingest-wizard.md");
 const packageJsonPath = join(root, "package.json");
 const oldCanonicalPathPattern = /\.agents\/skills\/okf-knowledge-vault/g;
@@ -198,6 +201,49 @@ describe("README discoverability contract (unit)", () => {
 
   it("README links to commands/registry.md", () => {
     assert.match(readmeText, /commands\/registry\.md/);
+  });
+});
+
+describe("YouTube curator-facing docs contract (unit)", () => {
+  const agentsText = readFileSync(agentsPath, "utf8");
+  const readmeText = readFileSync(readmePath, "utf8");
+  const registryText = readFileSync(registryPath, "utf8");
+  const ingestStubText = readFileSync(ingestStubPath, "utf8");
+
+  it("AGENTS.md describes YouTube as a transcript-dependent MVP in /okv-ingest guidance", () => {
+    assert.equal(documentsYoutubeIngestMvp(agentsText), true);
+    assert.match(agentsText, /YouTube link/i);
+    assert.match(agentsText, /ingest-wizard\.md/);
+  });
+
+  it("AGENTS.md documents fallback when a usable YouTube transcript is unavailable", () => {
+    assert.equal(documentsYoutubeTranscriptFallback(agentsText), true);
+  });
+
+  it("README describes YouTube as a transcript-dependent MVP path", () => {
+    assert.equal(documentsYoutubeIngestMvp(readmeText), true);
+    assert.match(readmeText, /YouTube link/i);
+  });
+
+  it("README documents fallback when no usable transcript is available", () => {
+    assert.equal(documentsYoutubeTranscriptFallback(readmeText), true);
+  });
+
+  it("registry.md and okv-ingest.md use consistent YouTube MVP wording", () => {
+    assert.equal(documentsYoutubeIngestMvp(registryText), true);
+    assert.equal(documentsYoutubeIngestMvp(ingestStubText), true);
+    assert.match(registryText, /YouTube URL/i);
+    assert.match(ingestStubText, /YouTube URL/i);
+    assert.match(registryText, /ingest-wizard\.md/);
+    assert.match(ingestStubText, /ingest-wizard\.md/);
+  });
+
+  it("registry.md documents transcript-unavailable fallback expectations", () => {
+    assert.equal(documentsYoutubeTranscriptFallback(registryText), true);
+  });
+
+  it("okv-ingest.md documents transcript-unavailable fallback expectations", () => {
+    assert.equal(documentsYoutubeTranscriptFallback(ingestStubText), true);
   });
 });
 

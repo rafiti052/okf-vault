@@ -53,7 +53,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["local", "google_drive", "granola"]
+          "enum": ["local", "google_drive", "granola", "youtube"]
         },
         "origin": {
           "type": "string",

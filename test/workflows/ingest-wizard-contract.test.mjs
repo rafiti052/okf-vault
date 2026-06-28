@@ -67,17 +67,21 @@ describe("ingest-wizard contract", () => {
     assert.equal(assertIngestWizardStepSections(broken), false);
   });
 
-  it("documents exactly two source type branches: MCP artifact and local file", () => {
+  it("documents exactly three source type branches: MCP artifact, local file, and YouTube link", () => {
     assert.match(text, /\*\*MCP artifact\*\*/);
     assert.match(text, /\*\*Local file\*\*/);
+    assert.match(text, /\*\*YouTube link\*\*/);
     assert.match(text, /`mcp_artifact`/);
     assert.match(text, /`local_file`/);
+    assert.match(text, /`youtube_link`/);
     assert.match(text, /no inference/i);
 
     const mcpCount = (text.match(/MCP artifact/gi) ?? []).length;
     const localCount = (text.match(/Local file/gi) ?? []).length;
+    const youtubeCount = (text.match(/YouTube link/gi) ?? []).length;
     assert.ok(mcpCount >= 1);
     assert.ok(localCount >= 1);
+    assert.ok(youtubeCount >= 1);
   });
 
   it("contains numbered A/B/C failure choices matching ADR-009 language", () => {
@@ -142,11 +146,12 @@ describe("ingest-wizard contract", () => {
     assert.match(text, /\/okv-init/);
   });
 
-  it("cross-links capability names for MCP and local branches", () => {
+  it("cross-links capability names for MCP, local, and YouTube branches", () => {
     assert.match(text, /capabilities\.md/);
     for (const capability of [
       "fetch_drive_document",
       "fetch_granola_transcript",
+      "fetch_youtube_transcript",
       "read_local_file",
     ]) {
       assert.match(text, new RegExp(capability));
@@ -154,6 +159,17 @@ describe("ingest-wizard contract", () => {
     }
     assert.match(text, /google_drive/);
     assert.match(text, /granola/);
+    assert.match(text, /youtube/);
+  });
+
+  it("documents YouTube URL acquisition with reduced-scope MVP behavior and fallback", () => {
+    assert.match(text, /##\s+3c\.\s+acquire_youtube/i);
+    assert.match(text, /fetch_youtube_transcript/);
+    assert.match(text, /default available transcript track/i);
+    assert.match(text, /timestamp anchors/i);
+    assert.match(text, /ambiguous/i);
+    assert.match(text, /Transcript unavailable/i);
+    assert.match(text, /Local file/i);
   });
 
   it("documents wizard progress emission points using REQUIRED_PROGRESS_EVENTS vocabulary", () => {
@@ -254,6 +270,20 @@ describe("ingest-wizard handoff payload", () => {
     assert.equal(parsed.sources.length, 1);
     assert.equal(parsed.sources[0]?.kind, "google_drive");
   });
+
+  it("accepts youtube wizard handoff fixture through parseIngestRunInput()", () => {
+    const handoff = buildWizardHandoffInput("knowledge", "run-wizard-youtube-01", {
+      kind: "youtube",
+      locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      content_type: "text/vtt",
+    });
+
+    const parsed = parseIngestRunInput(handoff);
+    assert.equal(parsed.vault_root, "knowledge");
+    assert.equal(parsed.run_id, "run-wizard-youtube-01");
+    assert.equal(parsed.sources.length, 1);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+  });
 });
 
 describe("ingest-wizard contract integration", () => {
@@ -307,6 +337,23 @@ describe("ingest-wizard contract integration", () => {
     const parsed = parseIngestRunInput(handoff);
     assert.equal(parsed.sources[0]?.locator, "drive:integration-doc");
     assert.equal(parsed.sources[0]?.content_type, "application/vnd.google-apps.presentation");
+  });
+
+  it("wizard handoff with youtube pending_source matches delegate_ingest contract fields", () => {
+    const wizardText = readFileSync(ingestWizardPath, "utf8");
+    assert.match(wizardText, /`kind`.*`youtube`/s);
+    assert.match(wizardText, /video.*default|default.*video/i);
+
+    const handoff = buildWizardHandoffInput("knowledge", "run-integration-youtube", {
+      kind: "youtube",
+      locator: "https://youtu.be/dQw4w9WgXcQ",
+      content_type: "text/vtt",
+    });
+
+    const parsed = parseIngestRunInput(handoff);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+    assert.equal(parsed.sources[0]?.content_type, "text/vtt");
+    assert.match(String(parsed.sources[0]?.locator), /dQw4w9WgXcQ/);
   });
 });
 

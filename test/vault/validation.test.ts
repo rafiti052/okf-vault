@@ -20,10 +20,12 @@ import {
   isVaultRelativePath,
   loadSourceEnvelope,
   parseNoteContent,
+  validateSourceEnvelope,
   validateStagedNotes,
   validateValidationReport,
   type ValidationReport,
 } from "../../dist/vault/validation.js";
+import { youtubeAccepted, youtubeRejected } from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -45,6 +47,14 @@ function stageNote(
   const targetDir = join(stagingDir, dirname(stagedName));
   mkdirSync(targetDir, { recursive: true });
   copyFileSync(join(notesDir, fixtureName), join(stagingDir, stagedName));
+  return stagingDir;
+}
+
+function stageGoldNote(vaultRoot: string, runId: string, notePath: string, stagedName: string) {
+  const stagingDir = join(vaultRoot, ".okf-vault", "tmp", runId);
+  const targetDir = join(stagingDir, dirname(stagedName));
+  mkdirSync(targetDir, { recursive: true });
+  copyFileSync(notePath, join(stagingDir, stagedName));
   return stagingDir;
 }
 
@@ -91,6 +101,51 @@ describe("validation report schema", () => {
     assert.throws(() =>
       buildValidationReport(NOTE_CONTRACT_VERSION, [{ code: "bad", message: "lower case code" }]),
     );
+  });
+});
+
+describe("source envelope validation", () => {
+  it("loads and accepts a valid YouTube transcript envelope with timestamp anchors", () => {
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
+    assert.equal(envelope.kind, "youtube");
+    const issues = validateSourceEnvelope(envelope);
+    assert.equal(issues.length, 0);
+  });
+
+  it("rejects a YouTube transcript envelope missing timestamp anchors", () => {
+    const envelope = loadSourceEnvelope(youtubeRejected.envelopePath);
+    const issues = validateSourceEnvelope(envelope);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0]?.code, "INCOMPLETE_TRANSCRIPT_TIMESTAMPS");
+    assert.match(issues[0]?.message ?? "", /timestamp anchors/i);
+  });
+
+  it("continues validating local, Drive, and Granola transcript envelopes unchanged", () => {
+    for (const name of [
+      "article-local.json",
+      "google-drive-article.json",
+      "panel-transcript.json",
+      "video-transcript.json",
+    ]) {
+      const envelope = loadEnvelope(name);
+      const issues = validateSourceEnvelope(envelope);
+      assert.equal(issues.length, 0, `${name} should pass envelope validation`);
+    }
+  });
+
+  it("rejects timestamp anchors with empty timestamp values on YouTube envelopes", () => {
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
+    envelope.anchors = [
+      {
+        id: "timestamp-empty",
+        kind: "timestamp",
+        label: "Empty",
+        text: "No time value.",
+        timestamp: "   ",
+      },
+    ];
+    const issues = validateSourceEnvelope(envelope);
+    assert.ok(issues.some((entry) => entry.code === "INCOMPLETE_TRANSCRIPT_TIMESTAMPS"));
   });
 });
 
@@ -205,6 +260,40 @@ describe("staged note contract validation", () => {
       const invalid = validateStagedNotes(vaultRoot, invalidDir, envelope);
       assert.equal(invalid.report.status, "fail", `${testCase.invalid} should fail`);
     }
+  });
+
+  it("accepts a valid MVP YouTube transcript note and envelope pair", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-youtube-pass-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageGoldNote(
+      vaultRoot,
+      "run-youtube",
+      youtubeAccepted.notePath,
+      youtubeAccepted.stagedNotePath,
+    );
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
+    const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
+    assert.equal(result.report.status, "pass");
+    assert.equal(result.report.issues.length, 0);
+  });
+
+  it("fails staged validation before commit when YouTube envelope lacks timestamps", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-youtube-fail-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageGoldNote(
+      vaultRoot,
+      "run-youtube-bad",
+      youtubeAccepted.notePath,
+      youtubeAccepted.stagedNotePath,
+    );
+    const envelope = loadSourceEnvelope(youtubeRejected.envelopePath);
+    const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
+    assert.equal(result.report.status, "fail");
+    const timestampIssue = result.report.issues.find(
+      (entry) => entry.code === "INCOMPLETE_TRANSCRIPT_TIMESTAMPS",
+    );
+    assert.ok(timestampIssue);
+    assert.match(timestampIssue?.message ?? "", /timestamp anchors/i);
   });
 });
 

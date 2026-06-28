@@ -90,9 +90,16 @@ export function parseIngestRunInput(input: IngestRunInput): IngestRunInput {
   return input;
 }
 
+export interface ConversionProfileHints {
+  kind?: SourceKind;
+  hasSlides?: boolean;
+  /** Curator-confirmed profile for ambiguous YouTube transcript acquisition. */
+  confirmedProfile?: ConversionProfile;
+}
+
 export function selectConversionProfile(
   contentType: string,
-  hints: { kind?: SourceKind; hasSlides?: boolean } = {},
+  hints: ConversionProfileHints = {},
 ): ConversionProfile {
   const normalized = contentType.toLowerCase();
   if (
@@ -105,6 +112,12 @@ export function selectConversionProfile(
   }
   if (hints.kind === "granola") {
     return "panel";
+  }
+  if (hints.kind === "youtube") {
+    if (hints.confirmedProfile === "panel" || normalized.includes("panel")) {
+      return "panel";
+    }
+    return "video";
   }
   if (
     normalized.includes("video") ||

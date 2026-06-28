@@ -24,12 +24,13 @@ export const SESSION_EXIT_STATUSES = [
   "skipped",
 ] as const satisfies readonly SessionExitStatus[];
 
-export type SessionSourceKind = "local" | "google_drive" | "granola";
+export type SessionSourceKind = "local" | "google_drive" | "granola" | "youtube";
 
 export const SESSION_SOURCE_KINDS = [
   "local",
   "google_drive",
   "granola",
+  "youtube",
 ] as const satisfies readonly SessionSourceKind[];
 
 export interface VaultSessionContext {

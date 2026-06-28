@@ -28,6 +28,7 @@ import {
   envelopeHasSlides,
 } from "../../dist/vault/ingestion.js";
 import { commitStagedSource, recoverVault } from "../../dist/vault/transaction.js";
+import { youtubeAccepted, youtubeAmbiguous, youtubeRejected } from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -52,6 +53,16 @@ const PANEL_STAGED = "notes/gold-panel-01.md";
 const VIDEO_ENVELOPE = join(envelopesDir, "video", "accepted-01.json");
 const VIDEO_NOTE = join(goldDir, "video", "accepted-01.md");
 const VIDEO_STAGED = "notes/gold-video-01.md";
+
+const YOUTUBE_ENVELOPE = youtubeAccepted.envelopePath;
+const YOUTUBE_NOTE = youtubeAccepted.notePath;
+const YOUTUBE_STAGED = youtubeAccepted.stagedNotePath;
+
+const YOUTUBE_PANEL_ENVELOPE = youtubeAmbiguous.envelopePath;
+const YOUTUBE_PANEL_NOTE = youtubeAmbiguous.notePath;
+const YOUTUBE_PANEL_STAGED = youtubeAmbiguous.stagedNotePath;
+
+const YOUTUBE_INVALID_ENVELOPE = youtubeRejected.envelopePath;
 
 function prepareVault() {
   const vaultRoot = mkdtempSync(join(tmpdir(), "okf-ingest-"));
@@ -92,6 +103,51 @@ describe("ingestion loop documentation", () => {
 });
 
 describe("ingest input parser", () => {
+  it("accepts a youtube source entry with required fields", () => {
+    const parsed = parseIngestRunInput({
+      vault_root: "/tmp/vault",
+      run_id: "run-youtube",
+      sources: [
+        {
+          kind: "youtube",
+          locator: "https://youtu.be/dQw4w9WgXcQ",
+          content_type: "video/transcript",
+        },
+      ],
+    });
+
+    assert.equal(parsed.sources.length, 1);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+    assert.equal(parsed.sources[0]?.locator, "https://youtu.be/dQw4w9WgXcQ");
+    assert.equal(parsed.sources[0]?.content_type, "video/transcript");
+  });
+
+  it("rejects duplicate youtube source keys when URL variants resolve to the same video id", () => {
+    assert.throws(
+      () =>
+        parseIngestRunInput({
+          vault_root: "/tmp/vault",
+          run_id: "run-youtube-dup",
+          sources: [
+            {
+              kind: "youtube",
+              locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              content_type: "video/transcript",
+            },
+            {
+              kind: "youtube",
+              locator: "https://youtu.be/dQw4w9WgXcQ",
+              content_type: "video/transcript",
+            },
+          ],
+        }),
+      (error: unknown) =>
+        error instanceof IngestInputError &&
+        error.code === "DUPLICATE_SOURCE_KEY" &&
+        error.message.includes("youtube:dQw4w9WgXcQ"),
+    );
+  });
+
   it("rejects empty source lists and duplicate stable source keys", () => {
     assert.throws(
       () =>
@@ -213,6 +269,110 @@ describe("profile selection", () => {
     assert.equal(selectConversionProfile("video/transcript"), "video");
     assert.equal(envelopeHasSlides(DECK_ENVELOPE), true);
     assert.equal(envelopeHasSlides(ARTICLE_ENVELOPE), false);
+  });
+
+  it("defaults youtube sources to video when transcript requirements are satisfied", () => {
+    assert.equal(selectConversionProfile("text/vtt", { kind: "youtube" }), "video");
+    assert.equal(selectConversionProfile("video/transcript", { kind: "youtube" }), "video");
+    assert.equal(
+      selectConversionProfile("text/plain", { kind: "youtube", confirmedProfile: "video" }),
+      "video",
+    );
+  });
+
+  it("routes ambiguous youtube sources to panel only with explicit curator confirmation", () => {
+    assert.equal(
+      selectConversionProfile("text/vtt", { kind: "youtube", confirmedProfile: "panel" }),
+      "panel",
+    );
+    assert.equal(selectConversionProfile("panel/transcript", { kind: "youtube" }), "panel");
+    assert.equal(selectConversionProfile("text/vtt", { kind: "youtube" }), "video");
+    assert.equal(
+      selectConversionProfile("text/plain", { kind: "youtube" }),
+      "video",
+    );
+  });
+
+  it("keeps granola panel routing and non-youtube transcript heuristics unchanged", () => {
+    assert.equal(selectConversionProfile("text/plain", { kind: "granola" }), "panel");
+    assert.equal(selectConversionProfile("video/transcript"), "video");
+    assert.equal(selectConversionProfile("panel/discussion"), "panel");
+    assert.equal(selectConversionProfile("text/markdown", { kind: "local" }), "article");
+  });
+});
+
+describe("youtube ingest integration", () => {
+  it("commits accepted youtube transcript through default video profile routing", () => {
+    const vaultRoot = prepareVault();
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    const profile = selectConversionProfile("text/vtt", { kind: "youtube" });
+    assert.equal(profile, "video");
+
+    const result = commitIngestFixture({
+      vaultRoot,
+      runId: "run-youtube-video",
+      envelopePath: YOUTUBE_ENVELOPE,
+      goldNotePath: YOUTUBE_NOTE,
+      stagedNotePath: YOUTUBE_STAGED,
+      expectedRevision: revision,
+    });
+
+    assert.equal(existsSync(join(vaultRoot, result.note_path)), true);
+    const record = loadManifest(vaultRoot).sources[0];
+    assert.equal(record?.kind, "youtube");
+    assert.equal(record?.source_key, "youtube:dQw4w9WgXcQ");
+  });
+
+  it("commits ambiguous youtube transcript through panel only with explicit confirmation", () => {
+    const vaultRoot = prepareVault();
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    const profile = selectConversionProfile("text/vtt", {
+      kind: "youtube",
+      confirmedProfile: "panel",
+    });
+    assert.equal(profile, "panel");
+
+    const result = commitIngestFixture({
+      vaultRoot,
+      runId: "run-youtube-panel",
+      envelopePath: YOUTUBE_PANEL_ENVELOPE,
+      goldNotePath: YOUTUBE_PANEL_NOTE,
+      stagedNotePath: YOUTUBE_PANEL_STAGED,
+      expectedRevision: revision,
+    });
+
+    assert.equal(existsSync(join(vaultRoot, result.note_path)), true);
+    const record = loadManifest(vaultRoot).sources[0];
+    assert.equal(record?.kind, "youtube");
+    assert.match(readFileSync(join(vaultRoot, result.note_path), "utf8"), /Panel Transcript Note/);
+  });
+
+  it("stops before commit when youtube envelope lacks usable timestamp anchors", () => {
+    const vaultRoot = prepareVault();
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    const beforeHead = runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim();
+
+    stageIngestFixture({
+      vaultRoot,
+      runId: "run-youtube-invalid",
+      envelopePath: YOUTUBE_INVALID_ENVELOPE,
+      goldNotePath: YOUTUBE_NOTE,
+      stagedNotePath: YOUTUBE_STAGED,
+      expectedRevision: revision,
+    });
+
+    const outcome = dispatch(
+      parseArgs([
+        "commit",
+        vaultRoot,
+        "run-youtube-invalid",
+        YOUTUBE_INVALID_ENVELOPE,
+        revision,
+      ]),
+    );
+    assert.equal(outcome.exitCode, ExitCode.VALIDATION);
+    assert.equal(runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim(), beforeHead);
+    assert.equal(loadManifest(vaultRoot).sources.length, 0);
   });
 });
 

@@ -20,6 +20,11 @@ import {
   validateStagedNotes,
   type ValidationReport,
 } from "../../dist/vault/validation.js";
+import {
+  pairedYoutubeEnvelopePath,
+  youtubeAccepted,
+  youtubeAmbiguous,
+} from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -300,5 +305,21 @@ describe("profile validation harness integration", () => {
     const { exitCode, report } = runValidateStagedCli(vaultRoot, stagingDir, envelopePath);
     assert.equal(exitCode, ExitCode.SUCCESS);
     assert.equal(report.status, "pass");
+  });
+
+  it("pairs YouTube gold notes with profile-scoped envelopes using stem naming", () => {
+    assert.equal(
+      pairedYoutubeEnvelopePath(youtubeAccepted.notePath, "video"),
+      youtubeAccepted.envelopePath,
+    );
+    assert.equal(
+      pairedYoutubeEnvelopePath(youtubeAmbiguous.notePath, "panel"),
+      youtubeAmbiguous.envelopePath,
+    );
+    assert.equal(pairedEnvelopePath(youtubeAccepted.notePath, "video"), youtubeAccepted.envelopePath);
+    assert.equal(
+      pairedEnvelopePath(youtubeAmbiguous.notePath, "panel"),
+      youtubeAmbiguous.envelopePath,
+    );
   });
 });

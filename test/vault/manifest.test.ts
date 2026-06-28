@@ -54,6 +54,37 @@ describe("manifest source identity and serialization", () => {
     assert.notEqual(driveKey, granolaKey);
   });
 
+  it("derives stable youtube keys from video IDs and common URL variants", () => {
+    const videoId = "dQw4w9WgXcQ";
+    const expected = `youtube:${videoId}`;
+    const origins = [
+      videoId,
+      `youtube:${videoId}`,
+      `https://www.youtube.com/watch?v=${videoId}`,
+      `https://youtube.com/watch?v=${videoId}&t=42`,
+      `https://youtu.be/${videoId}`,
+      `https://www.youtube.com/embed/${videoId}`,
+      `https://www.youtube.com/shorts/${videoId}`,
+      `https://m.youtube.com/watch?v=${videoId}`,
+    ];
+    for (const origin of origins) {
+      assert.equal(deriveSourceKey("youtube", origin), expected, origin);
+    }
+  });
+
+  it("rejects malformed YouTube origins during key derivation", () => {
+    assert.throws(() => deriveSourceKey("youtube", ""), /Invalid YouTube origin/);
+    assert.throws(() => deriveSourceKey("youtube", "not-a-valid-id"), /Invalid YouTube origin/);
+    assert.throws(
+      () => deriveSourceKey("youtube", "https://www.youtube.com/watch?v=tooshort"),
+      /Invalid YouTube origin/,
+    );
+    assert.throws(
+      () => deriveSourceKey("youtube", "https://example.com/watch?v=dQw4w9WgXcQ"),
+      /Invalid YouTube origin/,
+    );
+  });
+
   it("serializes sources in stable key order regardless of insertion order", () => {
     const recordA = committedRecord({ source_key: "drive:a", kind: "google_drive", origin: "a" });
     const recordB = committedRecord({
@@ -184,5 +215,28 @@ describe("manifest inspection and invariants", () => {
     const vaultRoot = mkdtempSync(join(tmpdir(), "okf-rev-"));
     saveManifest(vaultRoot, manifest);
     assert.equal(revision, manifestRevision(loadManifest(vaultRoot)));
+  });
+
+  it("accepts committed and skipped youtube source records", () => {
+    const videoId = "dQw4w9WgXcQ";
+    const sourceKey = deriveSourceKey("youtube", videoId);
+    const committed = committedRecord({
+      source_key: sourceKey,
+      kind: "youtube",
+      origin: videoId,
+      note_path: "notes/youtube-video.md",
+    });
+    validateSourceRecord(committed);
+
+    const skipped = committedRecord({
+      source_key: sourceKey,
+      kind: "youtube",
+      origin: `https://www.youtube.com/watch?v=${videoId}`,
+      status: "skipped",
+      skip_reason: "curator declined",
+    });
+    delete skipped.note_path;
+    delete skipped.commit;
+    validateSourceRecord(skipped);
   });
 });

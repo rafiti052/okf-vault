@@ -1,0 +1,44 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "youtube:dQw4w9WgXcQ",
+  "kind": "youtube",
+  "content_type": "text/vtt",
+  "origin": "youtube:dQw4w9WgXcQ",
+  "canonical_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "title": "Ambiguous Panel Video",
+  "modified_at": "2026-01-01T00:00:00.000Z",
+  "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "normalized_text": "Host opens. Guest responds with a contrasting view.",
+  "anchors": [
+    {
+      "id": "speaker-Host",
+      "kind": "speaker",
+      "label": "Host",
+      "speaker": "Host",
+      "text": "Host opening segment"
+    },
+    {
+      "id": "timestamp-00:02:15",
+      "kind": "timestamp",
+      "label": "Opening remarks",
+      "timestamp": "00:02:15",
+      "speaker": "Host",
+      "text": "We should prioritize reliability before scale."
+    },
+    {
+      "id": "speaker-Guest",
+      "kind": "speaker",
+      "label": "Guest",
+      "speaker": "Guest",
+      "text": "Guest response segment"
+    },
+    {
+      "id": "timestamp-00:08:40",
+      "kind": "timestamp",
+      "label": "Response",
+      "timestamp": "00:08:40",
+      "speaker": "Guest",
+      "text": "Iteration speed matters as much as reliability."
+    }
+  ]
+}

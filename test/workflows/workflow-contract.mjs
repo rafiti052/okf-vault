@@ -35,6 +35,7 @@ export const CAPABILITY_NAMES = [
   "read_local_file",
   "fetch_drive_document",
   "fetch_granola_transcript",
+  "fetch_youtube_transcript",
   "inspect_deck_slides",
   "invoke_process",
 ];
@@ -72,6 +73,7 @@ export const PREFLIGHT_ERROR_CODES = {
 export const NORMALIZATION_ERROR_CODES = {
   incompleteDeckSlideGap: "INCOMPLETE_DECK_SLIDE_GAP",
   incompleteTranscriptSpeakers: "INCOMPLETE_TRANSCRIPT_SPEAKERS",
+  incompleteTranscriptTimestamps: "INCOMPLETE_TRANSCRIPT_TIMESTAMPS",
 };
 
 /**
@@ -287,12 +289,14 @@ export const PHASE_1B_MODE_COMMAND_STUBS = [
 
 export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["okv-bootstrap.md", "okv-ingest-check.md"];
 
+export const PHASE_1C_MODE_COMMAND_STUBS = ["okv-ask.md"];
+
 /** All eight `/okv-*` command stub files (excludes registry.md). */
 export const ALL_OKV_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
-  "okv-ask.md",
+  ...PHASE_1C_MODE_COMMAND_STUBS,
 ];
 
 /** Canonical command stubs shipped through MVP, Phase 1b, and Phase 1c (includes pipeline stubs). */
@@ -300,7 +304,7 @@ export const SHIPPED_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
-  "okv-ask.md",
+  ...PHASE_1C_MODE_COMMAND_STUBS,
   "registry.md",
 ];
 
@@ -595,6 +599,187 @@ export function validateGranolaSpeakers(envelope, options = {}) {
 }
 
 /**
+ * @param {Record<string, unknown>} envelope
+ * @param {{ requireTimestampAnchors?: boolean }} [options]
+ * @returns {{ ok: true } | { ok: false; code: string; message: string }}
+ */
+export function validateYoutubeTimestamps(envelope, options = {}) {
+  if (envelope.kind !== "youtube") {
+    return { ok: true };
+  }
+
+  if (!options.requireTimestampAnchors) {
+    return { ok: true };
+  }
+
+  const anchors = /** @type {Array<{ kind?: string; timestamp?: string }>} */ (
+    envelope.anchors ?? []
+  );
+  const hasTimestamp = anchors.some(
+    (anchor) => anchor.kind === "timestamp" && (anchor.timestamp ?? "").length > 0,
+  );
+
+  if (!hasTimestamp) {
+    return {
+      ok: false,
+      code: NORMALIZATION_ERROR_CODES.incompleteTranscriptTimestamps,
+      message: "YouTube transcript requires timestamp anchors.",
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeTranscriptUnavailableFailure(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("transcript unavailable") &&
+    /stop before.*confirm_source|before\s+`confirm_source`/i.test(text) &&
+    documentsIngestionFailureActions(text) &&
+    lower.includes("local file")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeAlreadyProcessedSemantics(text) {
+  return (
+    text.includes("source_already_processed") &&
+    /manifest unchanged/i.test(text) &&
+    /already_processed/i.test(text)
+  );
+}
+
+/**
+ * @param {unknown} handoff
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function validateYoutubeWizardHandoff(handoff) {
+  if (handoff === null || typeof handoff !== "object" || Array.isArray(handoff)) {
+    return { ok: false, message: "Handoff must be an object." };
+  }
+
+  const record = /** @type {Record<string, unknown>} */ (handoff);
+  for (const field of INGEST_RUN_INPUT_FIELDS) {
+    if (record[field] === undefined || record[field] === "") {
+      return { ok: false, message: `Missing handoff field ${field}.` };
+    }
+  }
+
+  const sources = record.sources;
+  if (!Array.isArray(sources) || sources.length !== 1) {
+    return { ok: false, message: "Handoff sources must be a single-element array." };
+  }
+
+  const source = /** @type {Record<string, unknown>} */ (sources[0]);
+  for (const field of INGEST_SOURCE_INPUT_FIELDS) {
+    if (source[field] === undefined || source[field] === "") {
+      return { ok: false, message: `Missing pending_source field ${field}.` };
+    }
+  }
+
+  if (source.kind !== "youtube") {
+    return { ok: false, message: "Expected kind youtube." };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Simulated progress events when manifest inspect reports an unchanged YouTube source.
+ * @param {string} runId
+ * @param {string} sourceKey
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function simulateYoutubeAlreadyProcessedPath(runId, sourceKey) {
+  return [
+    { event: "run_started", run_id: runId, phase: "preflight", status: "ok", duration_ms: 0 },
+    {
+      event: "preflight_passed",
+      run_id: runId,
+      phase: "preflight",
+      status: "ok",
+      duration_ms: 10,
+    },
+    {
+      event: "source_acquired",
+      run_id: runId,
+      phase: "acquire",
+      source_key: sourceKey,
+      status: "ok",
+      duration_ms: 100,
+    },
+    {
+      event: "source_already_processed",
+      run_id: runId,
+      phase: "inspect",
+      source_key: sourceKey,
+      status: "ok",
+      duration_ms: 50,
+    },
+    { event: "run_completed", run_id: runId, phase: "finalize", status: "ok", duration_ms: 160 },
+  ];
+}
+
+/**
+ * Wizard acquisition failure for unusable YouTube transcript evidence (pre-delegation).
+ * @param {string} runId
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function simulateYoutubeTranscriptUnavailableWizardFailure(runId) {
+  return [
+    {
+      event: "run_failed",
+      run_id: runId,
+      phase: "acquire",
+      status: "error",
+      error_code: "TRANSCRIPT_UNAVAILABLE",
+      duration_ms: 0,
+    },
+  ];
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} events
+ * @returns {boolean}
+ */
+export function verifyYoutubeAlreadyProcessedOrdering(events) {
+  const names = events.map((entry) => entry.event);
+  const acquired = names.indexOf("source_acquired");
+  const already = names.indexOf("source_already_processed");
+  const conversion = names.indexOf("conversion_started");
+  const committed = names.indexOf("source_committed");
+  const completed = names.indexOf("run_completed");
+
+  return (
+    acquired >= 0 &&
+    already > acquired &&
+    conversion === -1 &&
+    committed === -1 &&
+    completed > already
+  );
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} events
+ * @returns {boolean}
+ */
+export function verifyTranscriptUnavailableStopsBeforeConversion(events) {
+  const names = events.map((entry) => entry.event);
+  return (
+    !names.includes("conversion_started") &&
+    !names.includes("source_committed") &&
+    !names.includes("source_acquired")
+  );
+}
+
+/**
  * @param {Record<string, unknown>} context
  * @returns {{ ok: true; event?: Record<string, unknown> } | { ok: false; code: string; message: string }}
  */
@@ -683,6 +868,8 @@ export function capabilityRequirements(kind) {
       return ["fetch_drive_document", "invoke_process"];
     case "granola":
       return ["fetch_granola_transcript", "invoke_process"];
+    case "youtube":
+      return ["fetch_youtube_transcript", "invoke_process"];
     default:
       return ["invoke_process"];
   }
@@ -936,6 +1123,35 @@ export function documentsIngestFirstRouting(text) {
     (lower.includes("recommended") ||
       lower.includes("new content") ||
       lower.includes("starting point"))
+  );
+}
+
+/**
+ * Curator-facing copy describes YouTube as a transcript-dependent MVP, not broad platform support.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeIngestMvp(text) {
+  const lower = text.toLowerCase();
+  return (
+    /youtube/i.test(text) &&
+    lower.includes("transcript") &&
+    (lower.includes("mvp") || lower.includes("reduced-scope") || lower.includes("reduced scope")) &&
+    lower.includes("not broad")
+  );
+}
+
+/**
+ * Curator-facing copy documents fallback when a usable YouTube transcript is unavailable.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeTranscriptFallback(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("fallback") &&
+    (lower.includes("local") || lower.includes("transcript")) &&
+    (lower.includes("unavailable") || lower.includes("retry") || lower.includes("skip"))
   );
 }
 
