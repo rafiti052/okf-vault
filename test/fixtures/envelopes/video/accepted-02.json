@@ -1,0 +1,35 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/training-recap.vtt",
+  "kind": "local",
+  "content_type": "text/vtt",
+  "origin": "/tmp/sources/training-recap.vtt",
+  "canonical_uri": "file:///tmp/sources/training-recap.vtt",
+  "title": "Training Recap Video",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4",
+  "normalized_text": "Paragraph one covers objectives. Paragraph two covers exercises. Paragraph three covers next steps.",
+  "anchors": [
+    {
+      "id": "timestamp-00:02:00",
+      "kind": "timestamp",
+      "label": "Paragraph 1",
+      "timestamp": "00:02:00",
+      "text": "Paragraph one covers objectives for the training session."
+    },
+    {
+      "id": "timestamp-00:06:00",
+      "kind": "timestamp",
+      "label": "Paragraph 2",
+      "timestamp": "00:06:00",
+      "text": "Paragraph two covers exercises participants completed."
+    },
+    {
+      "id": "timestamp-00:10:00",
+      "kind": "timestamp",
+      "label": "Paragraph 3",
+      "timestamp": "00:10:00",
+      "text": "Paragraph three covers next steps after the recap."
+    }
+  ]
+}

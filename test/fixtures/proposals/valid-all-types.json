@@ -1,0 +1,46 @@
+{
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-topic-001",
+      "type": "topic",
+      "affected_paths": ["topics/strategy.md"],
+      "rationale": "Group strategy notes under a shared topic map.",
+      "confidence": "high",
+      "disposition": "pending",
+      "suggested_changes": "Add [[notes/gold-article-01.md]] to topics/strategy.md"
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-link-001",
+      "type": "link",
+      "affected_paths": ["notes/gold-article-01.md", "notes/gold-panel-01.md"],
+      "rationale": "Panel discussion references the article metrics.",
+      "confidence": "medium",
+      "disposition": "pending",
+      "suggested_changes": "Add cross-link to [panel note](notes/gold-panel-01.md)."
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-duplicate-001",
+      "type": "duplicate",
+      "affected_paths": ["notes/gold-article-01.md", "notes/gold-video-01.md"],
+      "claim_ids": ["claim-001", "claim-002"],
+      "rationale": "Both notes restate the same revenue growth claim.",
+      "confidence": "low",
+      "disposition": "pending",
+      "suggested_changes": "Curator review only; do not merge automatically."
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-contradiction-001",
+      "type": "contradiction",
+      "affected_paths": ["notes/gold-deck-01.md", "notes/gold-panel-01.md"],
+      "claim_ids": ["claim-003", "claim-004"],
+      "rationale": "Deck and panel claims conflict on timeline.",
+      "confidence": "medium",
+      "disposition": "pending",
+      "suggested_changes": "Flag for curator resolution with cited claim ids."
+    }
+  ]
+}

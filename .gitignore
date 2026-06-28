@@ -1,1 +1,17 @@
 .compozy
+node_modules/
+.pnpm-store/
+dist/
+dist-test/
+.DS_Store
+
+.preflight-missing-*/
+.claude/settings.local.json
+.claude/settings.local.*
+*.tsbuildinfo
+
+# Compozy workflow tooling
+.agents/*
+.claude/*
+.cursor/*
+.windsurf/*

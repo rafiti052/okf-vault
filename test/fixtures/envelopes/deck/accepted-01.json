@@ -1,0 +1,94 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "drive:deck-metrics-five",
+  "kind": "google_drive",
+  "content_type": "application/vnd.google-apps.presentation",
+  "origin": "drive:deck-metrics-five",
+  "canonical_uri": "https://drive.google.com/file/d/deck-metrics-five/view",
+  "title": "Five Slide Metrics Deck",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "normalized_text": "Deck content across five slides with metrics and speaker notes.",
+  "anchors": [
+    {
+      "id": "slide-001",
+      "kind": "slide",
+      "label": "Slide 1",
+      "text": "Overview",
+      "slide_number": 1
+    },
+    {
+      "id": "slide-002",
+      "kind": "slide",
+      "label": "Slide 2",
+      "text": "Background context",
+      "slide_number": 2
+    },
+    {
+      "id": "slide-003",
+      "kind": "slide",
+      "label": "Slide 3",
+      "text": "Results reached 42% improvement with $1.2M impact",
+      "slide_number": 3
+    },
+    {
+      "id": "slide-004",
+      "kind": "slide",
+      "label": "Slide 4",
+      "text": "Implementation plan",
+      "slide_number": 4
+    },
+    {
+      "id": "speaker-004",
+      "kind": "speaker_note",
+      "label": "Slide 4 notes",
+      "text": "Speaker-only rollout detail for claim-002",
+      "slide_number": 4
+    },
+    {
+      "id": "slide-005",
+      "kind": "slide",
+      "label": "Slide 5",
+      "text": "Next steps",
+      "slide_number": 5
+    }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "Overview",
+      "text": "Overview",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 2,
+      "title": "Background",
+      "text": "Background context",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 3,
+      "title": "Results",
+      "text": "Results reached 42% improvement with $1.2M impact",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 4,
+      "title": "Plan",
+      "text": "Implementation plan",
+      "speaker_notes": "Speaker-only rollout detail for claim-002",
+      "image_available": true
+    },
+    {
+      "number": 5,
+      "title": "Next steps",
+      "text": "Next steps",
+      "speaker_notes": "",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}

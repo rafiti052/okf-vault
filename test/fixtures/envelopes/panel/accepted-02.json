@@ -1,0 +1,44 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/community-panel.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/community-panel.txt",
+  "canonical_uri": "file:///tmp/sources/community-panel.txt",
+  "title": "Community Panel Transcript",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2",
+  "normalized_text": "Moderator introduces the topic. Panelist One summarizes community feedback.",
+  "anchors": [
+    {
+      "id": "speaker-Moderator",
+      "kind": "speaker",
+      "label": "Moderator",
+      "speaker": "Moderator",
+      "text": "Moderator introduction"
+    },
+    {
+      "id": "timestamp-00:01:05",
+      "kind": "timestamp",
+      "label": "Introduction",
+      "timestamp": "00:01:05",
+      "speaker": "Moderator",
+      "text": "Welcome to the community panel."
+    },
+    {
+      "id": "speaker-Panelist-One",
+      "kind": "speaker",
+      "label": "Panelist One",
+      "speaker": "Panelist One",
+      "text": "Panelist One feedback segment"
+    },
+    {
+      "id": "timestamp-00:04:30",
+      "kind": "timestamp",
+      "label": "Feedback summary",
+      "timestamp": "00:04:30",
+      "speaker": "Panelist One",
+      "text": "Residents requested clearer communication channels."
+    }
+  ]
+}

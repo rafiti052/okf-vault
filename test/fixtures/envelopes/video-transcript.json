@@ -1,0 +1,21 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/demo-video.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/demo-video.txt",
+  "canonical_uri": "file:///tmp/sources/demo-video.txt",
+  "title": "Demo Video",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "normalized_text": "Video transcript text.",
+  "anchors": [
+    {
+      "id": "timestamp-00:01:30",
+      "kind": "timestamp",
+      "label": "Feature overview",
+      "text": "The product ships quarterly.",
+      "timestamp": "00:01:30"
+    }
+  ]
+}

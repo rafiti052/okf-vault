@@ -1,0 +1,50 @@
+{
+  "schema_version": "okf-vault-manifest/1.0.0",
+  "note_contract_version": "okf-note-contract/1.0.0",
+  "sources": [
+    {
+      "source_key": "local:/fixtures/revenue-growth",
+      "kind": "local",
+      "origin": "/fixtures/revenue-growth",
+      "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/revenue-growth.md",
+      "status": "committed",
+      "commit": "abc1111",
+      "processed_at": "2026-06-19T12:00:00.000Z"
+    },
+    {
+      "source_key": "local:/fixtures/market-strategy",
+      "kind": "local",
+      "origin": "/fixtures/market-strategy",
+      "content_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/market-strategy.md",
+      "status": "committed",
+      "commit": "abc2222",
+      "processed_at": "2026-06-19T12:01:00.000Z"
+    },
+    {
+      "source_key": "local:/fixtures/unrelated-astronomy",
+      "kind": "local",
+      "origin": "/fixtures/unrelated-astronomy",
+      "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/unrelated-astronomy.md",
+      "status": "committed",
+      "commit": "abc3333",
+      "processed_at": "2026-06-19T12:02:00.000Z"
+    },
+    {
+      "source_key": "local:/fixtures/customer-retention",
+      "kind": "local",
+      "origin": "/fixtures/customer-retention",
+      "content_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "contract_version": "okf-note-contract/1.0.0",
+      "note_path": "notes/customer-retention.md",
+      "status": "committed",
+      "commit": "abc4444",
+      "processed_at": "2026-06-19T13:00:00.000Z"
+    }
+  ]
+}

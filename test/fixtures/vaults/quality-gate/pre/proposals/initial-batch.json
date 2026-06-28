@@ -1,0 +1,24 @@
+{
+  "proposals": [
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-initial-link-001",
+      "type": "link",
+      "affected_paths": ["notes/revenue-growth.md", "notes/market-strategy.md"],
+      "rationale": "Revenue growth metrics inform strategy planning.",
+      "confidence": "high",
+      "disposition": "pending",
+      "suggested_changes": "Add cross-link to [[notes/market-strategy.md]] from revenue note."
+    },
+    {
+      "schema_version": "okf-vault-proposal/1.0.0",
+      "proposal_id": "prop-initial-topic-001",
+      "type": "topic",
+      "affected_paths": ["topics/strategy.md"],
+      "rationale": "Group strategy and revenue notes under the strategy topic map.",
+      "confidence": "medium",
+      "disposition": "pending",
+      "suggested_changes": "Add [[notes/revenue-growth.md]] and [[notes/market-strategy.md]] to topics/strategy.md"
+    }
+  ]
+}

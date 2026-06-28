@@ -1,0 +1,20 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/sample-article.md",
+  "kind": "local",
+  "content_type": "text/markdown",
+  "origin": "/tmp/sources/sample-article.md",
+  "canonical_uri": "file:///tmp/sources/sample-article.md",
+  "title": "Sample Article",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "normalized_text": "Article body text about revenue growth.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "label": "Opening paragraph",
+      "text": "Revenue grew 12% year over year."
+    }
+  ]
+}

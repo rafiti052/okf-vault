@@ -1,0 +1,5 @@
+{
+  "schema_version": "okf-vault-visualizer-config/1.0.0",
+  "command": ["node", "../../../tools/noop-visualizer.mjs"],
+  "output_dir": ".okf-vault/tmp/visualizer-output"
+}

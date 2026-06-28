@@ -1,0 +1,98 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  parsePathEntries,
+  isDirectoryOnPath,
+  getPnpmGlobalBinDir,
+  assertPnpmGlobalBinOnPath,
+  formatGlobalBinNotOnPathRemediation,
+  parseGlobalBinDirFromPnpmError,
+  PNPM_GLOBAL_LINK_ARGS,
+} from "../../scripts/pnpm-global-path.mjs";
+
+describe("pnpm global bin PATH helpers (unit)", () => {
+  it("parsePathEntries splits PATH by platform separator", () => {
+    assert.deepEqual(parsePathEntries("/usr/bin:/usr/local/bin"), ["/usr/bin", "/usr/local/bin"]);
+    assert.deepEqual(parsePathEntries(""), []);
+  });
+
+  it("isDirectoryOnPath compares normalized entries", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const normalize = (entry) => entry.replace(/\/+$/, "");
+    const pathEnv = "/usr/bin:/Users/test/Library/pnpm/bin:/opt/homebrew/bin";
+
+    assert.equal(isDirectoryOnPath(globalBin, pathEnv, normalize), true);
+    assert.equal(isDirectoryOnPath(globalBin, "/usr/bin:/opt/homebrew/bin", normalize), false);
+  });
+
+  it("getPnpmGlobalBinDir reads stdout from mocked pnpm bin -g", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const spawnSyncFn = (command, args) => {
+      assert.equal(command, "pnpm");
+      assert.deepEqual(args, ["bin", "-g"]);
+      return { status: 0, stdout: `${globalBin}\n` };
+    };
+
+    assert.equal(getPnpmGlobalBinDir(spawnSyncFn), globalBin);
+  });
+
+  it("getPnpmGlobalBinDir parses path from pnpm not-in-PATH error", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const spawnSyncFn = () => ({
+      status: 1,
+      stderr: `[ERROR] The configured global bin directory "${globalBin}" is not in PATH\nRun "pnpm setup" to update your shell configuration.\n`,
+    });
+
+    assert.equal(getPnpmGlobalBinDir(spawnSyncFn), globalBin);
+  });
+
+  it("parseGlobalBinDirFromPnpmError extracts quoted directory", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const message = `[ERROR] The configured global bin directory "${globalBin}" is not in PATH`;
+    assert.equal(parseGlobalBinDirFromPnpmError(message), globalBin);
+    assert.equal(parseGlobalBinDirFromPnpmError("other failure"), null);
+  });
+
+  it("assertPnpmGlobalBinOnPath fails early when global bin is missing from PATH", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const spawnSyncFn = () => ({
+      status: 1,
+      stderr: `[ERROR] The configured global bin directory "${globalBin}" is not in PATH\n`,
+    });
+    const result = assertPnpmGlobalBinOnPath({
+      spawnSyncFn,
+      pathEnv: "/usr/bin:/opt/homebrew/bin",
+      normalize: (entry) => entry,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.globalBinDir, globalBin);
+    assert.match(result.message, /pnpm setup/i);
+    assert.match(result.message, new RegExp(globalBin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  });
+
+  it("assertPnpmGlobalBinOnPath passes when global bin is on PATH", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const spawnSyncFn = () => ({ status: 0, stdout: `${globalBin}\n` });
+    const result = assertPnpmGlobalBinOnPath({
+      spawnSyncFn,
+      pathEnv: `/usr/bin:${globalBin}:/opt/homebrew/bin`,
+      normalize: (entry) => entry,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.globalBinDir, globalBin);
+  });
+
+  it("PNPM_GLOBAL_LINK_ARGS uses pnpm 11 global link from package root", () => {
+    assert.deepEqual(PNPM_GLOBAL_LINK_ARGS, ["link", "--global", "."]);
+  });
+
+  it("formatGlobalBinNotOnPathRemediation includes export PATH on unix", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const message = formatGlobalBinNotOnPathRemediation("/Users/test/Library/pnpm/bin");
+    assert.match(message, /export PATH="\/Users\/test\/Library\/pnpm\/bin:\$PATH"/);
+  });
+});

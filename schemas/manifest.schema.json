@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "okf-vault-manifest/1.0.0",
+  "title": "OKF Vault Ingestion Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "note_contract_version", "sources"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "okf-vault-manifest/1.0.0"
+    },
+    "note_contract_version": {
+      "type": "string",
+      "pattern": "^okf-note-contract/[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourceRecord"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "vaultRelativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)[a-zA-Z0-9_./-]+$"
+    },
+    "sourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "kind",
+        "origin",
+        "content_sha256",
+        "contract_version",
+        "status",
+        "processed_at"
+      ],
+      "properties": {
+        "source_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["local", "google_drive", "granola"]
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "contract_version": {
+          "type": "string",
+          "pattern": "^okf-note-contract/[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "note_path": {
+          "$ref": "#/$defs/vaultRelativePath"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["committed", "skipped"]
+        },
+        "skip_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 7
+        },
+        "processed_at": {
+          "$ref": "#/$defs/utcTimestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "skipped"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["skip_reason"],
+            "properties": {
+              "skip_reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "committed"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["note_path", "commit"],
+            "properties": {
+              "note_path": {
+                "$ref": "#/$defs/vaultRelativePath"
+              },
+              "commit": {
+                "type": "string",
+                "minLength": 7
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

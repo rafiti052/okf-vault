@@ -1,0 +1,60 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/quarterly-review.pptx",
+  "kind": "local",
+  "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "origin": "/tmp/sources/quarterly-review.pptx",
+  "canonical_uri": "file:///tmp/sources/quarterly-review.pptx",
+  "title": "Quarterly Review Deck",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "normalized_text": "Three-slide local deck with speaker notes on slide 2.",
+  "anchors": [
+    { "id": "slide-001", "kind": "slide", "label": "Slide 1", "text": "Agenda", "slide_number": 1 },
+    {
+      "id": "slide-002",
+      "kind": "slide",
+      "label": "Slide 2",
+      "text": "Highlights",
+      "slide_number": 2
+    },
+    {
+      "id": "speaker-002",
+      "kind": "speaker_note",
+      "label": "Slide 2 notes",
+      "text": "Highlight detail from speaker notes",
+      "slide_number": 2
+    },
+    {
+      "id": "slide-003",
+      "kind": "slide",
+      "label": "Slide 3",
+      "text": "Closing",
+      "slide_number": 3
+    }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "Agenda",
+      "text": "Agenda",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 2,
+      "title": "Highlights",
+      "text": "Highlights",
+      "speaker_notes": "Highlight detail from speaker notes",
+      "image_available": true
+    },
+    {
+      "number": 3,
+      "title": "Closing",
+      "text": "Closing",
+      "speaker_notes": "",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}

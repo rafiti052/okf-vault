@@ -1,0 +1,26 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "drive:file-redacted-001",
+  "kind": "google_drive",
+  "content_type": "application/vnd.google-apps.document",
+  "origin": "drive:file-redacted-001",
+  "canonical_uri": "https://drive.google.com/file/d/file-redacted-001/view",
+  "title": "Redacted Research Brief",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "normalized_text": "Brief body describing a three-phase rollout timeline.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "label": "Summary paragraph",
+      "text": "Phase one begins in Q3 with pilot sites."
+    },
+    {
+      "id": "anchor-002",
+      "kind": "text",
+      "label": "Timeline table",
+      "text": "Phase two expands to twelve regions by year end."
+    }
+  ]
+}

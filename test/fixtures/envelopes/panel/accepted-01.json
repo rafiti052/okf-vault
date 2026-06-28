@@ -1,0 +1,44 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "granola:panel-tech-001",
+  "kind": "granola",
+  "content_type": "text/plain",
+  "origin": "granola:panel-tech-001",
+  "canonical_uri": "https://granola.example/meetings/panel-tech-001",
+  "title": "Technology Panel Discussion",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+  "normalized_text": "Speaker A opens the panel. Speaker B responds with a contrasting view.",
+  "anchors": [
+    {
+      "id": "speaker-Speaker-A",
+      "kind": "speaker",
+      "label": "Speaker A",
+      "speaker": "Speaker A",
+      "text": "Speaker A opening segment"
+    },
+    {
+      "id": "timestamp-00:02:15",
+      "kind": "timestamp",
+      "label": "Opening remarks",
+      "timestamp": "00:02:15",
+      "speaker": "Speaker A",
+      "text": "We should prioritize reliability before scale."
+    },
+    {
+      "id": "speaker-Speaker-B",
+      "kind": "speaker",
+      "label": "Speaker B",
+      "speaker": "Speaker B",
+      "text": "Speaker B response segment"
+    },
+    {
+      "id": "timestamp-00:08:40",
+      "kind": "timestamp",
+      "label": "Response",
+      "timestamp": "00:08:40",
+      "speaker": "Speaker B",
+      "text": "Iteration speed matters as much as reliability."
+    }
+  ]
+}
