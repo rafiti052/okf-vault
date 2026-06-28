@@ -24,9 +24,13 @@ export const OKV_COMMANDS = [
   "okv-visualize",
   "okv-bootstrap",
   "okv-ingest-check",
+  "okv-ask",
 ];
 
-export const LEGACY_VAULT_COMMANDS = OKV_COMMANDS.map((command) =>
+/** Commands that existed under the vault-* prefix before the okv-* rebrand. */
+export const REBRANDED_OKV_COMMANDS = OKV_COMMANDS.filter((c) => c !== "okv-ask");
+
+export const LEGACY_VAULT_COMMANDS = REBRANDED_OKV_COMMANDS.map((command) =>
   command.replace(/^okv-/, "vault-"),
 );
 

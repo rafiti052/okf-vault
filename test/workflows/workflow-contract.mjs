@@ -47,9 +47,10 @@ export const OKV_COMMANDS = [
   "okv-visualize",
   "okv-bootstrap",
   "okv-ingest-check",
+  "okv-ask",
 ];
 
-export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
+export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize", "ask"];
 
 export const PIPELINE_COMMANDS = ["okv-bootstrap", "okv-ingest-check"];
 
@@ -286,18 +287,20 @@ export const PHASE_1B_MODE_COMMAND_STUBS = [
 
 export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["okv-bootstrap.md", "okv-ingest-check.md"];
 
-/** All seven `/okv-*` command stub files (excludes registry.md). */
+/** All eight `/okv-*` command stub files (excludes registry.md). */
 export const ALL_OKV_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
+  "okv-ask.md",
 ];
 
-/** Canonical command stubs shipped through MVP and Phase 1b (includes pipeline stubs). */
+/** Canonical command stubs shipped through MVP, Phase 1b, and Phase 1c (includes pipeline stubs). */
 export const SHIPPED_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
+  "okv-ask.md",
   "registry.md",
 ];
 
@@ -307,6 +310,7 @@ export const MODE_STUB_SKILL_ANCHORS = {
   "okv-organize.md": "organize",
   "okv-validate.md": "validate",
   "okv-visualize.md": "visualize",
+  "okv-ask.md": "ask",
 };
 
 /** Maps pipeline stub filenames to pipelines.md section anchors. */

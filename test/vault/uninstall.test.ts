@@ -401,7 +401,7 @@ describe("uninstall integration behavior", () => {
         const real = uninstallData(dispatch(parseArgs(["uninstall"])));
         const removedSymlinks = managedSymlinkPaths(real);
 
-        assert.equal(previewedSymlinks.length, 16);
+        assert.equal(previewedSymlinks.length, 18);
         assert.deepEqual(removedSymlinks, previewedSymlinks);
       }),
     );

@@ -255,7 +255,7 @@ describe("init and inspect CLI integration", () => {
         skipped: string[];
       };
       assert.equal(data.adapters_installed, true);
-      assert.equal(data.adapter_links_created, 16);
+      assert.equal(data.adapter_links_created, 18);
       assert.equal(data.adapter_links_skipped, 0);
       assert.equal(data.curator_rule_installed, true);
       assert.equal(
@@ -264,7 +264,7 @@ describe("init and inspect CLI integration", () => {
       );
       assert.equal(data.legacy_paths_removed, 0);
       assert.deepEqual(data.legacy_removed, []);
-      assert.equal(data.linked.length, 16);
+      assert.equal(data.linked.length, 18);
       assert.equal(data.skipped.length, 0);
       assert.equal(realpathSync(data.project_root), realpathSync(projectRoot));
       assert.equal(realpathSync(data.vault_root), realpathSync(join(projectRoot, "knowledge")));
@@ -365,11 +365,11 @@ describe("init and inspect CLI integration", () => {
       assert.equal(secondData.idempotent, true);
       assert.equal(secondData.curator_rule_installed, false);
       assert.equal(secondData.adapter_links_created, 0);
-      assert.equal(secondData.adapter_links_skipped, 16);
+      assert.equal(secondData.adapter_links_skipped, 18);
       assert.equal(secondData.legacy_paths_removed, 0);
       assert.deepEqual(secondData.legacy_removed, []);
       assert.equal(secondData.linked.length, 0);
-      assert.equal(secondData.skipped.length, 16);
+      assert.equal(secondData.skipped.length, 18);
     } finally {
       process.chdir(originalCwd);
     }
@@ -419,7 +419,7 @@ describe("init and inspect CLI integration", () => {
       };
       assert.equal(data.idempotent, false);
       assert.equal(data.adapter_links_created, 1);
-      assert.equal(data.adapter_links_skipped, 15);
+      assert.equal(data.adapter_links_skipped, 17);
       assert.deepEqual(
         data.linked.map((path) => realpathSync(dirname(path))),
         [realpathSync(dirname(cursorSkill))],

@@ -132,7 +132,7 @@ describe("discoverability contract (unit)", () => {
     assert.match(agentsText, /Choose the right command/i);
   });
 
-  it("registry.md lists exactly seven /okv-* commands with no /okf-* references", () => {
+  it("registry.md lists exactly eight /okv-* commands with no /okf-* references", () => {
     const slugs = extractVaultCommandSlugs(registryText);
     assert.deepEqual(slugs, [...OKV_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);

@@ -84,6 +84,7 @@ node dist/main.js validate ./knowledge
 | Health check | `/okv-validate` |
 | Graph inspection | `/okv-visualize` |
 | Ingest + validate pipeline | `/okv-ingest-check` |
+| Natural-language query | `/okv-ask` |
 
 Full command list with availability labels and stub links: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
