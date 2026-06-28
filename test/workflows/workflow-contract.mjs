@@ -35,6 +35,7 @@ export const CAPABILITY_NAMES = [
   "read_local_file",
   "fetch_drive_document",
   "fetch_granola_transcript",
+  "fetch_youtube_transcript",
   "inspect_deck_slides",
   "invoke_process",
 ];
@@ -47,9 +48,10 @@ export const OKV_COMMANDS = [
   "okv-visualize",
   "okv-bootstrap",
   "okv-ingest-check",
+  "okv-ask",
 ];
 
-export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize"];
+export const SKILL_MODES = ["initialize", "ingest", "organize", "validate", "visualize", "ask"];
 
 export const PIPELINE_COMMANDS = ["okv-bootstrap", "okv-ingest-check"];
 
@@ -71,6 +73,7 @@ export const PREFLIGHT_ERROR_CODES = {
 export const NORMALIZATION_ERROR_CODES = {
   incompleteDeckSlideGap: "INCOMPLETE_DECK_SLIDE_GAP",
   incompleteTranscriptSpeakers: "INCOMPLETE_TRANSCRIPT_SPEAKERS",
+  incompleteTranscriptTimestamps: "INCOMPLETE_TRANSCRIPT_TIMESTAMPS",
 };
 
 /**
@@ -286,18 +289,22 @@ export const PHASE_1B_MODE_COMMAND_STUBS = [
 
 export const PHASE_1B_PIPELINE_COMMAND_STUBS = ["okv-bootstrap.md", "okv-ingest-check.md"];
 
-/** All seven `/okv-*` command stub files (excludes registry.md). */
+export const PHASE_1C_MODE_COMMAND_STUBS = ["okv-ask.md"];
+
+/** All eight `/okv-*` command stub files (excludes registry.md). */
 export const ALL_OKV_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
+  ...PHASE_1C_MODE_COMMAND_STUBS,
 ];
 
-/** Canonical command stubs shipped through MVP and Phase 1b (includes pipeline stubs). */
+/** Canonical command stubs shipped through MVP, Phase 1b, and Phase 1c (includes pipeline stubs). */
 export const SHIPPED_COMMAND_STUBS = [
   "okv-ingest.md",
   ...PHASE_1B_MODE_COMMAND_STUBS,
   ...PHASE_1B_PIPELINE_COMMAND_STUBS,
+  ...PHASE_1C_MODE_COMMAND_STUBS,
   "registry.md",
 ];
 
@@ -307,6 +314,7 @@ export const MODE_STUB_SKILL_ANCHORS = {
   "okv-organize.md": "organize",
   "okv-validate.md": "validate",
   "okv-visualize.md": "visualize",
+  "okv-ask.md": "ask",
 };
 
 /** Maps pipeline stub filenames to pipelines.md section anchors. */
@@ -591,6 +599,38 @@ export function validateGranolaSpeakers(envelope, options = {}) {
 }
 
 /**
+ * @param {Record<string, unknown>} envelope
+ * @param {{ requireTimestampAnchors?: boolean }} [options]
+ * @returns {{ ok: true } | { ok: false; code: string; message: string }}
+ */
+export function validateYoutubeTimestamps(envelope, options = {}) {
+  if (envelope.kind !== "youtube") {
+    return { ok: true };
+  }
+
+  if (!options.requireTimestampAnchors) {
+    return { ok: true };
+  }
+
+  const anchors = /** @type {Array<{ kind?: string; timestamp?: string }>} */ (
+    envelope.anchors ?? []
+  );
+  const hasTimestamp = anchors.some(
+    (anchor) => anchor.kind === "timestamp" && (anchor.timestamp ?? "").length > 0,
+  );
+
+  if (!hasTimestamp) {
+    return {
+      ok: false,
+      code: NORMALIZATION_ERROR_CODES.incompleteTranscriptTimestamps,
+      message: "YouTube transcript requires timestamp anchors.",
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
  * @param {Record<string, unknown>} context
  * @returns {{ ok: true; event?: Record<string, unknown> } | { ok: false; code: string; message: string }}
  */
@@ -679,6 +719,8 @@ export function capabilityRequirements(kind) {
       return ["fetch_drive_document", "invoke_process"];
     case "granola":
       return ["fetch_granola_transcript", "invoke_process"];
+    case "youtube":
+      return ["fetch_youtube_transcript", "invoke_process"];
     default:
       return ["invoke_process"];
   }
