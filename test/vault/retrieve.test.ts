@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -1580,5 +1580,152 @@ describe("hydrateLinkedNotes — integration: realistic topic result", () => {
     );
     // Provenance is empty at this stage (Task 10 fills it).
     assert.deepEqual(note.provenance, { source_key: "", kind: "" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildManifestIndex + filterNotesViaManifest — unit tests (Task 10)
+// ---------------------------------------------------------------------------
+import { loadManifest, upsertCommittedSource, saveManifest } from "../../dist/vault/manifest.js";
+import { NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
+
+describe("buildManifestIndex", () => {
+  it("returns empty map when manifest has no committed records", () => {
+    const vault = makeVaultRoot();
+    const index = buildManifestIndex(vault);
+    assert.equal(index.size, 0);
+  });
+
+  it("returns empty map when vault root is invalid", () => {
+    const index = buildManifestIndex("/nonexistent/path");
+    assert.equal(index.size, 0);
+  });
+
+  it("indexes committed records by absolute note_path", () => {
+    const vault = makeVaultRoot();
+    const notePath = join(vault, "knowledge", "notes", "note-a.md");
+    mkdirSync(join(vault, "knowledge", "notes"), { recursive: true });
+    writeFileSync(notePath, "# Note A\nContent");
+
+    let manifest = loadManifest(vault);
+    manifest = upsertCommittedSource(manifest, {
+      source_key: "local:/sources/note-a.md",
+      kind: "local",
+      origin: "/sources/note-a.md",
+      content_sha256: "a".repeat(64),
+      contract_version: NOTE_CONTRACT_VERSION,
+      note_path: join("knowledge", "notes", "note-a.md"),
+      status: "committed",
+      commit: "abc1234",
+      processed_at: new Date().toISOString(),
+    });
+    saveManifest(vault, manifest);
+
+    const index = buildManifestIndex(vault);
+    assert.equal(index.size, 1);
+    assert.ok(index.has(notePath));
+    assert.deepEqual(index.get(notePath), { source_key: "local:/sources/note-a.md", kind: "local" });
+  });
+
+  it("excludes skipped records from the index", () => {
+    const vault = makeVaultRoot();
+    let manifest = loadManifest(vault);
+    manifest = upsertCommittedSource(manifest, {
+      source_key: "local:/sources/committed.md",
+      kind: "local",
+      origin: "/sources/committed.md",
+      content_sha256: "b".repeat(64),
+      contract_version: NOTE_CONTRACT_VERSION,
+      note_path: join("knowledge", "notes", "committed.md"),
+      status: "committed",
+      commit: "abc1234",
+      processed_at: new Date().toISOString(),
+    });
+    saveManifest(vault, manifest);
+
+    const index = buildManifestIndex(vault);
+    assert.equal(index.size, 1);
+  });
+});
+
+describe("filterNotesViaManifest", () => {
+  it("returns empty array when index is empty", () => {
+    const notes = [{ path: "/vault/notes/note.md", summary: "s", provenance: { source_key: "", kind: "" } }];
+    const result = filterNotesViaManifest(notes, new Map());
+    assert.deepEqual(result, []);
+  });
+
+  it("includes notes present in the manifest index with real provenance", () => {
+    const notePath = "/vault/notes/committed.md";
+    const index = new Map([[notePath, { source_key: "local:/s.md", kind: "local" }]]);
+    const notes = [{ path: notePath, summary: "hello", provenance: { source_key: "", kind: "" } }];
+    const result = filterNotesViaManifest(notes, index);
+    assert.equal(result.length, 1);
+    assert.deepEqual(result[0]?.provenance, { source_key: "local:/s.md", kind: "local" });
+  });
+
+  it("excludes notes not in the manifest index", () => {
+    const index = new Map([["/vault/notes/committed.md", { source_key: "local:/c.md", kind: "local" }]]);
+    const notes = [
+      { path: "/vault/notes/committed.md", summary: "ok", provenance: { source_key: "", kind: "" } },
+      { path: "/vault/notes/unknown.md", summary: "not ok", provenance: { source_key: "", kind: "" } },
+    ];
+    const result = filterNotesViaManifest(notes, index);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.path, "/vault/notes/committed.md");
+  });
+
+  it("preserves summary and path while replacing provenance", () => {
+    const notePath = "/vault/notes/n.md";
+    const index = new Map([[notePath, { source_key: "granola:abc", kind: "granola" }]]);
+    const notes = [{ path: notePath, summary: "original summary", provenance: { source_key: "", kind: "" } }];
+    const result = filterNotesViaManifest(notes, index);
+    assert.equal(result[0]?.summary, "original summary");
+    assert.equal(result[0]?.path, notePath);
+    assert.equal(result[0]?.provenance.kind, "granola");
+  });
+});
+
+describe("filterNotesViaManifest — integration: committed-only with provenance", () => {
+  it("full pipeline: hydrate then filter leaves only committed notes with provenance", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "knowledge", "notes");
+    const topicsDir = join(vault, "knowledge", "topics");
+    mkdirSync(notesDir, { recursive: true });
+    mkdirSync(topicsDir, { recursive: true });
+
+    const committedPath = join(notesDir, "committed.md");
+    const skippedPath = join(notesDir, "skipped.md");
+    writeFileSync(committedPath, "---\ntitle: Committed\n---\n\nCommitted note content.");
+    writeFileSync(skippedPath, "---\ntitle: Skipped\n---\n\nSkipped note content.");
+
+    let manifest = loadManifest(vault);
+    manifest = upsertCommittedSource(manifest, {
+      source_key: "local:/committed.md",
+      kind: "local",
+      origin: "/committed.md",
+      content_sha256: "c".repeat(64),
+      contract_version: NOTE_CONTRACT_VERSION,
+      note_path: join("knowledge", "notes", "committed.md"),
+      status: "committed",
+      commit: "abc1234",
+      processed_at: new Date().toISOString(),
+    });
+    saveManifest(vault, manifest);
+
+    // Hydrate both notes
+    const candidate = makeCandidate({ linkedNotePaths: [committedPath, skippedPath] });
+    const hydrated = hydrateLinkedNotes(candidate, vault);
+    assert.equal(hydrated.length, 2);
+
+    // Filter via manifest — only committed note should remain
+    const index = buildManifestIndex(vault);
+    const filtered = filterNotesViaManifest(hydrated, index);
+
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]?.path, committedPath);
+    assert.equal(filtered[0]?.provenance.source_key, "local:/committed.md");
+    assert.equal(filtered[0]?.provenance.kind, "local");
+    assert.ok(filtered[0]?.summary.length ?? 0 > 0);
   });
 });

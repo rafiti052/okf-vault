@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure } from "../cli/cli.js";
 import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
+import { loadManifest } from "./manifest.js";
 
 // ---------------------------------------------------------------------------
 // Retrieval result contract — Task 03
@@ -910,6 +911,47 @@ export function hydrateLinkedNotes(
   }
 
   return results;
+}
+
+/**
+ * Build a manifest index keyed by absolute note_path for committed records.
+ * Used by filterNotesViaManifest to avoid re-loading the manifest per note.
+ */
+export function buildManifestIndex(
+  vaultRoot: string,
+): Map<string, { source_key: string; kind: string }> {
+  let manifest;
+  try {
+    manifest = loadManifest(vaultRoot);
+  } catch {
+    return new Map();
+  }
+
+  const index = new Map<string, { source_key: string; kind: string }>();
+  for (const record of manifest.sources) {
+    if (record.status === "committed" && record.note_path !== undefined) {
+      const absPath = resolve(vaultRoot, record.note_path);
+      index.set(absPath, { source_key: record.source_key, kind: record.kind });
+    }
+  }
+  return index;
+}
+
+/**
+ * Filter hydrated notes to committed manifest records and attach provenance.
+ * Notes not present in the manifest index (non-committed or unknown) are excluded.
+ */
+export function filterNotesViaManifest(
+  notes: LinkedNote[],
+  manifestIndex: Map<string, { source_key: string; kind: string }>,
+): LinkedNote[] {
+  return notes
+    .map((note) => {
+      const prov = manifestIndex.get(resolve(note.path));
+      if (prov === undefined) return null;
+      return { ...note, provenance: prov };
+    })
+    .filter((n): n is LinkedNote => n !== null);
 }
 
 // ---------------------------------------------------------------------------
