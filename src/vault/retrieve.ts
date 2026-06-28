@@ -705,6 +705,109 @@ export function selectResults(
 }
 
 // ---------------------------------------------------------------------------
+// Broadening hint generation — Task 08
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of broadening hints returned per response.
+ * Keeps hint output bounded and token-economic for agents.
+ */
+const MAX_HINTS = 5;
+
+/**
+ * Maximum number of suggested query reformulations included in hints.
+ * Per PRD F4: "up to two suggested follow-up query reformulations".
+ */
+const MAX_SUGGESTED_QUERIES = 2;
+
+/**
+ * Generate broadening hints for medium/low-confidence retrieval responses.
+ *
+ * Hints are derived from two adjacency signals:
+ * 1. Shared-tag adjacency — topic maps that share tags with selected results.
+ * 2. Shared linked-note adjacency — topic maps that share linked-note paths.
+ *
+ * Hint suppression rules:
+ * - When confidence === "high" AND coverage_gap === false, return [].
+ * - Topic maps already in selected are excluded.
+ * - Output is bounded to MAX_HINTS and ordered deterministically.
+ * - Each topic map appears at most once.
+ */
+export function generateBroadeningHints(
+  query: string,
+  confidence: "high" | "medium" | "low",
+  coverage_gap: boolean,
+  selected: Array<{ candidate: TopicMapCandidate; score: number }>,
+  allCandidates: TopicMapCandidate[],
+): BroadeningHint[] {
+  if (confidence === "high" && !coverage_gap) return [];
+
+  const selectedPaths = new Set(selected.map((s) => s.candidate.path));
+  const selectedTags = new Set<string>();
+  const selectedLinkedPaths = new Set<string>();
+
+  for (const { candidate } of selected) {
+    for (const tag of candidate.tags) selectedTags.add(tag.toLowerCase());
+    for (const p of candidate.linkedNotePaths) selectedLinkedPaths.add(p);
+  }
+
+  const queryTokenSet = new Set(tokenize(query));
+  const sharedTagHints: BroadeningHint[] = [];
+  const sharedNoteHints: BroadeningHint[] = [];
+  const hintPaths = new Set<string>();
+
+  for (const candidate of allCandidates) {
+    if (selectedPaths.has(candidate.path)) continue;
+
+    const candidateTags = candidate.tags.map((t) => t.toLowerCase());
+    const sharedTags = candidateTags.filter((t) => selectedTags.has(t));
+    if (sharedTags.length > 0 && !hintPaths.has(candidate.path)) {
+      hintPaths.add(candidate.path);
+      const tagList = sharedTags.slice(0, 3).join(", ");
+      sharedTagHints.push({
+        topic_path: candidate.path,
+        reason: `Shares tag${sharedTags.length > 1 ? "s" : ""}: ${tagList}`,
+      });
+      continue;
+    }
+
+    const sharedNotes = candidate.linkedNotePaths.filter((p) => selectedLinkedPaths.has(p));
+    if (sharedNotes.length > 0 && !hintPaths.has(candidate.path)) {
+      hintPaths.add(candidate.path);
+      sharedNoteHints.push({
+        topic_path: candidate.path,
+        reason: `Shares ${sharedNotes.length} linked note${sharedNotes.length > 1 ? "s" : ""} with matched topic`,
+      });
+    }
+  }
+
+  sharedTagHints.sort((a, b) => a.topic_path.localeCompare(b.topic_path));
+  sharedNoteHints.sort((a, b) => a.topic_path.localeCompare(b.topic_path));
+  const hints = [...sharedTagHints, ...sharedNoteHints].slice(0, MAX_HINTS);
+
+  const suggestedQueryTags: string[] = [];
+  for (const { candidate } of selected) {
+    for (const tag of candidate.tags) {
+      const tagTokens = tokenize(tag);
+      const hasOverlap = tagTokens.some((t) => queryTokenSet.has(t));
+      if (!hasOverlap) {
+        const readable = tag.replace(/[-_]/gu, " ").toLowerCase();
+        if (!suggestedQueryTags.includes(readable)) suggestedQueryTags.push(readable);
+      }
+      if (suggestedQueryTags.length >= MAX_SUGGESTED_QUERIES) break;
+    }
+    if (suggestedQueryTags.length >= MAX_SUGGESTED_QUERIES) break;
+  }
+
+  for (let i = 0; i < Math.min(suggestedQueryTags.length, hints.length); i++) {
+    const sq = suggestedQueryTags[i];
+    if (sq !== undefined) (hints[i] as BroadeningHint).suggested_query = sq;
+  }
+
+  return hints;
+}
+
+// ---------------------------------------------------------------------------
 // Linked note hydration — Task 09
 // ---------------------------------------------------------------------------
 

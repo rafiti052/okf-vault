@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, extractNoteSummary, hydrateLinkedNotes } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -1193,6 +1193,136 @@ describe("selectResults — integration: close thematic matches", () => {
 
     const paths = result.candidates.map((r) => r.candidate.path);
     assert.ok(!paths.includes("/vault/topics/unrelated.md"), "weak unrelated candidate must not appear");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateBroadeningHints — unit tests (Task 08)
+// ---------------------------------------------------------------------------
+
+function makeCandidateForHints(
+  path: string,
+  tags: string[] = [],
+  linkedNotePaths: string[] = [],
+): import("../../dist/vault/retrieve.js").TopicMapCandidate {
+  return makeCandidate({ path, title: path, tags, linkedNotePaths });
+}
+
+describe("generateBroadeningHints — confidence gating", () => {
+  it("returns empty array when confidence is high and coverage_gap is false", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], ["/vault/notes/note1.md"]);
+    const adjacent = makeCandidateForHints("/vault/topics/productivity.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai agents", "high", false, [{ candidate: selected, score: 30 }], [selected, adjacent]);
+    assert.deepEqual(hints, []);
+  });
+
+  it("returns hints when confidence is medium", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], []);
+    const adjacent = makeCandidateForHints("/vault/topics/productivity.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai agents", "medium", false, [{ candidate: selected, score: 10 }], [selected, adjacent]);
+    assert.ok(hints.length > 0, "expected hints for medium confidence");
+  });
+
+  it("returns hints when confidence is low", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
+    const adjacent = makeCandidateForHints("/vault/topics/agents.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai", "low", false, [{ candidate: selected, score: 2 }], [selected, adjacent]);
+    assert.ok(hints.length > 0, "expected hints for low confidence");
+  });
+
+  it("returns hints when confidence is high but coverage_gap is true", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
+    const adjacent = makeCandidateForHints("/vault/topics/agents.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai", "high", true, [{ candidate: selected, score: 30 }], [selected, adjacent]);
+    assert.ok(hints.length > 0, "coverage_gap overrides high-confidence suppression");
+  });
+});
+
+describe("generateBroadeningHints — shared-tag adjacency", () => {
+  it("includes topic maps that share tags with the selected result", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], []);
+    const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
+    const unrelated = makeCandidateForHints("/vault/topics/cooking.md", ["food"], []);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling, unrelated]);
+    const hintPaths = hints.map((h) => h.topic_path);
+    assert.ok(hintPaths.includes("/vault/topics/autonomous.md"), "shared-tag sibling must appear");
+    assert.ok(!hintPaths.includes("/vault/topics/cooking.md"), "unrelated topic must not appear");
+  });
+
+  it("excludes the selected result itself from hints", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected]);
+    assert.ok(!hints.map((h) => h.topic_path).includes("/vault/topics/ai.md"));
+  });
+
+  it("emits reason string describing the shared tags", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["agents"], []);
+    const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    assert.ok(hints.length > 0);
+    assert.ok(hints[0]?.reason.includes("agents"));
+  });
+
+  it("tag matching is case-insensitive", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["Agents"], []);
+    const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    assert.ok(hints.map((h) => h.topic_path).includes("/vault/topics/autonomous.md"));
+  });
+});
+
+describe("generateBroadeningHints — shared linked-note adjacency", () => {
+  it("includes topic maps that share a linked note with the selected result", () => {
+    const note = "/vault/notes/shared.md";
+    const selected = makeCandidateForHints("/vault/topics/ai.md", [], [note]);
+    const sibling = makeCandidateForHints("/vault/topics/automation.md", [], [note]);
+    const unrelated = makeCandidateForHints("/vault/topics/cooking.md", [], ["/vault/notes/food.md"]);
+    const hints = generateBroadeningHints("agents", "medium", false, [{ candidate: selected, score: 5 }], [selected, sibling, unrelated]);
+    const hintPaths = hints.map((h) => h.topic_path);
+    assert.ok(hintPaths.includes("/vault/topics/automation.md"));
+    assert.ok(!hintPaths.includes("/vault/topics/cooking.md"));
+  });
+
+  it("a topic with both shared tag and shared note appears only once", () => {
+    const note = "/vault/notes/shared.md";
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["agents"], [note]);
+    const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], [note]);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    assert.equal(hints.filter((h) => h.topic_path === "/vault/topics/autonomous.md").length, 1);
+  });
+});
+
+describe("generateBroadeningHints — bounded output and suggested queries", () => {
+  it("caps total hints at 5", () => {
+    const selected = makeCandidateForHints("/vault/topics/main.md", ["ai"], []);
+    const siblings = Array.from({ length: 10 }, (_, i) => makeCandidateForHints(`/vault/topics/s${i}.md`, ["ai"], []));
+    const hints = generateBroadeningHints("something", "medium", false, [{ candidate: selected, score: 5 }], [selected, ...siblings]);
+    assert.ok(hints.length <= 5);
+  });
+
+  it("returns empty array when no adjacent topics exist", () => {
+    const selected = makeCandidateForHints("/vault/topics/main.md", ["rare"], []);
+    const unrelated = makeCandidateForHints("/vault/topics/other.md", ["different"], []);
+    const hints = generateBroadeningHints("query", "medium", false, [{ candidate: selected, score: 5 }], [selected, unrelated]);
+    assert.deepEqual(hints, []);
+  });
+
+  it("output is deterministic across calls", () => {
+    const selected = makeCandidateForHints("/vault/topics/main.md", ["ai"], []);
+    const siblings = ["a", "b", "c"].map((x) => makeCandidateForHints(`/vault/topics/${x}.md`, ["ai"], []));
+    const all = [selected, ...siblings];
+    const h1 = generateBroadeningHints("q", "medium", false, [{ candidate: selected, score: 5 }], all).map((h) => h.topic_path);
+    const h2 = generateBroadeningHints("q", "medium", false, [{ candidate: selected, score: 5 }], all).map((h) => h.topic_path);
+    assert.deepEqual(h1, h2);
+  });
+
+  it("attaches suggested_query from tag vocabulary not in original query", () => {
+    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "autonomous-agents"], []);
+    const sibling = makeCandidateForHints("/vault/topics/automation.md", ["ai"], []);
+    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    const withQuery = hints.filter((h) => h.suggested_query !== undefined);
+    assert.ok(withQuery.length > 0, "expected suggested_query on at least one hint");
+    assert.ok(withQuery[0]?.suggested_query?.includes("autonomous"));
   });
 });
 
