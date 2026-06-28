@@ -28,6 +28,7 @@ const okvCommands = [
   "okv-visualize",
   "okv-bootstrap",
   "okv-ingest-check",
+  "okv-ask",
 ];
 
 function tempRoot(prefix: string): string {

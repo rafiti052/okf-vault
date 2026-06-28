@@ -75,11 +75,12 @@ describe("F8 command drift helpers (unit)", () => {
     assert.equal(resolveMarkdownAnchor(skillText, "nonexistent-mode"), false);
   });
 
-  it("listCommandStubs returns exactly seven OKV command stub files", () => {
+  it("listCommandStubs returns exactly eight OKV command stub files", () => {
     const stubs = listCommandStubs(commandsDir);
     assert.deepEqual(stubs, [...ALL_OKV_COMMAND_STUBS].sort());
-    assert.equal(stubs.length, 7);
+    assert.equal(stubs.length, 8);
     assert.deepEqual(stubs, [
+      "okv-ask.md",
       "okv-bootstrap.md",
       "okv-ingest-check.md",
       "okv-ingest.md",
@@ -191,12 +192,12 @@ describe("F8 command stub linkage (unit)", () => {
 });
 
 describe("F8 registry completeness (integration)", () => {
-  it("registry.md lists exactly seven /okv-* commands matching on-disk stubs", () => {
+  it("registry.md lists exactly eight /okv-* commands matching on-disk stubs", () => {
     const stubs = listCommandStubs(commandsDir);
     const rows = parseRegistryCommandRows(registryText);
 
-    assert.equal(stubs.length, 7);
-    assert.equal(rows.size, 7);
+    assert.equal(stubs.length, 8);
+    assert.equal(rows.size, 8);
     assert.deepEqual([...rows.keys()].sort(), [...OKV_COMMANDS].sort());
 
     for (const command of OKV_COMMANDS) {
@@ -279,9 +280,9 @@ describe("F8 drift failure simulation (integration)", () => {
     assert.match(broken[0], /ingest-wizard-removed/);
   });
 
-  it("canonical seven-stub contract passes full F8 linkage gate", () => {
+  it("canonical eight-stub contract passes full F8 linkage gate", () => {
     const stubs = listCommandStubs(commandsDir);
-    assert.equal(stubs.length, 7);
+    assert.equal(stubs.length, 8);
 
     for (const stubFileName of stubs) {
       const stubText = readStub(stubFileName);

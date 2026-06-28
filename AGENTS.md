@@ -14,7 +14,7 @@ Use this one-screen decision tree before reading the full skill. Map MCP and fil
 | Check vault health / contracts | `/okv-validate` | Contract, manifest, graph checks (Phase 1b) |
 | Inspect the knowledge graph | `/okv-visualize` | OKF visualizer (Phase 1b) |
 | Ingest then validate in one session | `/okv-ingest-check` | Composed pipeline (Phase 1b) |
-| Ask a natural-language question grounded in the vault | `/okv-ask` | Read-only retrieval with confidence and coverage signals (Phase 1c) |
+| Query the vault in natural language | `/okv-ask` | Read-only retrieve — surfaces ranked notes with confidence and coverage signals (Phase 1c) |
 
 Full command list with availability labels: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 

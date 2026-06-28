@@ -47,8 +47,8 @@ describe("managed artifact manifest (unit)", () => {
     const locals = localArtifacts(artifacts);
     const bins = globalBins(artifacts);
 
-    assert.equal(locals.length, 17);
-    assert.ok(locals.length >= 16);
+    assert.equal(locals.length, 19);
+    assert.ok(locals.length >= 18);
     assert.equal(bins.length, 2);
     assert.deepEqual(bins.map((artifact) => artifact.name).sort(), ["okf-vault", "okv"]);
     assert.ok(bins.find((artifact) => artifact.name === "okf-vault")?.tombstone);
@@ -73,7 +73,7 @@ describe("managed artifact manifest (unit)", () => {
       (artifact) => artifact.kind === "symlink",
     );
 
-    assert.equal(symlinks.length, 16);
+    assert.equal(symlinks.length, 18);
     for (const artifact of symlinks) {
       assert.equal(typeof artifact.target, "string");
       assert.ok(
@@ -83,11 +83,11 @@ describe("managed artifact manifest (unit)", () => {
     }
   });
 
-  it("includes all seven okv commands in Cursor and Claude entries", () => {
+  it("includes all eight okv commands in Cursor and Claude entries", () => {
     const projectRoot = createProjectRoot();
     const artifacts = listManagedArtifacts(projectRoot);
 
-    assert.equal(OKV_COMMANDS.length, 7);
+    assert.equal(OKV_COMMANDS.length, 8);
     for (const command of OKV_COMMANDS) {
       assert.ok(
         artifacts.some(

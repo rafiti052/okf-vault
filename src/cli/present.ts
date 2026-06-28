@@ -48,6 +48,7 @@ const SUCCESS_NEXT_BY_COMMAND: Record<string, string> = {
   doctor: "review any warnings or failures; rerun doctor after repairs.",
   help: "run a command with --human for an interactive summary or --json for agent output.",
   version: "run okv --help to see available commands.",
+  retrieve: "review results and refine your query if needed.",
 };
 
 const NEXT_BY_EXIT_CODE: Record<ExitCodeValue, string> = {
@@ -399,6 +400,101 @@ function errorSummary(error: CliError, context: PresenterContext): string {
   return lines.join("\n");
 }
 
+function retrieveSummary(data: JsonRecord, context: PresenterContext): string {
+  // Eval mode: data contains query_results array and metrics object.
+  if (Array.isArray(data.query_results)) {
+    const sections: string[] = [];
+
+    // Aggregate metrics summary.
+    const metrics = isRecord(data.metrics) ? data.metrics : {};
+    const hitRate =
+      typeof metrics.hit_rate === "number"
+        ? `${Math.round((metrics.hit_rate as number) * 100)}%`
+        : "N/A";
+    const metricsTable = createTable(["metric", "value"], context);
+    metricsTable.push(["total queries", normalizeCell(metrics.total_queries)]);
+    metricsTable.push(["hit rate", hitRate]);
+    metricsTable.push(["high confidence", normalizeCell(metrics.high_confidence_count)]);
+    metricsTable.push(["medium confidence", normalizeCell(metrics.medium_confidence_count)]);
+    metricsTable.push(["low confidence", normalizeCell(metrics.low_confidence_count)]);
+    metricsTable.push(["coverage gaps", normalizeCell(metrics.coverage_gap_count)]);
+    metricsTable.push(["median duration (ms)", normalizeCell(metrics.median_duration_ms)]);
+    sections.push(metricsTable.toString());
+
+    // Per-query outcomes table.
+    const queryResults = data.query_results as unknown[];
+    if (queryResults.length > 0) {
+      const perQueryTable = createTable(["query", "hit", "confidence", "gap"], context);
+      for (const qr of queryResults) {
+        if (!isRecord(qr)) continue;
+        const hitGlyph = qr.hit === true ? context.symbols.ok : context.symbols.fail;
+        const gapGlyph = qr.coverage_gap === true ? context.symbols.fail : context.symbols.ok;
+        const shortQuery = typeof qr.query === "string" ? qr.query.slice(0, 48) : "";
+        perQueryTable.push([shortQuery, hitGlyph, normalizeCell(qr.confidence), gapGlyph]);
+      }
+      sections.push(perQueryTable.toString());
+    }
+
+    return sections.join("\n\n");
+  }
+
+  // Query mode: coverage gap.
+  if (data.coverage_gap === true) {
+    const lines = ["No strong topic match found for this query."];
+    if (Array.isArray(data.broadening_hints) && data.broadening_hints.length > 0) {
+      lines.push("Broadening hints:");
+      for (const hint of data.broadening_hints as unknown[]) {
+        if (!isRecord(hint)) continue;
+        const suggestion =
+          typeof hint.suggested_query === "string" ? ` → try: "${hint.suggested_query}"` : "";
+        lines.push(`  ${normalizeCell(hint.reason)}${suggestion}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  // Query mode: normal result.
+  const sections: string[] = [];
+  const topResult = Array.isArray(data.results) && data.results.length > 0
+    ? data.results[0]
+    : undefined;
+
+  if (isRecord(topResult)) {
+    const summaryTable = createTable(["field", "value"], context);
+    summaryTable.push(["topic", normalizeCell(topResult.title)]);
+    summaryTable.push(["confidence", normalizeCell(data.confidence)]);
+    summaryTable.push(["linked notes", normalizeCell(
+      Array.isArray(topResult.linked_notes) ? topResult.linked_notes.length : 0,
+    )]);
+    if (typeof topResult.excerpt === "string" && topResult.excerpt.length > 0) {
+      summaryTable.push(["excerpt", topResult.excerpt.slice(0, 120)]);
+    }
+    sections.push(summaryTable.toString());
+  } else {
+    sections.push(keyValueSummary(data, context));
+  }
+
+  // Broadening hints when confidence is not high.
+  if (
+    data.confidence !== "high" &&
+    Array.isArray(data.broadening_hints) &&
+    data.broadening_hints.length > 0
+  ) {
+    const hints = data.broadening_hints as unknown[];
+    const hintsTable = createTable(["hint", "suggested query"], context);
+    for (const hint of hints) {
+      if (!isRecord(hint)) continue;
+      hintsTable.push([
+        normalizeCell(hint.reason),
+        normalizeCell(hint.suggested_query ?? ""),
+      ]);
+    }
+    sections.push(hintsTable.toString());
+  }
+
+  return sections.join("\n\n");
+}
+
 function bodyFor(outcome: DispatchOutcome, context: PresenterContext): string {
   const result = outcome.result;
   if (result === undefined) {
@@ -430,6 +526,9 @@ function bodyFor(outcome: DispatchOutcome, context: PresenterContext): string {
   }
   if (result.command === "inspect") {
     return keyValueSummary(data, context);
+  }
+  if (result.command === "retrieve") {
+    return retrieveSummary(data, context);
   }
   return keyValueSummary(data, context);
 }

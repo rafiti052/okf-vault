@@ -1,0 +1,62 @@
+[
+  {
+    "query": "business strategy and competitive positioning",
+    "expected_topic_paths": ["topics/strategy.md"],
+    "note": "EN: core strategy query — must match strategy topic map"
+  },
+  {
+    "query": "revenue growth and market expansion planning",
+    "expected_topic_paths": ["topics/strategy.md"],
+    "note": "EN: growth vocabulary overlaps strategy tags"
+  },
+  {
+    "query": "software architecture and system design decisions",
+    "expected_topic_paths": ["topics/engineering.md"],
+    "note": "EN: architecture query targets engineering topic map"
+  },
+  {
+    "query": "coding standards and technical debt management",
+    "expected_topic_paths": ["topics/engineering.md"],
+    "note": "EN: engineering practices vocabulary"
+  },
+  {
+    "query": "gestao de produto e roadmap de funcionalidades",
+    "expected_topic_paths": ["topics/produto.md"],
+    "note": "PT: product management query — must match produto topic map"
+  },
+  {
+    "query": "priorizacao de features e metricas de produto",
+    "expected_topic_paths": ["topics/produto.md"],
+    "note": "PT: product prioritization in Portuguese"
+  },
+  {
+    "query": "pipeline de dados e analytics de negocios",
+    "expected_topic_paths": ["topics/dados.md"],
+    "note": "PT: data pipeline query — must match dados topic map"
+  },
+  {
+    "query": "analise de dados e inteligencia de negocios",
+    "expected_topic_paths": ["topics/dados.md"],
+    "note": "PT: data analysis vocabulary in Portuguese"
+  },
+  {
+    "query": "team leadership and organizational culture",
+    "expected_topic_paths": ["topics/leadership.md"],
+    "note": "EN: leadership principles query"
+  },
+  {
+    "query": "building high performing teams and management principles",
+    "expected_topic_paths": ["topics/leadership.md"],
+    "note": "EN: team management vocabulary"
+  },
+  {
+    "query": "financial planning and budget management",
+    "expected_topic_paths": ["topics/finance.md"],
+    "note": "EN: finance and budget query"
+  },
+  {
+    "query": "investment analysis and cash flow optimization",
+    "expected_topic_paths": ["topics/finance.md"],
+    "note": "EN: investment vocabulary — must match finance topic map"
+  }
+]

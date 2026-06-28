@@ -95,6 +95,7 @@ describe("diagnostics engine", () => {
         "okv-visualize",
         "okv-bootstrap",
         "okv-ingest-check",
+        "okv-ask",
       ];
 
       fs.mkdirSync(join(canonicalSkill, "commands"), { recursive: true });

@@ -68,11 +68,11 @@ describe("Phase 1b pipeline stub helpers (unit)", () => {
 });
 
 describe("Phase 1b pipeline command stubs (unit)", () => {
-  it("all seven OKV command stub files exist in canonical commands/", () => {
+  it("all eight OKV command stub files exist in canonical commands/", () => {
     for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       assert.ok(existsSync(stubPath(stubFileName)), `missing ${stubFileName}`);
     }
-    assert.equal(ALL_OKV_COMMAND_STUBS.length, 7);
+    assert.equal(ALL_OKV_COMMAND_STUBS.length, 8);
   });
 
   for (const stubFileName of PHASE_1B_PIPELINE_COMMAND_STUBS) {
@@ -138,7 +138,7 @@ describe("Phase 1b pipeline command stubs (integration)", () => {
   const rows = parseRegistryCommandRows(registryText);
   const pipelineLinks = parsePipelineRegistrySectionLinks(registryText);
 
-  it("registry.md lists all seven commands with consistent /okv-* naming", () => {
+  it("registry.md lists all eight commands with consistent /okv-* naming", () => {
     const slugs = [...rows.keys()].sort();
     assert.deepEqual(slugs, [...OKV_COMMANDS].sort());
     assert.equal(usesVaultPrefixOnly(registryText), true);

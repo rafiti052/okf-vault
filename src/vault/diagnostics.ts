@@ -189,6 +189,7 @@ export function checkRules(projectRoot: string, fsImpl: typeof fs = fs): Diagnos
     "okv-visualize",
     "okv-bootstrap",
     "okv-ingest-check",
+    "okv-ask",
   ];
 
   for (const command of okvCommands) {

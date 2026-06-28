@@ -231,8 +231,8 @@ describe("runtime adapter symlinks (unit)", () => {
     assert.equal(existsSync(join(root, ".cursor", "rules", "okf-vault.mdc")), false);
   });
 
-  it("all seven OKV command stubs resolve through Cursor and Claude adapter paths", () => {
-    assert.equal(ALL_OKV_COMMAND_STUBS.length, 7);
+  it("all eight OKV command stubs resolve through Cursor and Claude adapter paths", () => {
+    assert.equal(ALL_OKV_COMMAND_STUBS.length, 8);
     for (const stubFileName of ALL_OKV_COMMAND_STUBS) {
       const cursorResult = assertAdapterStubResolves(cursorDir, canonicalDir, stubFileName);
       assert.equal(cursorResult.ok, true, cursorResult.ok ? "" : cursorResult.message);
@@ -305,9 +305,9 @@ describe("runtime adapter symlinks (unit)", () => {
 });
 
 describe("per-command discoverable unit contract (unit)", () => {
-  it("exports exactly seven OKV command slugs for adapter scripts", () => {
+  it("exports exactly eight OKV command slugs for adapter scripts", () => {
     assert.deepEqual(OKV_COMMANDS, HARNESS_OKV_COMMANDS);
-    assert.equal(OKV_COMMANDS.length, 7);
+    assert.equal(OKV_COMMANDS.length, 8);
     for (const command of OKV_COMMANDS) {
       assert.match(command, /^okv-/);
     }
@@ -321,14 +321,14 @@ describe("foreign-repo init (integration)", () => {
     rmSync(tempProjectRoot, { recursive: true, force: true });
   });
 
-  it("linkRuntimeAdapters against a foreign --project-root resolves all 14 per-command links into the clone", () => {
+  it("linkRuntimeAdapters against a foreign --project-root resolves all 16 per-command links into the clone", () => {
     const result = linkRuntimeAdapters({
       projectRoot: tempProjectRoot,
       canonicalSkillRoot: canonicalSkill,
       quiet: true,
     });
-    assert.equal(result.linked.length + result.skipped.length, 16);
-    assert.equal(countManagedSymlinks(tempProjectRoot), 16);
+    assert.equal(result.linked.length + result.skipped.length, 18);
+    assert.equal(countManagedSymlinks(tempProjectRoot), 18);
     const verification = verifyRuntimeAdapters(tempProjectRoot, {
       canonicalSkillRoot: canonicalSkill,
     });
@@ -362,7 +362,7 @@ describe("foreign-repo init (integration)", () => {
       quiet: true,
     });
     assert.equal(second.linked.length, 0);
-    assert.equal(second.skipped.length, 16);
+    assert.equal(second.skipped.length, 18);
   });
 });
 
@@ -392,7 +392,7 @@ describe("setup adapter installation (integration)", () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.status, "ok");
       assert.equal(payload.command, "link-runtime-adapters");
-      assert.equal(payload.data.linked.length, 16);
+      assert.equal(payload.data.linked.length, 18);
       assert.ok(
         payload.data.removed.some((path) =>
           path.endsWith(join(".cursor", "skills", "vault-ingest", "SKILL.md")),
@@ -426,7 +426,7 @@ describe("setup adapter installation (integration)", () => {
       assert.equal(payload.status, "ok");
       assert.equal(payload.command, "setup");
       assert.equal(payload.data.adapters_verified, true);
-      assert.equal(payload.data.linked.length, 16);
+      assert.equal(payload.data.linked.length, 18);
       assert.ok(
         payload.data.removed.some((path) =>
           path.endsWith(join(".cursor", "skills", "vault-ingest", "SKILL.md")),

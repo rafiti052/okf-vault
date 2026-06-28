@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
@@ -1120,12 +1121,243 @@ export function resolveVaultRoot(
 }
 
 // ---------------------------------------------------------------------------
+// Eval runner — Task 13
+// ---------------------------------------------------------------------------
+
+/**
+ * Default path to the bundled eval fixture file.
+ * Resolves correctly from both `src/` (ts-node / vitest) and `dist/` (compiled).
+ */
+const DEFAULT_EVAL_FIXTURES_PATH = fileURLToPath(
+  new URL("../../test/fixtures/retrieve-eval/eval-cases.json", import.meta.url),
+);
+
+/**
+ * Load eval fixture cases from a JSON file.
+ *
+ * Validates that the parsed value is an array and that each entry has a
+ * non-empty `query` string and a non-empty `expected_topic_paths` array.
+ * Throws a descriptive Error when any invariant is violated.
+ *
+ * @param fixturesPath - Absolute path to the JSON fixture file.
+ * @returns Parsed array of RetrieveEvalCase objects.
+ */
+export function loadEvalFixtures(fixturesPath: string): RetrieveEvalCase[] {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(fixturesPath, "utf8");
+  } catch (err) {
+    throw new Error(
+      `loadEvalFixtures: could not read fixture file at ${fixturesPath}: ${String(err)}`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `loadEvalFixtures: invalid JSON in fixture file at ${fixturesPath}: ${String(err)}`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `loadEvalFixtures: fixture file must contain a JSON array, got ${typeof parsed}`,
+    );
+  }
+
+  const cases: RetrieveEvalCase[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const entry = parsed[i] as Record<string, unknown>;
+    if (typeof entry.query !== "string" || entry.query.trim() === "") {
+      throw new Error(
+        `loadEvalFixtures: entry[${i}].query must be a non-empty string`,
+      );
+    }
+    if (
+      !Array.isArray(entry.expected_topic_paths) ||
+      entry.expected_topic_paths.length === 0
+    ) {
+      throw new Error(
+        `loadEvalFixtures: entry[${i}].expected_topic_paths must be a non-empty array`,
+      );
+    }
+    const evalCase: RetrieveEvalCase = {
+      query: entry.query as string,
+      expected_topic_paths: entry.expected_topic_paths as string[],
+    };
+    if (typeof entry.note === "string") {
+      evalCase.note = entry.note;
+    }
+    cases.push(evalCase);
+  }
+
+  return cases;
+}
+
+/**
+ * Compute the median of an array of numbers.
+ * Returns 0 for an empty array.
+ */
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[mid] as number)
+    : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
+}
+
+/**
+ * Normalize a topic path for comparison.
+ * Strips the vault root prefix and leading separator to produce a
+ * vault-relative path (e.g. "topics/strategy.md").
+ */
+function normalizePath(absPath: string, vaultRoot: string): string {
+  // Try to make relative to vaultRoot first.
+  const rel = relative(vaultRoot, absPath);
+  // If the path is already relative (no leading ../) use it; otherwise basename.
+  if (!rel.startsWith("..")) {
+    return rel;
+  }
+  return basename(absPath);
+}
+
+/**
+ * Run the full eval harness against a vault root.
+ *
+ * For each fixture case:
+ * 1. Load and parse topic candidates from the vault.
+ * 2. Call buildRetrieveResponse to score and rank candidates.
+ * 3. Compare the top result's vault-relative path against expected_topic_paths.
+ * 4. Record per-query outcome with timing.
+ *
+ * Assembles aggregate metrics and returns a RetrieveEvalReport.
+ *
+ * @param vaultRoot - Absolute path to the vault root to evaluate.
+ * @param fixtures  - Array of eval cases to run.
+ * @returns Fully-shaped RetrieveEvalReport.
+ */
+export function runRetrieveEval(
+  vaultRoot: string,
+  fixtures: RetrieveEvalCase[],
+): RetrieveEvalReport {
+  const runAt = new Date().toISOString();
+
+  // Load candidates once; they are the same for every query.
+  const rawFiles = loadTopicCandidateFiles(vaultRoot);
+  const allCandidates = rawFiles.map(parseTopicCandidateFile);
+
+  const queryResults: RetrieveEvalQueryResult[] = [];
+
+  for (const fixture of fixtures) {
+    const start = Date.now();
+    const response = buildRetrieveResponse(fixture.query, vaultRoot, allCandidates);
+    const durationMs = Date.now() - start;
+
+    const topResult = response.results[0];
+    const topResultPath = topResult !== undefined ? topResult.path : null;
+    const topScore = topResult !== undefined ? topResult.score : 0;
+
+    // Normalize top result path to vault-relative form.
+    const normalizedTopPath =
+      topResultPath !== null ? normalizePath(topResultPath, vaultRoot) : null;
+
+    // Check if any expected path matches the top result.
+    const hit =
+      normalizedTopPath !== null &&
+      fixture.expected_topic_paths.some((expected) => {
+        const normalizedExpected = expected.startsWith("/")
+          ? normalizePath(expected, vaultRoot)
+          : expected;
+        return (
+          normalizedTopPath === normalizedExpected ||
+          basename(normalizedTopPath) === basename(normalizedExpected)
+        );
+      });
+
+    queryResults.push({
+      query: fixture.query,
+      top_result_path: topResultPath,
+      confidence: response.confidence,
+      hit,
+      coverage_gap: response.coverage_gap,
+      top_score: topScore,
+      duration_ms: durationMs,
+    });
+  }
+
+  // Aggregate metrics.
+  const total = queryResults.length;
+  const hitCount = queryResults.filter((r) => r.hit).length;
+  const highCount = queryResults.filter((r) => r.confidence === "high").length;
+  const mediumCount = queryResults.filter((r) => r.confidence === "medium").length;
+  const lowCount = queryResults.filter((r) => r.confidence === "low").length;
+  const gapCount = queryResults.filter((r) => r.coverage_gap).length;
+  const medianDuration = median(queryResults.map((r) => r.duration_ms));
+
+  const metrics: RetrieveEvalMetrics = {
+    total_queries: total,
+    hit_count: hitCount,
+    hit_rate: total > 0 ? hitCount / total : 0,
+    high_confidence_count: highCount,
+    medium_confidence_count: mediumCount,
+    low_confidence_count: lowCount,
+    coverage_gap_count: gapCount,
+    median_duration_ms: medianDuration,
+  };
+
+  return {
+    schema_version: RETRIEVE_EVAL_SCHEMA_VERSION,
+    vault_root: vaultRoot,
+    run_at: runAt,
+    query_results: queryResults,
+    metrics,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Eval thresholds — Task 14
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimum acceptable hit rate for the eval harness.
+ * A value of 0.8 requires at least 80% of queries to return the expected
+ * topic map as the top result.
+ */
+export const EVAL_THRESHOLDS = {
+  min_hit_rate: 0.8,
+} as const;
+
+/**
+ * Check whether the eval metrics satisfy all defined thresholds.
+ *
+ * @param metrics - Aggregate metrics from a RetrieveEvalReport.
+ * @returns An object with `pass` (boolean) and `reasons` (array of failure strings).
+ */
+export function checkEvalThresholds(
+  metrics: RetrieveEvalMetrics,
+): { pass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+
+  if (metrics.hit_rate < EVAL_THRESHOLDS.min_hit_rate) {
+    reasons.push(
+      `hit_rate ${metrics.hit_rate.toFixed(2)} below threshold ${EVAL_THRESHOLDS.min_hit_rate}`,
+    );
+  }
+
+  return { pass: reasons.length === 0, reasons };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
 export function handleRetrieve(
   args: string[],
   getCwd: () => string = () => process.cwd(),
+  fixturesPath: string = DEFAULT_EVAL_FIXTURES_PATH,
 ): DispatchOutcome {
   const evalFlag = args.includes("--eval");
   const positional = args.filter((a) => !a.startsWith("--"));
@@ -1133,14 +1365,15 @@ export function handleRetrieve(
   if (evalFlag) {
     const resolution = resolveVaultRoot(positional, getCwd);
     if (!resolution.ok) return resolution.outcome;
-    // Placeholder: eval execution implemented in tasks 13–14
+
+    const { vaultRoot } = resolution;
+    const fixtures = loadEvalFixtures(fixturesPath);
+    const report = runRetrieveEval(vaultRoot, fixtures);
+    const { pass } = checkEvalThresholds(report.metrics);
+
     return {
-      exitCode: ExitCode.USAGE,
-      result: failure(
-        "retrieve",
-        RetrieveErrorCode.NOT_YET_IMPLEMENTED,
-        "Eval mode is not yet implemented.",
-      ),
+      exitCode: pass ? ExitCode.SUCCESS : ExitCode.VALIDATION,
+      result: success("retrieve", report as unknown as Record<string, unknown>),
     };
   }
 
