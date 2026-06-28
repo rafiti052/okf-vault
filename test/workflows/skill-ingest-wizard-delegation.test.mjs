@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseIngestRunInput } from "../../dist/vault/ingestion.js";
 import {
+  buildWizardHandoffInput,
   containsIngestionLoopPhaseOrder,
   documentsIngestRunInputHandoff,
   documentsNotInitializedRoutesAway,
@@ -12,6 +13,7 @@ import {
   extractSkillModeSection,
   INGEST_WIZARD_STEPS,
   skillRoot,
+  validateYoutubeWizardHandoff,
   verifyHappyPathOrdering,
 } from "./workflow-contract.mjs";
 
@@ -116,6 +118,22 @@ describe("skill ingest wizard delegation (integration)", () => {
     assert.equal(handoff.run_id, "run-1");
     assert.equal(handoff.sources.length, 1);
     assert.equal(handoff.sources[0]?.kind, "local");
+  });
+
+  it("youtube wizard handoff passes contract shape and parseIngestRunInput()", () => {
+    const raw = buildWizardHandoffInput("knowledge", "run-youtube-delegate", {
+      kind: "youtube",
+      locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      content_type: "text/vtt",
+    });
+
+    const shape = validateYoutubeWizardHandoff(raw);
+    assert.equal(shape.ok, true);
+
+    const parsed = parseIngestRunInput(raw);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+    assert.equal(parsed.sources[0]?.content_type, "text/vtt");
+    assert.match(String(parsed.sources[0]?.locator), /dQw4w9WgXcQ/);
   });
 
   it("ingestion-loop happy-path ordering still passes after SKILL.md wizard pointer addition", () => {

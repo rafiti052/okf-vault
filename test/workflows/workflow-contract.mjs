@@ -631,6 +631,155 @@ export function validateYoutubeTimestamps(envelope, options = {}) {
 }
 
 /**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeTranscriptUnavailableFailure(text) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("transcript unavailable") &&
+    /stop before.*confirm_source|before\s+`confirm_source`/i.test(text) &&
+    documentsIngestionFailureActions(text) &&
+    lower.includes("local file")
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function documentsYoutubeAlreadyProcessedSemantics(text) {
+  return (
+    text.includes("source_already_processed") &&
+    /manifest unchanged/i.test(text) &&
+    /already_processed/i.test(text)
+  );
+}
+
+/**
+ * @param {unknown} handoff
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function validateYoutubeWizardHandoff(handoff) {
+  if (handoff === null || typeof handoff !== "object" || Array.isArray(handoff)) {
+    return { ok: false, message: "Handoff must be an object." };
+  }
+
+  const record = /** @type {Record<string, unknown>} */ (handoff);
+  for (const field of INGEST_RUN_INPUT_FIELDS) {
+    if (record[field] === undefined || record[field] === "") {
+      return { ok: false, message: `Missing handoff field ${field}.` };
+    }
+  }
+
+  const sources = record.sources;
+  if (!Array.isArray(sources) || sources.length !== 1) {
+    return { ok: false, message: "Handoff sources must be a single-element array." };
+  }
+
+  const source = /** @type {Record<string, unknown>} */ (sources[0]);
+  for (const field of INGEST_SOURCE_INPUT_FIELDS) {
+    if (source[field] === undefined || source[field] === "") {
+      return { ok: false, message: `Missing pending_source field ${field}.` };
+    }
+  }
+
+  if (source.kind !== "youtube") {
+    return { ok: false, message: "Expected kind youtube." };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Simulated progress events when manifest inspect reports an unchanged YouTube source.
+ * @param {string} runId
+ * @param {string} sourceKey
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function simulateYoutubeAlreadyProcessedPath(runId, sourceKey) {
+  return [
+    { event: "run_started", run_id: runId, phase: "preflight", status: "ok", duration_ms: 0 },
+    {
+      event: "preflight_passed",
+      run_id: runId,
+      phase: "preflight",
+      status: "ok",
+      duration_ms: 10,
+    },
+    {
+      event: "source_acquired",
+      run_id: runId,
+      phase: "acquire",
+      source_key: sourceKey,
+      status: "ok",
+      duration_ms: 100,
+    },
+    {
+      event: "source_already_processed",
+      run_id: runId,
+      phase: "inspect",
+      source_key: sourceKey,
+      status: "ok",
+      duration_ms: 50,
+    },
+    { event: "run_completed", run_id: runId, phase: "finalize", status: "ok", duration_ms: 160 },
+  ];
+}
+
+/**
+ * Wizard acquisition failure for unusable YouTube transcript evidence (pre-delegation).
+ * @param {string} runId
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function simulateYoutubeTranscriptUnavailableWizardFailure(runId) {
+  return [
+    {
+      event: "run_failed",
+      run_id: runId,
+      phase: "acquire",
+      status: "error",
+      error_code: "TRANSCRIPT_UNAVAILABLE",
+      duration_ms: 0,
+    },
+  ];
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} events
+ * @returns {boolean}
+ */
+export function verifyYoutubeAlreadyProcessedOrdering(events) {
+  const names = events.map((entry) => entry.event);
+  const acquired = names.indexOf("source_acquired");
+  const already = names.indexOf("source_already_processed");
+  const conversion = names.indexOf("conversion_started");
+  const committed = names.indexOf("source_committed");
+  const completed = names.indexOf("run_completed");
+
+  return (
+    acquired >= 0 &&
+    already > acquired &&
+    conversion === -1 &&
+    committed === -1 &&
+    completed > already
+  );
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} events
+ * @returns {boolean}
+ */
+export function verifyTranscriptUnavailableStopsBeforeConversion(events) {
+  const names = events.map((entry) => entry.event);
+  return (
+    !names.includes("conversion_started") &&
+    !names.includes("source_committed") &&
+    !names.includes("source_acquired")
+  );
+}
+
+/**
  * @param {Record<string, unknown>} context
  * @returns {{ ok: true; event?: Record<string, unknown> } | { ok: false; code: string; message: string }}
  */

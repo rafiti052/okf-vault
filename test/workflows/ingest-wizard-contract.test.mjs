@@ -338,6 +338,23 @@ describe("ingest-wizard contract integration", () => {
     assert.equal(parsed.sources[0]?.locator, "drive:integration-doc");
     assert.equal(parsed.sources[0]?.content_type, "application/vnd.google-apps.presentation");
   });
+
+  it("wizard handoff with youtube pending_source matches delegate_ingest contract fields", () => {
+    const wizardText = readFileSync(ingestWizardPath, "utf8");
+    assert.match(wizardText, /`kind`.*`youtube`/s);
+    assert.match(wizardText, /video.*default|default.*video/i);
+
+    const handoff = buildWizardHandoffInput("knowledge", "run-integration-youtube", {
+      kind: "youtube",
+      locator: "https://youtu.be/dQw4w9WgXcQ",
+      content_type: "text/vtt",
+    });
+
+    const parsed = parseIngestRunInput(handoff);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+    assert.equal(parsed.sources[0]?.content_type, "text/vtt");
+    assert.match(String(parsed.sources[0]?.locator), /dQw4w9WgXcQ/);
+  });
 });
 
 describe("ingest-wizard contract helpers (unit)", () => {
