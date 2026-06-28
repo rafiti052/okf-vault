@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -661,5 +661,312 @@ describe("parseTopicCandidateFile — integration with loadTopicCandidateFiles",
       assert.ok(typeof c.prose === "string");
       assert.ok(Array.isArray(c.linkedNotePaths));
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// tokenize — unit tests (Task 06)
+// ---------------------------------------------------------------------------
+
+describe("tokenize", () => {
+  it("lowercases tokens", () => {
+    const tokens = tokenize("Agent Workflows");
+    assert.deepEqual(tokens, ["agent", "workflows"]);
+  });
+
+  it("splits on whitespace and punctuation", () => {
+    const tokens = tokenize("agents, automation; workflows");
+    assert.deepEqual(tokens, ["agents", "automation", "workflows"]);
+  });
+
+  it("strips diacritics (Portuguese normalization)", () => {
+    // 'automação' -> 'automacao', 'estratégia' -> 'estrategia'
+    const tokens = tokenize("automação estratégia");
+    assert.deepEqual(tokens, ["automacao", "estrategia"]);
+  });
+
+  it("strips short noise tokens (length < 2)", () => {
+    const tokens = tokenize("a agent b");
+    // 'a' and 'b' are length 1, should be filtered
+    assert.deepEqual(tokens, ["agent"]);
+  });
+
+  it("returns empty array for empty input", () => {
+    assert.deepEqual(tokenize(""), []);
+  });
+
+  it("handles mixed Portuguese and English content", () => {
+    const tokens = tokenize("agentes e agents");
+    // 'e' is length 1 and filtered
+    assert.deepEqual(tokens, ["agentes", "agents"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scoreCandidate — unit tests (Task 06)
+// ---------------------------------------------------------------------------
+
+/** Build a minimal TopicMapCandidate for scorer unit tests. */
+function makeCandidate(
+  overrides: Partial<import("../../dist/vault/retrieve.js").TopicMapCandidate>,
+): import("../../dist/vault/retrieve.js").TopicMapCandidate {
+  return {
+    path: "/fake/vault/topics/test.md",
+    title: "",
+    tags: [],
+    description: "",
+    prose: "",
+    linkedNotePaths: [],
+    ...overrides,
+  };
+}
+
+describe("scoreCandidate — basic behavior", () => {
+  it("returns 0 for empty query", () => {
+    const candidate = makeCandidate({ title: "Agent Workflows", prose: "Agents are useful." });
+    assert.equal(scoreCandidate("", candidate), 0);
+  });
+
+  it("returns 0 when no query tokens match any field", () => {
+    const candidate = makeCandidate({ title: "Agent Workflows", prose: "Some content here." });
+    assert.equal(scoreCandidate("database schema", candidate), 0);
+  });
+
+  it("returns a positive score when a query token matches the title", () => {
+    const candidate = makeCandidate({ title: "Agent Workflows" });
+    assert.ok(scoreCandidate("agent", candidate) > 0);
+  });
+
+  it("produces deterministic scores for identical inputs", () => {
+    const candidate = makeCandidate({
+      title: "Agent Workflows",
+      tags: ["agents", "automation"],
+      description: "Notes about agents.",
+      prose: "Agents automate processes.",
+    });
+    const score1 = scoreCandidate("agents automation", candidate);
+    const score2 = scoreCandidate("agents automation", candidate);
+    assert.equal(score1, score2);
+  });
+});
+
+describe("scoreCandidate — field weight ordering", () => {
+  it("title match outscores an equivalent prose-only match", () => {
+    // candidate A has the query term in the title
+    const titleCandidate = makeCandidate({ title: "Agents", prose: "Other content." });
+    // candidate B has the query term only in prose
+    const proseCandidate = makeCandidate({ title: "Other Topic", prose: "Agents here." });
+
+    const titleScore = scoreCandidate("agents", titleCandidate);
+    const proseScore = scoreCandidate("agents", proseCandidate);
+
+    assert.ok(titleScore > proseScore, `Title score ${titleScore} should exceed prose score ${proseScore}`);
+  });
+
+  it("tag match outscores an equivalent prose-only match", () => {
+    const tagCandidate = makeCandidate({ tags: ["agents"], prose: "Other content." });
+    const proseCandidate = makeCandidate({ tags: [], prose: "Agents here." });
+
+    const tagScore = scoreCandidate("agents", tagCandidate);
+    const proseScore = scoreCandidate("agents", proseCandidate);
+
+    assert.ok(tagScore > proseScore, `Tag score ${tagScore} should exceed prose score ${proseScore}`);
+  });
+
+  it("description match outscores an equivalent prose-only match", () => {
+    const descCandidate = makeCandidate({ description: "Notes about agents.", prose: "Other content." });
+    const proseCandidate = makeCandidate({ description: "", prose: "Notes about agents." });
+
+    const descScore = scoreCandidate("agents", descCandidate);
+    const proseScore = scoreCandidate("agents", proseCandidate);
+
+    assert.ok(descScore > proseScore, `Description score ${descScore} should exceed prose score ${proseScore}`);
+  });
+
+  it("title + tag + description + prose match accumulates contributions from all fields", () => {
+    const allFields = makeCandidate({
+      title: "Agent",
+      tags: ["agent"],
+      description: "About agent systems.",
+      prose: "Agent workflows explained.",
+    });
+    const proseOnly = makeCandidate({
+      title: "",
+      tags: [],
+      description: "",
+      prose: "Agent workflows explained.",
+    });
+
+    assert.ok(
+      scoreCandidate("agent", allFields) > scoreCandidate("agent", proseOnly),
+      "all-fields candidate should outscore prose-only candidate",
+    );
+  });
+});
+
+describe("scoreCandidate — bilingual normalization", () => {
+  it("matches diacritic-stripped query tokens against accented candidate fields", () => {
+    // query: 'automacao' (no accent); candidate tag has 'automação' (with accent)
+    const candidate = makeCandidate({ tags: ["automação"] });
+    // After normalization both become 'automacao'
+    assert.ok(scoreCandidate("automacao", candidate) > 0);
+  });
+
+  it("matches accented query tokens against accented candidate fields after normalization", () => {
+    const candidate = makeCandidate({ tags: ["estratégia"] });
+    // Both normalize to 'estrategia'
+    assert.ok(scoreCandidate("estratégia", candidate) > 0);
+  });
+
+  it("bilingual overlap scores consistently regardless of token language", () => {
+    const candidate = makeCandidate({
+      tags: ["agentes", "agents"],
+      description: "Tópico sobre agentes de IA e agent workflows.",
+    });
+    // Portuguese query
+    const ptScore = scoreCandidate("agentes", candidate);
+    // English query
+    const enScore = scoreCandidate("agents", candidate);
+
+    // Both should be positive (both tokens exist in the candidate)
+    assert.ok(ptScore > 0, "Portuguese token should score positively");
+    assert.ok(enScore > 0, "English token should score positively");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rankCandidates — unit tests (Task 06)
+// ---------------------------------------------------------------------------
+
+describe("rankCandidates", () => {
+  it("returns candidates sorted by score descending", () => {
+    const strong = makeCandidate({
+      path: "/fake/vault/topics/agents.md",
+      title: "Agent Workflows",
+      tags: ["agents", "automation"],
+      description: "Notes on agents.",
+      prose: "Agents automate tasks.",
+    });
+    const weak = makeCandidate({
+      path: "/fake/vault/topics/strategy.md",
+      title: "Strategy",
+      tags: ["planning"],
+      description: "Notes on strategy.",
+      prose: "Agents are rarely mentioned here.",
+    });
+    const unrelated = makeCandidate({
+      path: "/fake/vault/topics/databases.md",
+      title: "Databases",
+      tags: ["sql"],
+      description: "Database notes.",
+      prose: "SQL and schema design.",
+    });
+
+    const ranked = rankCandidates("agents automation", [unrelated, weak, strong]);
+    assert.equal(ranked.length, 3);
+    // strong candidate should be ranked first
+    assert.ok(ranked[0]!.candidate.path.endsWith("agents.md"));
+    assert.ok(ranked[0]!.score > ranked[1]!.score);
+  });
+
+  it("returns empty array for empty candidates list", () => {
+    const ranked = rankCandidates("agents", []);
+    assert.deepEqual(ranked, []);
+  });
+
+  it("is deterministic — same ranking on repeated calls", () => {
+    const candidates = [
+      makeCandidate({ path: "/a.md", title: "Alpha", prose: "Agent workflows." }),
+      makeCandidate({ path: "/b.md", title: "Beta", prose: "Agents and automation." }),
+      makeCandidate({ path: "/c.md", title: "Gamma", prose: "Strategy planning." }),
+    ];
+
+    const first = rankCandidates("agents", candidates).map((r) => r.candidate.path);
+    const second = rankCandidates("agents", candidates).map((r) => r.candidate.path);
+    assert.deepEqual(first, second);
+  });
+
+  it("breaks score ties by path ascending for stable ordering", () => {
+    // Both candidates have the exact same content except path
+    const base = { title: "Agent", tags: ["agent"], description: "", prose: "" };
+    const c1 = makeCandidate({ ...base, path: "/z.md" });
+    const c2 = makeCandidate({ ...base, path: "/a.md" });
+
+    const ranked = rankCandidates("agent", [c1, c2]);
+    // a.md should come before z.md (ascending path sort for ties)
+    assert.equal(ranked[0]!.candidate.path, "/a.md");
+    assert.equal(ranked[1]!.candidate.path, "/z.md");
+  });
+
+  it("zero-score candidates appear after positive-score candidates", () => {
+    const match = makeCandidate({ path: "/match.md", title: "Agents" });
+    const noMatch = makeCandidate({ path: "/nomatch.md", title: "Databases" });
+
+    const ranked = rankCandidates("agents", [noMatch, match]);
+    assert.equal(ranked[0]!.candidate.path, "/match.md");
+    assert.equal(ranked[0]!.score, 10); // title weight
+    assert.equal(ranked[1]!.score, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scoreCandidate — integration: realistic ranking (Task 06)
+// ---------------------------------------------------------------------------
+
+describe("scoreCandidate — integration: realistic topic ranking", () => {
+  it("ranks the expected agent-workflows topic above an unrelated strategy topic", () => {
+    const agentTopic = makeCandidate({
+      path: "/vault/topics/agents.md",
+      title: "Agent Workflows",
+      tags: ["agents", "automation", "agentic"],
+      description: "Notes about agentic systems, LLM workflows, and automation.",
+      prose:
+        "This topic covers AI agent workflows, orchestration patterns, tool use, and autonomous task execution. " +
+        "Topics include multi-agent coordination, memory systems, and MCP integration.",
+    });
+
+    const strategyTopic = makeCandidate({
+      path: "/vault/topics/strategy.md",
+      title: "Estratégia Organizacional",
+      tags: ["estrategia", "planejamento", "okrs"],
+      description: "Notas sobre estratégia, planejamento e OKRs.",
+      prose:
+        "Este tópico cobre planejamento estratégico, definição de OKRs, e alinhamento organizacional. " +
+        "Inclui notas sobre ciclos de revisão e objetivos de longo prazo.",
+    });
+
+    const agentScore = scoreCandidate("agent workflows automation", agentTopic);
+    const strategyScore = scoreCandidate("agent workflows automation", strategyTopic);
+
+    assert.ok(
+      agentScore > strategyScore,
+      `Agent topic (${agentScore}) should outscore strategy topic (${strategyScore}) for query "agent workflows automation"`,
+    );
+  });
+
+  it("ranks the expected strategy topic above an unrelated agent topic for Portuguese query", () => {
+    const agentTopic = makeCandidate({
+      path: "/vault/topics/agents.md",
+      title: "Agent Workflows",
+      tags: ["agents", "automation", "agentic"],
+      description: "Notes about agentic systems and LLM workflows.",
+      prose: "AI agent workflows, orchestration, tool use, and autonomous task execution.",
+    });
+
+    const strategyTopic = makeCandidate({
+      path: "/vault/topics/strategy.md",
+      title: "Estratégia Organizacional",
+      tags: ["estrategia", "planejamento", "okrs"],
+      description: "Notas sobre estratégia, planejamento e OKRs.",
+      prose: "Planejamento estratégico, OKRs, alinhamento organizacional, revisão de ciclos.",
+    });
+
+    const agentScore = scoreCandidate("estrategia planejamento", agentTopic);
+    const strategyScore = scoreCandidate("estrategia planejamento", strategyTopic);
+
+    assert.ok(
+      strategyScore > agentScore,
+      `Strategy topic (${strategyScore}) should outscore agent topic (${agentScore}) for Portuguese query`,
+    );
   });
 });

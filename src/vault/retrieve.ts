@@ -475,6 +475,130 @@ function extractWikilinks(text: string, topicDir: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Weighted lexical scoring engine — Task 06
+// ---------------------------------------------------------------------------
+
+/**
+ * Field weights for lexical scoring.
+ * Higher weight means a token match in that field contributes more to the score.
+ * Weight order: title > tags > description > prose (per ADR-004).
+ */
+const FIELD_WEIGHTS = {
+  title: 10,
+  tags: 8,
+  description: 4,
+  prose: 1,
+} as const;
+
+/**
+ * Normalize a text string into a sorted set of lowercase tokens.
+ *
+ * Normalization rules:
+ * - Decompose Unicode characters (NFD) so diacritics are stripped.
+ * - Remove non-ASCII characters (strips diacritic combining marks).
+ * - Lowercase all characters.
+ * - Split on whitespace, punctuation, and common separators.
+ * - Filter out empty tokens and very short noise tokens (length < 2).
+ *
+ * This ensures bilingual content (Portuguese/English with accented characters)
+ * normalizes consistently with unaccented query tokens.
+ *
+ * @param text - Raw input string.
+ * @returns Array of normalized tokens (order preserved, may contain duplicates).
+ */
+export function tokenize(text: string): string[] {
+  return (
+    text
+      // Decompose diacritics (NFD) then strip combining marks
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/gu, "")
+      // Lowercase
+      .toLowerCase()
+      // Split on any non-alphanumeric character
+      .split(/[^a-z0-9]+/u)
+      // Filter out empty tokens
+      .filter((t) => t.length >= 2)
+  );
+}
+
+/**
+ * Count how many query tokens appear in the candidate field token set.
+ *
+ * @param queryTokens - Pre-normalized query tokens.
+ * @param fieldTokens - Pre-normalized field tokens.
+ * @returns Number of matching tokens (counting duplicates in query).
+ */
+function countMatches(queryTokens: string[], fieldTokens: Set<string>): number {
+  let count = 0;
+  for (const token of queryTokens) {
+    if (fieldTokens.has(token)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Compute a deterministic weighted lexical relevance score for a single
+ * topic-map candidate against a normalized query.
+ *
+ * Scoring algorithm:
+ * - Tokenize the query and each candidate field using the shared `tokenize` helper.
+ * - For each query token, check if it appears in each field's token set.
+ * - Multiply per-field match count by that field's weight.
+ * - Sum contributions across all fields.
+ *
+ * The score is a non-negative integer. Higher is more relevant.
+ * A score of 0 means no query tokens matched any candidate field.
+ *
+ * @param query - Natural-language query string from the caller.
+ * @param candidate - Normalized topic-map candidate to score.
+ * @returns Numeric relevance score (0 = no match).
+ */
+export function scoreCandidate(query: string, candidate: TopicMapCandidate): number {
+  const queryTokens = tokenize(query);
+  if (queryTokens.length === 0) return 0;
+
+  const titleTokens = new Set(tokenize(candidate.title));
+  const tagsTokens = new Set(tokenize(candidate.tags.join(" ")));
+  const descriptionTokens = new Set(tokenize(candidate.description));
+  const proseTokens = new Set(tokenize(candidate.prose));
+
+  const titleScore = countMatches(queryTokens, titleTokens) * FIELD_WEIGHTS.title;
+  const tagsScore = countMatches(queryTokens, tagsTokens) * FIELD_WEIGHTS.tags;
+  const descriptionScore = countMatches(queryTokens, descriptionTokens) * FIELD_WEIGHTS.description;
+  const proseScore = countMatches(queryTokens, proseTokens) * FIELD_WEIGHTS.prose;
+
+  return titleScore + tagsScore + descriptionScore + proseScore;
+}
+
+/**
+ * Score all candidates against a query and return them sorted by score descending.
+ * Ties are broken by candidate path (ascending) for determinism.
+ *
+ * @param query - Natural-language query string.
+ * @param candidates - Array of normalized topic-map candidates.
+ * @returns Array of `{ candidate, score }` records sorted by score descending.
+ */
+export function rankCandidates(
+  query: string,
+  candidates: TopicMapCandidate[],
+): Array<{ candidate: TopicMapCandidate; score: number }> {
+  const scored = candidates.map((candidate) => ({
+    candidate,
+    score: scoreCandidate(query, candidate),
+  }));
+
+  // Stable descending sort: higher score first; ties broken by path ascending.
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.candidate.path.localeCompare(b.candidate.path);
+  });
+
+  return scored;
+}
+
+// ---------------------------------------------------------------------------
 // Vault root resolution — Task 02
 // ---------------------------------------------------------------------------
 
