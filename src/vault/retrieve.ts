@@ -705,6 +705,111 @@ export function selectResults(
 }
 
 // ---------------------------------------------------------------------------
+// Linked note hydration — Task 09
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of characters allowed in a linked-note summary.
+ * Summaries are truncated at this boundary to keep retrieval responses bounded.
+ */
+const NOTE_SUMMARY_MAX_CHARS = 512;
+
+/**
+ * Extract a bounded summary from raw note content.
+ *
+ * Extraction rules:
+ * - Strip the YAML frontmatter block (--- ... ---) if present.
+ * - Skip blank lines and ATX heading lines (# …) at the start of the body.
+ * - Collect the first contiguous block of non-blank, non-heading lines as the
+ *   summary paragraph.
+ * - Truncate the result to NOTE_SUMMARY_MAX_CHARS characters.
+ * - Return an empty string when no prose paragraph is found.
+ *
+ * @param content - Raw file content of the note.
+ * @returns Bounded prose summary (≤512 chars).
+ */
+export function extractNoteSummary(content: string): string {
+  // Strip frontmatter block if present.
+  let body = content;
+  const fmMatch = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/u.exec(content);
+  if (fmMatch !== null) {
+    body = content.slice(fmMatch[0].length);
+  }
+
+  const lines = body.split(/\r?\n/u);
+  const paragraphLines: string[] = [];
+  let inParagraph = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!inParagraph) {
+      // Skip blank lines and headings before the first prose paragraph.
+      if (trimmed.length === 0 || /^#+\s/u.test(trimmed)) continue;
+      // Start collecting the paragraph.
+      inParagraph = true;
+      paragraphLines.push(trimmed);
+    } else {
+      // A blank line ends the paragraph.
+      if (trimmed.length === 0) break;
+      paragraphLines.push(trimmed);
+    }
+  }
+
+  const summary = paragraphLines.join(" ");
+  return summary.length <= NOTE_SUMMARY_MAX_CHARS
+    ? summary
+    : summary.slice(0, NOTE_SUMMARY_MAX_CHARS);
+}
+
+/**
+ * Hydrate linked notes for a single topic-map candidate.
+ *
+ * For each path in `candidate.linkedNotePaths`:
+ * - Attempt to read the note file from the filesystem.
+ * - Extract a bounded summary (≤512 chars) from the first non-frontmatter
+ *   prose paragraph.
+ * - Attach empty provenance (`source_key: "", kind: ""`).
+ *   Provenance will be filled in Task 10 via manifest lookup.
+ * - If the file is missing or unreadable, skip it without aborting the
+ *   overall response.
+ *
+ * Only the paths listed in `candidate.linkedNotePaths` are read; the full
+ * vault is never scanned.
+ *
+ * @param candidate - Selected topic-map candidate whose linked notes to hydrate.
+ * @param _vaultRoot - Vault root (reserved for Task 10 manifest lookup).
+ * @returns Array of hydrated `LinkedNote` records (may be shorter than
+ *          `linkedNotePaths` when files are missing or unreadable).
+ */
+export function hydrateLinkedNotes(
+  candidate: TopicMapCandidate,
+  _vaultRoot: string,
+): LinkedNote[] {
+  const results: LinkedNote[] = [];
+
+  for (const notePath of candidate.linkedNotePaths) {
+    let content: string;
+    try {
+      content = fs.readFileSync(notePath, "utf8");
+    } catch {
+      // Missing or unreadable — skip deterministically without aborting.
+      continue;
+    }
+
+    const summary = extractNoteSummary(content);
+
+    results.push({
+      path: notePath,
+      summary,
+      provenance: { source_key: "", kind: "" },
+    });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Vault root resolution — Task 02
 // ---------------------------------------------------------------------------
 

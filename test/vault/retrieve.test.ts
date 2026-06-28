@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, extractNoteSummary, hydrateLinkedNotes } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -1193,5 +1193,262 @@ describe("selectResults — integration: close thematic matches", () => {
 
     const paths = result.candidates.map((r) => r.candidate.path);
     assert.ok(!paths.includes("/vault/topics/unrelated.md"), "weak unrelated candidate must not appear");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractNoteSummary — unit tests (Task 09)
+// ---------------------------------------------------------------------------
+
+describe("extractNoteSummary", () => {
+  it("returns the first prose paragraph from a note without frontmatter", () => {
+    const content = "First paragraph line one.\nFirst paragraph line two.\n\nSecond paragraph.";
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "First paragraph line one. First paragraph line two.");
+  });
+
+  it("strips frontmatter and extracts prose from the body", () => {
+    const content = [
+      "---",
+      "title: My Note",
+      "tags: [foo]",
+      "---",
+      "",
+      "This is the first prose paragraph.",
+      "",
+      "Second paragraph.",
+    ].join("\n");
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "This is the first prose paragraph.");
+  });
+
+  it("skips leading headings before the first prose paragraph", () => {
+    const content = [
+      "# Note Title",
+      "",
+      "## Section",
+      "",
+      "Actual prose starts here.",
+    ].join("\n");
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "Actual prose starts here.");
+  });
+
+  it("truncates summary at 512 characters", () => {
+    const longLine = "a".repeat(600);
+    const content = longLine;
+    const summary = extractNoteSummary(content);
+    assert.equal(summary.length, 512);
+    assert.equal(summary, longLine.slice(0, 512));
+  });
+
+  it("returns empty string when note has no prose content", () => {
+    const content = "# Heading Only\n\n## Another Heading\n";
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "");
+  });
+
+  it("returns empty string for an empty file", () => {
+    assert.equal(extractNoteSummary(""), "");
+  });
+
+  it("handles frontmatter with CRLF line endings", () => {
+    const content = "---\r\ntitle: Note\r\n---\r\n\r\nProse line.\r\n";
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "Prose line.");
+  });
+
+  it("skips blank lines at the start of body after frontmatter", () => {
+    const content = [
+      "---",
+      "title: Note",
+      "---",
+      "",
+      "",
+      "First prose paragraph here.",
+    ].join("\n");
+    const summary = extractNoteSummary(content);
+    assert.equal(summary, "First prose paragraph here.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hydrateLinkedNotes — unit tests (Task 09)
+// ---------------------------------------------------------------------------
+
+/** Build a minimal TopicMapCandidate for hydration tests. */
+function makeCandidateWithLinks(linkedNotePaths: string[]): ReturnType<typeof makeCandidate> & { linkedNotePaths: string[] } {
+  return {
+    ...makeCandidate({ path: "/vault/topics/t.md" }),
+    linkedNotePaths,
+  };
+}
+
+describe("hydrateLinkedNotes — missing note handling", () => {
+  it("returns empty array when candidate has no linked note paths", () => {
+    const vault = makeVaultRoot();
+    const candidate = makeCandidateWithLinks([]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+    assert.deepEqual(notes, []);
+  });
+
+  it("skips missing linked note files deterministically without throwing", () => {
+    const vault = makeVaultRoot();
+    const candidate = makeCandidateWithLinks(["/does/not/exist/note.md"]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+    assert.deepEqual(notes, []);
+  });
+
+  it("skips unreadable files and still returns readable ones", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "notes");
+    mkdirSync(notesDir, { recursive: true });
+    const goodPath = join(notesDir, "good.md");
+    writeFileSync(goodPath, "Good prose content.\n", "utf8");
+
+    const candidate = makeCandidateWithLinks(["/missing/bad.md", goodPath]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0]?.path, goodPath);
+    assert.equal(notes[0]?.summary, "Good prose content.");
+  });
+});
+
+describe("hydrateLinkedNotes — summary extraction", () => {
+  it("extracts bounded summary from a readable note", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "notes");
+    mkdirSync(notesDir, { recursive: true });
+    const notePath = join(notesDir, "note.md");
+    writeFileSync(notePath, [
+      "---",
+      "title: Test Note",
+      "---",
+      "",
+      "This note discusses topic retrieval in detail.",
+    ].join("\n"), "utf8");
+
+    const candidate = makeCandidateWithLinks([notePath]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0]?.summary, "This note discusses topic retrieval in detail.");
+  });
+
+  it("attaches empty provenance (source_key and kind are empty strings)", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "notes");
+    mkdirSync(notesDir, { recursive: true });
+    const notePath = join(notesDir, "prov.md");
+    writeFileSync(notePath, "Provenance test note.\n", "utf8");
+
+    const candidate = makeCandidateWithLinks([notePath]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1);
+    assert.deepEqual(notes[0]?.provenance, { source_key: "", kind: "" });
+  });
+
+  it("summary is bounded to 512 characters", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "notes");
+    mkdirSync(notesDir, { recursive: true });
+    const notePath = join(notesDir, "long.md");
+    const longContent = "x".repeat(600) + "\n";
+    writeFileSync(notePath, longContent, "utf8");
+
+    const candidate = makeCandidateWithLinks([notePath]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1);
+    assert.ok((notes[0]?.summary.length ?? 0) <= 512, "summary must not exceed 512 chars");
+  });
+});
+
+describe("hydrateLinkedNotes — selected-result-only hydration", () => {
+  it("only hydrates notes from paths explicitly listed in the candidate", () => {
+    const vault = makeVaultRoot();
+    const notesDir = join(vault, "notes");
+    mkdirSync(notesDir, { recursive: true });
+
+    // Write two notes but only link one.
+    const linkedPath = join(notesDir, "linked.md");
+    const unlinkedPath = join(notesDir, "unlinked.md");
+    writeFileSync(linkedPath, "Linked note content.\n", "utf8");
+    writeFileSync(unlinkedPath, "Unlinked note content.\n", "utf8");
+
+    const candidate = makeCandidateWithLinks([linkedPath]);
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0]?.path, linkedPath);
+    // Unlinked note must NOT appear.
+    const paths = notes.map((n) => n.path);
+    assert.ok(!paths.includes(unlinkedPath), "unlinked note must not be hydrated");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hydrateLinkedNotes — integration test (Task 09)
+// ---------------------------------------------------------------------------
+
+describe("hydrateLinkedNotes — integration: realistic topic result", () => {
+  it("returns linked note summaries suitable for a retrieval response", () => {
+    const vault = makeVaultRoot();
+    const topicsDir = join(vault, "topics");
+    const notesDir = join(vault, "notes");
+    mkdirSync(topicsDir, { recursive: true });
+    mkdirSync(notesDir, { recursive: true });
+
+    const notePath = join(notesDir, "agent-note.md");
+    writeFileSync(notePath, [
+      "---",
+      "title: Agent Workflows",
+      "source_key: granola-abc",
+      "kind: granola",
+      "---",
+      "",
+      "This note describes how agents coordinate tasks using topic maps.",
+      "",
+      "More detail follows here.",
+    ].join("\n"), "utf8");
+
+    // Write a topic map that links to the note.
+    const topicPath = join(topicsDir, "agents.md");
+    writeFileSync(topicPath, [
+      "---",
+      "title: Agents",
+      "tags: [agents, automation]",
+      "description: Topic map for agent automation.",
+      "---",
+      "",
+      "Overview of agent automation.",
+      "",
+      "## Notas neste tópico",
+      "",
+      `- [[../notes/agent-note]]`,
+    ].join("\n"), "utf8");
+
+    const rawFiles = loadTopicCandidateFiles(vault);
+    assert.equal(rawFiles.length, 1);
+
+    const candidate = parseTopicCandidateFile(rawFiles[0]!);
+    // The candidate should have linkedNotePaths resolving to the note.
+    assert.equal(candidate.linkedNotePaths.length, 1);
+
+    const notes = hydrateLinkedNotes(candidate, vault);
+
+    assert.equal(notes.length, 1, "one linked note should be hydrated");
+    const note = notes[0]!;
+    assert.equal(note.path, candidate.linkedNotePaths[0]);
+    assert.ok(note.summary.length > 0, "summary must not be empty");
+    assert.ok(note.summary.length <= 512, "summary must be bounded");
+    assert.ok(
+      note.summary.includes("agents coordinate tasks"),
+      "summary must include first prose content",
+    );
+    // Provenance is empty at this stage (Task 10 fills it).
+    assert.deepEqual(note.provenance, { source_key: "", kind: "" });
   });
 });
