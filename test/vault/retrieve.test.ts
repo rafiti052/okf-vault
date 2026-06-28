@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -324,5 +324,342 @@ describe("loadTopicCandidateFiles", () => {
     const vault = makeVaultWithTopics({});
     const candidates = loadTopicCandidateFiles(vault);
     assert.equal(candidates.length, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseTopicCandidateFile — unit tests (Task 05)
+// ---------------------------------------------------------------------------
+
+/** Build a minimal RawTopicFile for parser unit tests. */
+function makeRawFile(name: string, content: string): import("../../dist/vault/retrieve.js").RawTopicFile {
+  return {
+    path: join("/fake/vault/topics", name),
+    content,
+  };
+}
+
+describe("parseTopicCandidateFile — frontmatter extraction", () => {
+  it("extracts title, tags, and description from valid frontmatter", () => {
+    const raw = makeRawFile("agents.md", [
+      "---",
+      "title: Agent Workflows",
+      "description: Notes about agentic systems.",
+      "tags:",
+      "  - agents",
+      "  - automation",
+      "---",
+      "",
+      "# Agent Workflows",
+      "",
+      "Prose about agents.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.path, raw.path);
+    assert.equal(candidate.title, "Agent Workflows");
+    assert.equal(candidate.description, "Notes about agentic systems.");
+    assert.deepEqual(candidate.tags, ["agents", "automation"]);
+  });
+
+  it("falls back to first heading when frontmatter has no title", () => {
+    const raw = makeRawFile("agents.md", [
+      "---",
+      "tags: [agents]",
+      "---",
+      "",
+      "# Agent Systems",
+      "",
+      "Prose here.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.title, "Agent Systems");
+  });
+
+  it("emits empty title when frontmatter has no title and body has no heading", () => {
+    const raw = makeRawFile("empty.md", [
+      "---",
+      "tags: [misc]",
+      "---",
+      "",
+      "Just some prose without a heading.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.title, "");
+  });
+
+  it("emits empty description when frontmatter description is absent", () => {
+    const raw = makeRawFile("no-desc.md", [
+      "---",
+      "title: My Topic",
+      "tags: [misc]",
+      "---",
+      "",
+      "Prose.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.description, "");
+  });
+
+  it("emits empty tags array when frontmatter tags is absent", () => {
+    const raw = makeRawFile("no-tags.md", [
+      "---",
+      "title: No Tags",
+      "---",
+      "",
+      "Prose.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.deepEqual(candidate.tags, []);
+  });
+
+  it("tolerates missing frontmatter block gracefully", () => {
+    const raw = makeRawFile("bare.md", "# Bare Topic\n\nNo frontmatter here.\n");
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.title, "Bare Topic");
+    assert.deepEqual(candidate.tags, []);
+    assert.equal(candidate.description, "");
+    // prose is the full content when there's no frontmatter
+    assert.ok(candidate.prose.includes("No frontmatter here."));
+  });
+
+  it("tolerates unparseable frontmatter YAML gracefully", () => {
+    const raw = makeRawFile("bad-yaml.md", [
+      "---",
+      ": this is invalid yaml: [unclosed",
+      "---",
+      "",
+      "# Fallback Heading",
+      "",
+      "Prose.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    // Should not throw; title falls back to heading
+    assert.equal(candidate.title, "Fallback Heading");
+    assert.deepEqual(candidate.tags, []);
+    assert.equal(candidate.description, "");
+  });
+});
+
+describe("parseTopicCandidateFile — prose extraction", () => {
+  it("prose contains the body text after frontmatter", () => {
+    const raw = makeRawFile("topic.md", [
+      "---",
+      "title: My Topic",
+      "---",
+      "",
+      "# My Topic",
+      "",
+      "First paragraph.",
+      "",
+      "## Details",
+      "",
+      "More detail.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.ok(candidate.prose.includes("First paragraph."));
+    assert.ok(candidate.prose.includes("More detail."));
+  });
+
+  it("preserves bilingual Portuguese/English content in prose", () => {
+    const raw = makeRawFile("bilingual.md", [
+      "---",
+      "title: Bilingual Topic",
+      "description: Tópico bilíngue sobre agentes de IA e agent workflows.",
+      "tags: [agentes, agents, automação]",
+      "---",
+      "",
+      "# Bilingual Topic",
+      "",
+      "Este tópico descreve agent workflows e automação de processos.",
+      "This topic describes agent workflows and process automation.",
+      "",
+      "## Notas neste tópico",
+      "",
+      "- [[notes/agent-note]]",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.ok(candidate.description.includes("agentes de IA"));
+    assert.ok(candidate.description.includes("agent workflows"));
+    assert.deepEqual(candidate.tags, ["agentes", "agents", "automação"]);
+    assert.ok(candidate.prose.includes("automação de processos"));
+    assert.ok(candidate.prose.includes("process automation"));
+  });
+});
+
+describe("parseTopicCandidateFile — linked-note extraction", () => {
+  it("extracts wikilinks from the body and resolves to absolute paths", () => {
+    const topicsDir = "/fake/vault/topics";
+    const raw = {
+      path: join(topicsDir, "agents.md"),
+      content: [
+        "---",
+        "title: Agents",
+        "---",
+        "",
+        "## Notas neste tópico",
+        "",
+        "- [[notes/agent-one]]",
+        "- [[notes/agent-two.md]]",
+      ].join("\n"),
+    };
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.linkedNotePaths.length, 2);
+    // Both should be absolute paths
+    assert.ok(candidate.linkedNotePaths[0]!.startsWith("/"));
+    assert.ok(candidate.linkedNotePaths[1]!.startsWith("/"));
+    // Extension appended when missing
+    assert.ok(candidate.linkedNotePaths[0]!.endsWith("notes/agent-one.md"));
+    // Preserved when present
+    assert.ok(candidate.linkedNotePaths[1]!.endsWith("notes/agent-two.md"));
+  });
+
+  it("returns empty linkedNotePaths when body contains no wikilinks", () => {
+    const raw = makeRawFile("no-links.md", [
+      "---",
+      "title: No Links",
+      "---",
+      "",
+      "Prose without any links.",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.deepEqual(candidate.linkedNotePaths, []);
+  });
+
+  it("deduplicates repeated wikilinks", () => {
+    const raw = makeRawFile("dup-links.md", [
+      "---",
+      "title: Dup Links",
+      "---",
+      "",
+      "- [[notes/note-a]]",
+      "- [[notes/note-a]]",
+      "- [[notes/note-b]]",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.linkedNotePaths.length, 2);
+  });
+
+  it("extracts wikilinks with display-text aliases ([[path|alias]])", () => {
+    const raw = makeRawFile("aliased.md", [
+      "---",
+      "title: Aliased",
+      "---",
+      "",
+      "- [[notes/note-a|Note A Display]]",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.linkedNotePaths.length, 1);
+    assert.ok(candidate.linkedNotePaths[0]!.endsWith("notes/note-a.md"));
+  });
+
+  it("extracts linked notes from 'Notas neste tópico' section (Portuguese section heading)", () => {
+    const raw = makeRawFile("pt-section.md", [
+      "---",
+      "title: Portuguese Topic",
+      "---",
+      "",
+      "# Portuguese Topic",
+      "",
+      "Synthesized prose aqui.",
+      "",
+      "## Notas neste tópico",
+      "",
+      "- [[notes/nota-um]]",
+      "- [[notes/nota-dois]]",
+    ].join("\n"));
+
+    const candidate = parseTopicCandidateFile(raw);
+    assert.equal(candidate.linkedNotePaths.length, 2);
+    assert.ok(candidate.linkedNotePaths[0]!.endsWith("notes/nota-um.md"));
+    assert.ok(candidate.linkedNotePaths[1]!.endsWith("notes/nota-dois.md"));
+  });
+});
+
+describe("parseTopicCandidateFile — integration with loadTopicCandidateFiles", () => {
+  it("roundtrip: load then parse produces a valid candidate for each file", () => {
+    const vault = makeVaultWithTopics({
+      "agents.md": [
+        "---",
+        "title: Agent Workflows",
+        "description: Notes about agents.",
+        "tags: [agents, workflows]",
+        "---",
+        "",
+        "# Agent Workflows",
+        "",
+        "Prose about agents and automation.",
+        "",
+        "## Notas neste tópico",
+        "",
+        "- [[notes/agent-one]]",
+      ].join("\n"),
+      "strategy.md": [
+        "---",
+        "title: Estratégia",
+        "description: Tópico sobre estratégia.",
+        "tags: [estrategia, strategy]",
+        "---",
+        "",
+        "# Estratégia",
+        "",
+        "Notas sobre planejamento e estratégia organizacional.",
+      ].join("\n"),
+    });
+
+    const raws = loadTopicCandidateFiles(vault);
+    assert.equal(raws.length, 2);
+
+    const candidates = raws.map(parseTopicCandidateFile);
+
+    // agents.md
+    const agentCandidate = candidates.find((c) => c.path.endsWith("agents.md"));
+    assert.ok(agentCandidate !== undefined);
+    assert.equal(agentCandidate.title, "Agent Workflows");
+    assert.deepEqual(agentCandidate.tags, ["agents", "workflows"]);
+    assert.equal(agentCandidate.description, "Notes about agents.");
+    assert.ok(agentCandidate.prose.includes("automation"));
+    assert.equal(agentCandidate.linkedNotePaths.length, 1);
+
+    // strategy.md (bilingual)
+    const strategyCandidate = candidates.find((c) => c.path.endsWith("strategy.md"));
+    assert.ok(strategyCandidate !== undefined);
+    assert.equal(strategyCandidate.title, "Estratégia");
+    assert.deepEqual(strategyCandidate.tags, ["estrategia", "strategy"]);
+    assert.ok(strategyCandidate.prose.includes("planejamento"));
+    assert.equal(strategyCandidate.linkedNotePaths.length, 0);
+  });
+
+  it("parsing incomplete topic maps does not throw", () => {
+    const vault = makeVaultWithTopics({
+      "incomplete.md": "Just bare prose with no frontmatter or heading.",
+      "no-title.md": "---\ntags: [misc]\n---\n\nSome prose.",
+      "empty.md": "",
+    });
+
+    const raws = loadTopicCandidateFiles(vault);
+    // All three files should parse without throwing
+    assert.doesNotThrow(() => raws.map(parseTopicCandidateFile));
+    const candidates = raws.map(parseTopicCandidateFile);
+    assert.equal(candidates.length, 3);
+    for (const c of candidates) {
+      assert.ok(typeof c.title === "string");
+      assert.ok(Array.isArray(c.tags));
+      assert.ok(typeof c.description === "string");
+      assert.ok(typeof c.prose === "string");
+      assert.ok(Array.isArray(c.linkedNotePaths));
+    }
   });
 });

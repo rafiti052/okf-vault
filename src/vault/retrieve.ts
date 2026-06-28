@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure } from "../cli/cli.js";
 import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
 
@@ -324,6 +325,153 @@ export function loadTopicCandidateFiles(vaultRoot: string): RawTopicFile[] {
   candidates.sort((a, b) => basename(a.path).localeCompare(basename(b.path)));
 
   return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Topic candidate parser — Task 05
+// ---------------------------------------------------------------------------
+
+/** Pattern matching YAML frontmatter delimiters at the start of a markdown file. */
+const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/u;
+
+/** Pattern matching wikilinks of the form [[path]] or [[path|alias]]. */
+const WIKILINK_PATTERN = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/gu;
+
+/**
+ * Resolve a wikilink path to an absolute filesystem path.
+ *
+ * Rules:
+ * - If the link already has an extension, treat it as-is.
+ * - If the link lacks an extension, append `.md`.
+ * - Resolve relative to the `topics/` directory that contains the topic map.
+ *
+ * @param link - Raw wikilink target (e.g. "notes/my-note" or "my-note.md").
+ * @param topicDir - Absolute path to the directory containing the topic map.
+ * @returns Absolute path to the linked file.
+ */
+function resolveWikilink(link: string, topicDir: string): string {
+  const normalized = link.trim();
+  const withExt = extname(normalized) === "" ? `${normalized}.md` : normalized;
+  return resolve(join(topicDir, withExt));
+}
+
+/**
+ * Parse a raw topic map file into a normalized `TopicMapCandidate`.
+ *
+ * Extraction rules:
+ * - **title**: `frontmatter.title` (string) → first `# Heading` in body → empty string.
+ * - **tags**: `frontmatter.tags` (string array) → empty array when absent or malformed.
+ * - **description**: `frontmatter.description` (string) → empty string when absent.
+ * - **prose**: Full markdown body after the frontmatter block (including all sections).
+ *   Used verbatim for lexical scoring; does not strip the `## Notas neste tópico` section
+ *   so that linked-note anchors contribute to the prose score.
+ * - **linkedNotePaths**: Wikilinks (`[[…]]`) extracted from the entire body, resolved to
+ *   absolute paths relative to the topic map's directory.
+ *
+ * This function is intentionally tolerant: a missing frontmatter block, unparseable YAML,
+ * or absent optional fields all produce deterministic empty values rather than errors.
+ *
+ * @param raw - Raw topic map file entry from `loadTopicCandidateFiles`.
+ * @returns Normalized candidate ready for the scoring pipeline.
+ */
+export function parseTopicCandidateFile(raw: RawTopicFile): TopicMapCandidate {
+  const match = FRONTMATTER_PATTERN.exec(raw.content);
+
+  // When there is no frontmatter block, treat the entire content as prose.
+  if (match === null) {
+    return {
+      path: raw.path,
+      title: extractFirstHeading(raw.content) ?? "",
+      tags: [],
+      description: "",
+      prose: raw.content,
+      linkedNotePaths: extractWikilinks(raw.content, dirname(raw.path)),
+    };
+  }
+
+  const yamlRaw = match[1] ?? "";
+  const body = match[2] ?? "";
+
+  let fm: Record<string, unknown> = {};
+  try {
+    const parsed = parseYaml(yamlRaw);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      fm = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Unparseable frontmatter — treat as empty; use body for title fallback.
+  }
+
+  const title = extractStringField(fm, "title") ?? extractFirstHeading(body) ?? "";
+  const tags = extractStringArrayField(fm, "tags");
+  const description = extractStringField(fm, "description") ?? "";
+
+  return {
+    path: raw.path,
+    title,
+    tags,
+    description,
+    prose: body,
+    linkedNotePaths: extractWikilinks(body, dirname(raw.path)),
+  };
+}
+
+/**
+ * Extract the text of the first `# Heading` found in a markdown string.
+ * Returns `undefined` when no ATX heading is present.
+ */
+function extractFirstHeading(text: string): string | undefined {
+  for (const line of text.split(/\r?\n/u)) {
+    const m = /^#\s+(.+)$/u.exec(line.trim());
+    if (m !== null) {
+      return m[1]?.trim() ?? undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract a string field from a frontmatter record.
+ * Returns `undefined` when the field is absent or not a string.
+ */
+function extractStringField(fm: Record<string, unknown>, key: string): string | undefined {
+  const value = fm[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Extract a string-array field from a frontmatter record.
+ * Returns an empty array when the field is absent, not an array, or contains non-string entries.
+ * Non-string entries are coerced to strings to tolerate YAML scalar variants.
+ */
+function extractStringArrayField(fm: Record<string, unknown>, key: string): string[] {
+  const value = fm[key];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item: unknown) => (typeof item === "string" ? item : String(item)))
+    .filter((item: string) => item.length > 0);
+}
+
+/**
+ * Extract all wikilink targets from a markdown string and resolve them to absolute paths.
+ *
+ * @param text - Raw markdown content to scan.
+ * @param topicDir - Absolute directory path of the topic map (used for resolution).
+ * @returns Deduplicated list of absolute paths, in first-occurrence order.
+ */
+function extractWikilinks(text: string, topicDir: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const m of text.matchAll(WIKILINK_PATTERN)) {
+    const link = m[1];
+    if (link === undefined || link.trim().length === 0) continue;
+    const abs = resolveWikilink(link, topicDir);
+    if (!seen.has(abs)) {
+      seen.add(abs);
+      result.push(abs);
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
