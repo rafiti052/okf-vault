@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { type DispatchOutcome, ExitCode, failure } from "../cli/cli.js";
+import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
 import { loadManifest } from "./manifest.js";
 
@@ -955,6 +955,103 @@ export function filterNotesViaManifest(
 }
 
 // ---------------------------------------------------------------------------
+// Response assembly — Task 11
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of characters allowed in a topic-map excerpt.
+ * Mirrors NOTE_SUMMARY_MAX_CHARS for consistency.
+ */
+const EXCERPT_MAX_CHARS = 512;
+
+/**
+ * Extract a bounded prose excerpt from a topic-map candidate.
+ *
+ * Uses the same paragraph-extraction rules as `extractNoteSummary`:
+ * - Strip frontmatter if present.
+ * - Skip blank lines and ATX heading lines.
+ * - Collect the first contiguous prose paragraph.
+ * - Truncate to EXCERPT_MAX_CHARS.
+ *
+ * @param candidate - The topic-map candidate to excerpt.
+ * @returns Bounded prose excerpt (≤512 chars).
+ */
+function extractExcerpt(candidate: TopicMapCandidate): string {
+  return extractNoteSummary(candidate.prose);
+}
+
+/**
+ * Assemble the final `RetrieveResponse` from a query, vault root, and
+ * pre-loaded topic-map candidates.
+ *
+ * Pipeline:
+ * 1. Rank candidates → select results → derive confidence.
+ * 2. Determine `coverage_gap`: true when no candidates were selected OR
+ *    the top score is below `CONFIDENCE_LOW_MINIMUM_THRESHOLD`.
+ * 3. For each selected candidate: hydrate linked notes, filter via manifest,
+ *    build a `RetrieveResult`.
+ * 4. Generate broadening hints.
+ * 5. Return a fully-shaped `RetrieveResponse`.
+ *
+ * This function always returns a valid response; coverage gaps are surfaced
+ * through the `coverage_gap` field, not process failures.
+ *
+ * @param query         - Natural-language query string from the caller.
+ * @param vaultRoot     - Absolute path to the vault root (used for manifest lookup).
+ * @param allCandidates - Pre-parsed topic-map candidates (from the loader pipeline).
+ * @returns Stable versioned `RetrieveResponse`.
+ */
+export function buildRetrieveResponse(
+  query: string,
+  vaultRoot: string,
+  allCandidates: TopicMapCandidate[],
+): RetrieveResponse {
+  const ranked = rankCandidates(query, allCandidates);
+  const { candidates: selected, confidence } = selectResults(ranked);
+
+  // coverage_gap: true when nothing was selected OR the top score is below
+  // the minimum threshold (meaning nothing meaningfully matched).
+  const topScore =
+    selected.length > 0
+      ? (selected[0] as { candidate: TopicMapCandidate; score: number }).score
+      : 0;
+  const coverage_gap = selected.length === 0 || topScore < CONFIDENCE_LOW_MINIMUM_THRESHOLD;
+
+  // Build the manifest index once for all selected candidates.
+  const manifestIndex = buildManifestIndex(vaultRoot);
+
+  const results: RetrieveResult[] = selected.map(({ candidate, score }) => {
+    const hydrated = hydrateLinkedNotes(candidate, vaultRoot);
+    const linked_notes = filterNotesViaManifest(hydrated, manifestIndex);
+    const excerpt = extractExcerpt(candidate).slice(0, EXCERPT_MAX_CHARS);
+    return {
+      path: candidate.path,
+      title: candidate.title,
+      excerpt,
+      linked_notes,
+      score,
+    };
+  });
+
+  const broadening_hints = generateBroadeningHints(
+    query,
+    confidence,
+    coverage_gap,
+    selected,
+    allCandidates,
+  );
+
+  return {
+    schema_version: RETRIEVE_SCHEMA_VERSION,
+    query,
+    confidence,
+    coverage_gap,
+    results,
+    broadening_hints,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Vault root resolution — Task 02
 // ---------------------------------------------------------------------------
 
@@ -1077,13 +1174,17 @@ export function handleRetrieve(
     };
   }
 
-  // Placeholder: retrieval execution implemented in tasks 04–11
+  const query = remainder.join(" ");
+
+  // Load and parse topic candidates.
+  const rawFiles = loadTopicCandidateFiles(vaultRoot);
+  const allCandidates = rawFiles.map(parseTopicCandidateFile);
+
+  // Assemble the final response (always succeeds; coverage gaps use coverage_gap flag).
+  const response = buildRetrieveResponse(query, vaultRoot, allCandidates);
+
   return {
-    exitCode: ExitCode.USAGE,
-    result: failure(
-      "retrieve",
-      RetrieveErrorCode.NOT_YET_IMPLEMENTED,
-      "Retrieval is not yet implemented.",
-    ),
+    exitCode: ExitCode.SUCCESS,
+    result: success("retrieve", response as unknown as Record<string, unknown>),
   };
 }

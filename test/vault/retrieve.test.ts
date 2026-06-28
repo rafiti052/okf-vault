@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest, buildRetrieveResponse, RETRIEVE_SCHEMA_VERSION } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -153,18 +153,25 @@ describe("handleRetrieve — query mode", () => {
     assertErrorCode(outcome.result, "USAGE_MISSING_QUERY");
   });
 
-  it("reaches NOT_YET_IMPLEMENTED when explicit vault root and query supplied", () => {
+  it("returns SUCCESS with a RetrieveResponse when explicit vault root and query supplied", () => {
     const vault = makeVaultRoot();
     const outcome = handleRetrieve([vault, "my query"], () => makePlainDir());
-    assert.equal(outcome.exitCode, ExitCode.USAGE);
-    assertErrorCode(outcome.result, "NOT_YET_IMPLEMENTED");
+    assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+    const r = outcome.result as { status: string; command: string; data: Record<string, unknown> };
+    assert.equal(r.status, "ok");
+    assert.equal(r.command, "retrieve");
+    assert.ok("schema_version" in r.data);
+    assert.ok("coverage_gap" in r.data);
   });
 
-  it("reaches NOT_YET_IMPLEMENTED when cwd is vault root and query supplied (cwd fallback)", () => {
+  it("returns SUCCESS with a RetrieveResponse when cwd is vault root and query supplied (cwd fallback)", () => {
     const vault = makeVaultRoot();
     const outcome = handleRetrieve(["my query"], () => vault);
-    assert.equal(outcome.exitCode, ExitCode.USAGE);
-    assertErrorCode(outcome.result, "NOT_YET_IMPLEMENTED");
+    assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+    const r = outcome.result as { status: string; command: string; data: Record<string, unknown> };
+    assert.equal(r.status, "ok");
+    assert.equal(r.command, "retrieve");
+    assert.ok("schema_version" in r.data);
   });
 });
 
@@ -229,14 +236,16 @@ describe("CLI integration — okv retrieve root resolution", () => {
     assert.match(output, /VAULT_ROOT_NOT_FOUND/);
   });
 
-  it("outputs NOT_YET_IMPLEMENTED when cwd is a valid vault root with query", () => {
+  it("exits 0 and outputs a valid RetrieveResponse when cwd is a valid vault root with query", () => {
     const vault = makeVaultRoot();
     const result = spawnSync(process.execPath, [cliPath, "--json", "retrieve", "agent workflows"], {
       cwd: vault,
       encoding: "utf8",
     });
-    const output = result.stdout + result.stderr;
-    assert.match(output, /NOT_YET_IMPLEMENTED/);
+    assert.equal(result.status, 0, `Expected exit 0 but got ${result.status}. stderr: ${result.stderr}`);
+    const parsed = JSON.parse(result.stdout) as { status: string; data: { schema_version: string } };
+    assert.equal(parsed.status, "ok");
+    assert.equal(parsed.data.schema_version, "okv-retrieve/1.0.0");
   });
 });
 
@@ -1727,5 +1736,132 @@ describe("filterNotesViaManifest — integration: committed-only with provenance
     assert.equal(filtered[0]?.provenance.source_key, "local:/committed.md");
     assert.equal(filtered[0]?.provenance.kind, "local");
     assert.ok(filtered[0]?.summary.length ?? 0 > 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildRetrieveResponse — unit tests (Task 11)
+// ---------------------------------------------------------------------------
+
+describe("buildRetrieveResponse — empty candidate corpus", () => {
+  it("returns a valid response envelope even when no candidates exist", () => {
+    const vault = makeVaultRoot();
+    const response = buildRetrieveResponse("anything", vault, []);
+    assert.equal(response.schema_version, RETRIEVE_SCHEMA_VERSION);
+    assert.equal(response.query, "anything");
+    assert.equal(response.coverage_gap, true);
+    assert.deepEqual(response.results, []);
+    assert.ok(Array.isArray(response.broadening_hints));
+  });
+
+  it("sets confidence to low when no candidates exist", () => {
+    const vault = makeVaultRoot();
+    const response = buildRetrieveResponse("empty query", vault, []);
+    assert.equal(response.confidence, "low");
+  });
+});
+
+describe("buildRetrieveResponse — coverage_gap logic", () => {
+  it("sets coverage_gap true when top score is below minimum threshold (no token match)", () => {
+    const vault = makeVaultRoot();
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "unrelated.md"),
+      content: "---\ntitle: Completely Unrelated\ntags: [xyz]\ndescription: xyz stuff\n---\nSome xyz prose.\n",
+    });
+    const response = buildRetrieveResponse("zzzzzzzzz totally absent", vault, [candidate]);
+    assert.equal(response.coverage_gap, true);
+  });
+
+  it("sets coverage_gap false when top score meets threshold (matching candidate)", () => {
+    const vault = makeVaultRoot();
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "agents.md"),
+      content: "---\ntitle: Agent Workflows\ntags: [agents, workflows]\ndescription: Notes about agents.\n---\nAgents do work.\n",
+    });
+    const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
+    assert.equal(response.coverage_gap, false);
+    assert.equal(response.results.length, 1);
+  });
+});
+
+describe("buildRetrieveResponse — response shape", () => {
+  it("returns a fully-shaped response with all required fields", () => {
+    const vault = makeVaultRoot();
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "agents.md"),
+      content: "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
+    });
+    const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
+    assert.equal(response.schema_version, RETRIEVE_SCHEMA_VERSION);
+    assert.equal(response.query, "agent workflows");
+    assert.ok(typeof response.confidence === "string");
+    assert.ok(typeof response.coverage_gap === "boolean");
+    assert.ok(Array.isArray(response.results));
+    assert.ok(Array.isArray(response.broadening_hints));
+  });
+
+  it("each result has path, title, excerpt, linked_notes, and score fields", () => {
+    const vault = makeVaultRoot();
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "agents.md"),
+      content: "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
+    });
+    const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
+    assert.equal(response.results.length, 1);
+    const result = response.results[0];
+    assert.ok(result !== undefined);
+    assert.ok(typeof result.path === "string");
+    assert.ok(typeof result.title === "string");
+    assert.ok(typeof result.excerpt === "string");
+    assert.ok(Array.isArray(result.linked_notes));
+    assert.ok(typeof result.score === "number");
+  });
+
+  it("excerpt is bounded to 512 characters", () => {
+    const vault = makeVaultRoot();
+    const longProse = "word ".repeat(300);
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "long.md"),
+      content: `---\ntitle: Long Topic\ntags: [long]\ndescription: long topic.\n---\n${longProse}\n`,
+    });
+    const response = buildRetrieveResponse("long topic", vault, [candidate]);
+    if (response.results.length > 0) {
+      assert.ok((response.results[0]!.excerpt.length) <= 512);
+    }
+  });
+
+  it("each broadening hint has topic_path and reason fields", () => {
+    const vault = makeVaultRoot();
+    const candidates = ["alpha", "beta", "gamma"].map((name) =>
+      parseTopicCandidateFile({
+        path: join(vault, "topics", `${name}.md`),
+        content: `---\ntitle: ${name} workflows\ntags: [shared-tag, ${name}]\ndescription: ${name} stuff.\n---\n${name} content.\n`,
+      }),
+    );
+    const response = buildRetrieveResponse("alpha workflows", vault, candidates);
+    for (const hint of response.broadening_hints) {
+      assert.ok(typeof hint.topic_path === "string");
+      assert.ok(typeof hint.reason === "string");
+    }
+  });
+});
+
+describe("buildRetrieveResponse — low-confidence is still a success", () => {
+  it("returns a plain response object (not an error) even on coverage gap", () => {
+    const vault = makeVaultRoot();
+    const response = buildRetrieveResponse("zzz", vault, []);
+    assert.ok("schema_version" in response);
+    assert.ok(!("status" in response), "response must not be an error envelope");
+    assert.equal(response.schema_version, RETRIEVE_SCHEMA_VERSION);
+  });
+
+  it("handleRetrieve emits exit 0 for coverage-gap (low-confidence) queries", () => {
+    const vault = makeVaultRoot();
+    // vault has no topics/ dir, so allCandidates will be empty → coverage_gap
+    const outcome = handleRetrieve([vault, "zzz totally unmatched"], () => makePlainDir());
+    assert.equal(outcome.exitCode, ExitCode.SUCCESS);
+    const r = outcome.result as { status: string; data: { coverage_gap: boolean } };
+    assert.equal(r.status, "ok");
+    assert.equal(r.data.coverage_gap, true);
   });
 });
