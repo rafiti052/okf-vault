@@ -1860,7 +1860,7 @@ describe("buildRetrieveResponse — low-confidence is still a success", () => {
     // vault has no topics/ dir, so allCandidates will be empty → coverage_gap
     const outcome = handleRetrieve([vault, "zzz totally unmatched"], () => makePlainDir());
     assert.equal(outcome.exitCode, ExitCode.SUCCESS);
-    const r = outcome.result as { status: string; data: { coverage_gap: boolean } };
+    const r = outcome.result as unknown as { status: string; data: { coverage_gap: boolean } };
     assert.equal(r.status, "ok");
     assert.equal(r.data.coverage_gap, true);
   });
