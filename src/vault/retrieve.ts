@@ -599,6 +599,112 @@ export function rankCandidates(
 }
 
 // ---------------------------------------------------------------------------
+// Confidence tier and multi-result selection — Task 07
+// ---------------------------------------------------------------------------
+
+/**
+ * Thresholds governing confidence tier assignment and close-score expansion.
+ *
+ * All values are implementation constants calibrated through the repo-owned
+ * eval fixture set (ADR-004). They are not exposed as CLI flags in V1.
+ *
+ * CONFIDENCE_HIGH_DOMINANCE_RATIO:
+ *   The top score must be at least this multiple of the median score to emit
+ *   `high` confidence. A value of 2.0 means the top score must be twice the
+ *   median — ensures the winner clearly outranks the field.
+ *
+ * CONFIDENCE_LOW_MINIMUM_THRESHOLD:
+ *   Absolute minimum top score below which `low` is always emitted regardless
+ *   of distribution. A score of 0 means nothing matched at all.
+ *
+ * CLOSE_SCORE_WINDOW:
+ *   Fraction of the top score used to define the close-score window.
+ *   A value of 0.8 means any candidate scoring >= topScore * 0.8 is included
+ *   as a secondary result alongside the top result.
+ *
+ * MAX_RESULTS:
+ *   Hard cap on the number of candidates returned. Prevents unbounded
+ *   expansion when many candidates cluster near the top score.
+ */
+const CONFIDENCE_HIGH_DOMINANCE_RATIO = 2.0;
+const CONFIDENCE_LOW_MINIMUM_THRESHOLD = 1;
+const CLOSE_SCORE_WINDOW = 0.8;
+const MAX_RESULTS = 5;
+
+/**
+ * Assign a confidence tier to a retrieval result set.
+ *
+ * Algorithm (per ADR-004 — uses the full score distribution, not only the top):
+ * 1. If the top score is below `CONFIDENCE_LOW_MINIMUM_THRESHOLD`, emit `low`.
+ * 2. Compute the median of all scores.
+ *    - If the median is 0 and the top score is positive, there is a single
+ *      strong signal — emit `high`.
+ *    - If topScore / median >= CONFIDENCE_HIGH_DOMINANCE_RATIO, emit `high`.
+ * 3. Otherwise emit `medium`.
+ *
+ * @param topScore - The highest score in the ranked list.
+ * @param scores   - All scores from the ranked list (must include topScore).
+ * @returns Confidence tier string.
+ */
+export function assignConfidence(
+  topScore: number,
+  scores: number[],
+): "high" | "medium" | "low" {
+  if (topScore < CONFIDENCE_LOW_MINIMUM_THRESHOLD) return "low";
+
+  // Compute median of all scores.
+  const sorted = [...scores].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 1
+      ? (sorted[mid] as number)
+      : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
+
+  if (median === 0 || topScore / median >= CONFIDENCE_HIGH_DOMINANCE_RATIO) {
+    return "high";
+  }
+
+  return "medium";
+}
+
+/**
+ * Select the final result set from a ranked candidate list.
+ *
+ * Selection rules (per ADR-004):
+ * - Always include the top-ranked candidate (index 0).
+ * - Include additional candidates whose score falls within the close-score
+ *   window: score >= topScore * CLOSE_SCORE_WINDOW.
+ * - Hard-cap the total number of results at MAX_RESULTS.
+ * - Preserves the ranked order (deterministic, already sorted by rankCandidates).
+ *
+ * When the ranked list is empty, returns an empty candidates array with `low`
+ * confidence. This is the coverage-gap case.
+ *
+ * @param ranked - Array of `{ candidate, score }` records sorted descending
+ *                 by score (as returned by `rankCandidates`).
+ * @returns Object with the selected `candidates` subset and derived `confidence`.
+ */
+export function selectResults(
+  ranked: Array<{ candidate: TopicMapCandidate; score: number }>,
+): {
+  candidates: Array<{ candidate: TopicMapCandidate; score: number }>;
+  confidence: "high" | "medium" | "low";
+} {
+  if (ranked.length === 0) {
+    return { candidates: [], confidence: "low" };
+  }
+
+  const topScore = (ranked[0] as { candidate: TopicMapCandidate; score: number }).score;
+  const allScores = ranked.map((r) => r.score);
+  const confidence = assignConfidence(topScore, allScores);
+
+  const threshold = topScore * CLOSE_SCORE_WINDOW;
+  const selected = ranked.filter((r) => r.score >= threshold).slice(0, MAX_RESULTS);
+
+  return { candidates: selected, confidence };
+}
+
+// ---------------------------------------------------------------------------
 // Vault root resolution — Task 02
 // ---------------------------------------------------------------------------
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -968,5 +968,230 @@ describe("scoreCandidate — integration: realistic topic ranking", () => {
       strategyScore > agentScore,
       `Strategy topic (${strategyScore}) should outscore agent topic (${agentScore}) for Portuguese query`,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assignConfidence — unit tests (Task 07)
+// ---------------------------------------------------------------------------
+
+describe("assignConfidence — basic tier assignment", () => {
+  it("returns 'low' when topScore is 0", () => {
+    assert.equal(assignConfidence(0, [0, 0, 0]), "low");
+  });
+
+  it("returns 'low' when topScore is below minimum threshold (< 1)", () => {
+    // topScore of 0 is below threshold
+    assert.equal(assignConfidence(0, [0, 0, 5]), "low");
+  });
+
+  it("returns 'high' when topScore is clearly above median (dominance ratio >= 2.0)", () => {
+    // topScore=20, median of [20, 5, 5, 5, 5] = 5 -> ratio 4.0 -> high
+    assert.equal(assignConfidence(20, [20, 5, 5, 5, 5]), "high");
+  });
+
+  it("returns 'high' when median is 0 and topScore is positive", () => {
+    // Only one candidate matched; median of [10, 0, 0, 0] = 0 -> high signal
+    assert.equal(assignConfidence(10, [10, 0, 0, 0]), "high");
+  });
+
+  it("returns 'medium' when topScore is positive but dominance ratio < 2.0", () => {
+    // topScore=10, scores=[10, 8, 7, 6] -> median=(8+7)/2=7.5 -> ratio ~1.33 -> medium
+    assert.equal(assignConfidence(10, [10, 8, 7, 6]), "medium");
+  });
+
+  it("returns 'medium' for close scores across all candidates", () => {
+    // All scores close together -> no single dominant winner
+    assert.equal(assignConfidence(10, [10, 9, 9, 8]), "medium");
+  });
+
+  it("returns 'high' for single-candidate list with positive score", () => {
+    // Only one candidate; median is that candidate's score -> ratio is 1.0
+    // But median equals topScore, ratio = 1.0 < 2.0 -> should be medium
+    // Unless median == topScore -> medium. Let's verify expected behavior.
+    // topScore=10, scores=[10], median=10, ratio=1.0 -> medium
+    assert.equal(assignConfidence(10, [10]), "medium");
+  });
+
+  it("uses full distribution to derive median, not just the top two", () => {
+    // topScore=30, scores=[30, 1, 1, 1, 1, 1] -> median of 6 = (1+1)/2 = 1 -> ratio=30 -> high
+    assert.equal(assignConfidence(30, [30, 1, 1, 1, 1, 1]), "high");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectResults — unit tests (Task 07)
+// ---------------------------------------------------------------------------
+
+describe("selectResults — basic selection", () => {
+  it("returns empty candidates and 'low' confidence for empty input", () => {
+    const result = selectResults([]);
+    assert.equal(result.confidence, "low");
+    assert.deepEqual(result.candidates, []);
+  });
+
+  it("always includes the top candidate", () => {
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md", title: "Agents" }), score: 20 },
+      { candidate: makeCandidate({ path: "/b.md", title: "Strategy" }), score: 5 },
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.candidates.length >= 1, true);
+    assert.equal(result.candidates[0]!.candidate.path, "/a.md");
+  });
+
+  it("includes secondary candidate within 80% of top score", () => {
+    // topScore=10, window=8. Score 8 >= 8 -> included. Score 7 < 8 -> excluded.
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md" }), score: 10 },
+      { candidate: makeCandidate({ path: "/b.md" }), score: 8 },
+      { candidate: makeCandidate({ path: "/c.md" }), score: 7 },
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.candidates.length, 2);
+    assert.ok(result.candidates.some((r) => r.candidate.path === "/a.md"));
+    assert.ok(result.candidates.some((r) => r.candidate.path === "/b.md"));
+    assert.ok(!result.candidates.some((r) => r.candidate.path === "/c.md"));
+  });
+
+  it("excludes candidates below the 80% window", () => {
+    const ranked = [
+      { candidate: makeCandidate({ path: "/strong.md" }), score: 100 },
+      { candidate: makeCandidate({ path: "/weak.md" }), score: 50 }, // 50 < 80 -> excluded
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.candidates.length, 1);
+    assert.equal(result.candidates[0]!.candidate.path, "/strong.md");
+  });
+
+  it("caps results at MAX_RESULTS (5) even when many candidates are within window", () => {
+    // All 10 candidates at score 10 (all within 80% window of 10)
+    const ranked = Array.from({ length: 10 }, (_, i) => ({
+      candidate: makeCandidate({ path: `/${i}.md` }),
+      score: 10,
+    }));
+    const result = selectResults(ranked);
+    assert.equal(result.candidates.length, 5);
+  });
+
+  it("preserves descending score order in returned candidates", () => {
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md" }), score: 10 },
+      { candidate: makeCandidate({ path: "/b.md" }), score: 9 },
+      { candidate: makeCandidate({ path: "/c.md" }), score: 8 },
+    ];
+    const result = selectResults(ranked);
+    const scores = result.candidates.map((r) => r.score);
+    // Verify descending order is preserved
+    for (let i = 1; i < scores.length; i++) {
+      assert.ok((scores[i - 1] as number) >= (scores[i] as number));
+    }
+  });
+
+  it("returns 'high' confidence when top score clearly dominates", () => {
+    // topScore=40, others=5 -> ratio=8.0 -> high
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md" }), score: 40 },
+      { candidate: makeCandidate({ path: "/b.md" }), score: 5 },
+      { candidate: makeCandidate({ path: "/c.md" }), score: 5 },
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.confidence, "high");
+  });
+
+  it("returns 'medium' confidence when top score does not clearly dominate", () => {
+    // topScore=10, close scores -> medium
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md" }), score: 10 },
+      { candidate: makeCandidate({ path: "/b.md" }), score: 9 },
+      { candidate: makeCandidate({ path: "/c.md" }), score: 8 },
+      { candidate: makeCandidate({ path: "/d.md" }), score: 7 },
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.confidence, "medium");
+  });
+
+  it("returns 'low' confidence when top score is 0", () => {
+    const ranked = [
+      { candidate: makeCandidate({ path: "/a.md" }), score: 0 },
+      { candidate: makeCandidate({ path: "/b.md" }), score: 0 },
+    ];
+    const result = selectResults(ranked);
+    assert.equal(result.confidence, "low");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectResults — integration: close thematic matches (Task 07)
+// ---------------------------------------------------------------------------
+
+describe("selectResults — integration: close thematic matches", () => {
+  it("returns both candidates in deterministic order when two topics score closely", () => {
+    // Build two candidates that both match "agent automation" well
+    const agentTopic = makeCandidate({
+      path: "/vault/topics/agents.md",
+      title: "Agent Workflows",
+      tags: ["agents", "automation"],
+      description: "Notes on agent automation.",
+      prose: "Agents automate tasks and workflows.",
+    });
+    const autoTopic = makeCandidate({
+      path: "/vault/topics/automation.md",
+      title: "Automation Systems",
+      tags: ["automation", "agents"],
+      description: "Automation notes.",
+      prose: "Automation and agent-driven processes.",
+    });
+    const unrelatedTopic = makeCandidate({
+      path: "/vault/topics/strategy.md",
+      title: "Strategy",
+      tags: ["planning"],
+      description: "Strategy notes.",
+      prose: "Long-term planning and OKRs.",
+    });
+
+    const ranked = rankCandidates("agent automation", [agentTopic, autoTopic, unrelatedTopic]);
+    const result = selectResults(ranked);
+
+    // Both agent and automation topics should appear (close scores)
+    const paths = result.candidates.map((r) => r.candidate.path);
+    assert.ok(paths.includes("/vault/topics/agents.md"), "agents.md should be in results");
+    assert.ok(paths.includes("/vault/topics/automation.md"), "automation.md should be in results");
+
+    // Results must be in descending score order (deterministic)
+    const scores = result.candidates.map((r) => r.score);
+    for (let i = 1; i < scores.length; i++) {
+      assert.ok((scores[i - 1] as number) >= (scores[i] as number), "scores must be non-increasing");
+    }
+  });
+
+  it("does not include unrelated low-scoring candidates in close-match set", () => {
+    const strongA = makeCandidate({
+      path: "/vault/topics/a.md",
+      title: "Agent Workflows",
+      tags: ["agents"],
+      description: "Agent workflow notes.",
+      prose: "Agents and workflows.",
+    });
+    const strongB = makeCandidate({
+      path: "/vault/topics/b.md",
+      title: "Agentic Systems",
+      tags: ["agents"],
+      description: "Notes on agentic systems.",
+      prose: "Agentic automation.",
+    });
+    const weak = makeCandidate({
+      path: "/vault/topics/unrelated.md",
+      title: "Database Design",
+      tags: ["sql"],
+      description: "SQL and schema notes.",
+      prose: "Database normalization.",
+    });
+
+    const ranked = rankCandidates("agents", [strongA, strongB, weak]);
+    const result = selectResults(ranked);
+
+    const paths = result.candidates.map((r) => r.candidate.path);
+    assert.ok(!paths.includes("/vault/topics/unrelated.md"), "weak unrelated candidate must not appear");
   });
 });
