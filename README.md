@@ -39,7 +39,7 @@ Two layers work together:
 ### Install (this repository)
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/rafiti052/okf-vault
 cd okf-vault
 pnpm run setup          # build CLI + install Cursor and Claude adapters + per-command /okv-* slash entries
 ```
@@ -102,6 +102,8 @@ Full command list with availability labels and stub links: [commands/registry.md
 | `validate` | Run the consolidated quality gate (contracts, manifest, graph, recovery state) |
 | `visualize` | Build the configured OKF visualizer HTML output |
 | `recover` | Recover from a failed transaction using the journal |
+| `retrieve <vault-root> <query>` | Natural-language query over topic maps — returns ranked results with confidence and coverage-gap signal |
+| `retrieve --eval <vault-root>` | Run the fixed eval corpus; exits 0 on pass, 3 on threshold miss (hit rate ≥ 0.8) |
 
 All commands emit a single JSON object on stdout and human diagnostics on stderr. Exit codes 0–5 map to success, unexpected, usage, validation, conflict, and transaction failures.
 
@@ -126,6 +128,7 @@ Invoke the **okf-vault** skill for vault tasks:
 | `organize` | Generate dossiers and curation proposals after ingestion |
 | `validate` | Run quality checks on an existing vault |
 | `visualize` | Open the knowledge graph visualizer after validation passes |
+| `ask` | Natural-language query grounded in committed notes (read-only) |
 
 The skill enforces explicit sources, sequential processing, visible progress events, and ADR-009 failure-stop behavior. See [SKILL.md](.agents/skills/okf-vault/SKILL.md) for phase order and curator rules.
 
