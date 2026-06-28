@@ -129,6 +129,65 @@ describe("JSON Schema contracts", () => {
     );
   });
 
+  it("accepts valid youtube source records and rejects invalid youtube entries", () => {
+    const { validate } = createValidator("manifest.schema.json");
+    const videoId = "dQw4w9WgXcQ";
+    const sourceKey = `youtube:${videoId}`;
+    const committed = {
+      schema_version: "okf-vault-manifest/1.0.0",
+      note_contract_version: "okf-note-contract/1.0.0",
+      sources: [
+        {
+          source_key: sourceKey,
+          kind: "youtube",
+          origin: videoId,
+          content_sha256: VALID_SHA,
+          contract_version: "okf-note-contract/1.0.0",
+          note_path: "notes/youtube-video.md",
+          status: "committed",
+          commit: "abc1234",
+          processed_at: VALID_TS,
+        },
+      ],
+    };
+    const skipped = {
+      schema_version: "okf-vault-manifest/1.0.0",
+      note_contract_version: "okf-note-contract/1.0.0",
+      sources: [
+        {
+          source_key: sourceKey,
+          kind: "youtube",
+          origin: `https://www.youtube.com/watch?v=${videoId}`,
+          content_sha256: VALID_SHA,
+          contract_version: "okf-note-contract/1.0.0",
+          status: "skipped",
+          skip_reason: "curator declined",
+          processed_at: VALID_TS,
+        },
+      ],
+    };
+    assert.ok(validate(committed));
+    assert.ok(validate(skipped));
+    assert.ok(
+      !validate({
+        ...committed,
+        sources: [{ ...committed.sources[0], kind: "youtube_stream" }],
+      }),
+    );
+    assert.ok(
+      !validate({
+        ...committed,
+        sources: [{ ...committed.sources[0], source_key: "" }],
+      }),
+    );
+    assert.ok(
+      !validate({
+        ...skipped,
+        sources: [{ ...skipped.sources[0], skip_reason: undefined }],
+      }),
+    );
+  });
+
   it("proposal schema validates topic, link, duplicate, contradiction with claim ID rules", () => {
     const { schema, validate } = createValidator("proposal.schema.json");
     assert.equal(schema.$id, "okf-vault-proposal/1.0.0");
