@@ -1,4 +1,5 @@
 import { handleDossier } from "../vault/dossier.js";
+import { handleRetrieve } from "../vault/retrieve.js";
 import { handleDoctor } from "../vault/doctor.js";
 import { handleValidateGraph } from "../vault/graph.js";
 import { handleInit, handleInspect } from "../vault/manifest.js";
@@ -57,6 +58,7 @@ export const RESERVED_COMMANDS = [
   "recover",
   "uninstall",
   "doctor",
+  "retrieve",
 ] as const;
 
 export type ReservedCommand = (typeof RESERVED_COMMANDS)[number];
@@ -152,7 +154,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
 }
 
 export function helpText(): string {
-  const otherCommands = RESERVED_COMMANDS.filter((name) => name !== "init")
+  const otherCommands = RESERVED_COMMANDS.filter(
+    (name) => name !== "init" && name !== "retrieve",
+  )
     .map((name) => `  ${name}`)
     .join("\n");
   return [
@@ -164,6 +168,10 @@ export function helpText(): string {
     "Commands:",
     "  init [vault-root]  From repo root: create ./knowledge/ and install skill adapters.",
     "                     With vault-root: initialize vault only (no adapters).",
+    "  retrieve <vault-root> <query>   Query vault topic maps and return ranked results.",
+    "  retrieve <query>                 Fallback form when cwd is already a valid vault root.",
+    "  retrieve --eval <vault-root>    Run the fixed eval set against the vault.",
+    "  retrieve --eval                  Eval fallback form when cwd is already a valid vault root.",
     otherCommands,
     "",
     "Global flags:",
@@ -261,6 +269,10 @@ export function dispatch(parsed: ParsedArgs): DispatchOutcome {
 
   if (parsed.command === "doctor") {
     return handleDoctor(parsed.positional.slice(1), parsed.outputModeFlag);
+  }
+
+  if (parsed.command === "retrieve") {
+    return handleRetrieve(parsed.positional.slice(1));
   }
 
   return {

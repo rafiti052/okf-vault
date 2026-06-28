@@ -100,6 +100,7 @@ describe("CLI parsing and dispatch", () => {
       "dossier",
       "validate-proposals",
       "doctor",
+      "retrieve",
     ]);
     for (const command of RESERVED_COMMANDS) {
       if (command === "init" || command === "uninstall") {
@@ -201,6 +202,43 @@ describe("CLI parsing and dispatch", () => {
   });
 });
 
+describe("retrieve command registration", () => {
+  it("RESERVED_COMMANDS includes retrieve", () => {
+    assert.ok(
+      (RESERVED_COMMANDS as readonly string[]).includes("retrieve"),
+      "retrieve must be in RESERVED_COMMANDS",
+    );
+  });
+
+  it("dispatch routes retrieve to the handler and returns usage on missing args", () => {
+    const outcome = dispatch(parseArgs(["retrieve"]));
+    assert.equal(outcome.exitCode, ExitCode.USAGE);
+    assert.equal(outcome.result?.status, "error");
+    assert.equal(outcome.result?.command, "retrieve");
+  });
+
+  it("dispatch routes retrieve --eval with missing vault-root to usage error", () => {
+    const outcome = dispatch(parseArgs(["retrieve", "--eval"]));
+    assert.equal(outcome.exitCode, ExitCode.USAGE);
+    assert.equal(outcome.result?.status, "error");
+    assert.equal(outcome.result?.command, "retrieve");
+  });
+
+  it("help text includes retrieve query and eval forms", () => {
+    const text = helpText();
+    assert.match(text, /retrieve/);
+    assert.match(text, /--eval/);
+    assert.match(text, /vault-root/);
+    assert.match(text, /query/);
+  });
+
+  it("retrieve does not appear in unknown-command error when invoked", () => {
+    const outcome = dispatch(parseArgs(["retrieve", "some-vault", "some-query"]));
+    const code = outcome.result?.status === "error" ? outcome.result.code : undefined;
+    assert.notEqual(code, "USAGE_UNKNOWN_COMMAND");
+  });
+});
+
 describe("exit class mapping helpers", () => {
   it("documents conflict and transaction exit classes", () => {
     assert.equal(ExitCode.CONFLICT, 4);
@@ -224,6 +262,16 @@ describe("compiled executable integration", () => {
     assert.equal(unknown.status, ExitCode.USAGE);
     assert.match(unknown.stdout, /USAGE_UNKNOWN_COMMAND/);
     assert.match(unknown.stderr, /Unknown command/);
+  });
+
+  it("returns structured usage error for retrieve with no args", () => {
+    const bin = join(root, "dist", "main.js");
+    const result = spawnSync(process.execPath, [bin, "retrieve", "--json"], { encoding: "utf8" });
+    assert.equal(result.status, ExitCode.USAGE);
+    const payload = JSON.parse(result.stdout.trim()) as { status: string; command: string; code?: string };
+    assert.equal(payload.status, "error");
+    assert.equal(payload.command, "retrieve");
+    assert.match(payload.code ?? "", /USAGE/);
   });
 
   it("defaults to JSON when stdout is piped", () => {
