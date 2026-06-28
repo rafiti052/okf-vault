@@ -215,6 +215,30 @@ describe("parseVaultSessionContext", () => {
     });
     assert.equal(parsed.vault_root, "knowledge");
   });
+
+  it("accepts last_source_kind youtube and rejects unsupported values", () => {
+    const parsed = parseVaultSessionContext({
+      vault_root: "knowledge",
+      last_run_id: "run-youtube-01",
+      last_mode: "ingest",
+      last_exit_status: "completed",
+      last_source_kind: "youtube",
+    });
+    assert.equal(parsed.last_source_kind, "youtube");
+
+    assert.throws(
+      () =>
+        parseVaultSessionContext({
+          vault_root: "knowledge",
+          last_run_id: null,
+          last_mode: null,
+          last_exit_status: null,
+          last_source_kind: "vimeo",
+        }),
+      (error: unknown) =>
+        error instanceof SessionContextError && error.code === "INVALID_ENUM_VALUE",
+    );
+  });
 });
 
 describe("createDefaultSessionContext", () => {
@@ -265,6 +289,32 @@ describe("IngestWizardState contract", () => {
 });
 
 describe("wizard handoff integration", () => {
+  it("passes parseIngestRunInput for a wizard-style youtube source handoff", () => {
+    const wizardState: IngestWizardState = {
+      step: "delegate_ingest",
+      source_type: "mcp_artifact",
+      pending_source: {
+        kind: "youtube",
+        locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        content_type: "video/transcript",
+      },
+      run_id: "run-youtube-handoff",
+    };
+
+    assert.ok(wizardState.pending_source);
+
+    const handoff = parseIngestRunInput({
+      vault_root: "knowledge",
+      run_id: wizardState.run_id,
+      sources: [wizardState.pending_source],
+    });
+
+    assert.equal(handoff.run_id, "run-youtube-handoff");
+    assert.equal(handoff.sources.length, 1);
+    assert.equal(handoff.sources[0]?.kind, "youtube");
+    assert.equal(handoff.sources[0]?.locator, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  });
+
   it("passes parseIngestRunInput when pending_source is wrapped in a single-element sources array", () => {
     const wizardState: IngestWizardState = {
       step: "delegate_ingest",

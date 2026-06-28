@@ -92,6 +92,51 @@ describe("ingestion loop documentation", () => {
 });
 
 describe("ingest input parser", () => {
+  it("accepts a youtube source entry with required fields", () => {
+    const parsed = parseIngestRunInput({
+      vault_root: "/tmp/vault",
+      run_id: "run-youtube",
+      sources: [
+        {
+          kind: "youtube",
+          locator: "https://youtu.be/dQw4w9WgXcQ",
+          content_type: "video/transcript",
+        },
+      ],
+    });
+
+    assert.equal(parsed.sources.length, 1);
+    assert.equal(parsed.sources[0]?.kind, "youtube");
+    assert.equal(parsed.sources[0]?.locator, "https://youtu.be/dQw4w9WgXcQ");
+    assert.equal(parsed.sources[0]?.content_type, "video/transcript");
+  });
+
+  it("rejects duplicate youtube source keys when URL variants resolve to the same video id", () => {
+    assert.throws(
+      () =>
+        parseIngestRunInput({
+          vault_root: "/tmp/vault",
+          run_id: "run-youtube-dup",
+          sources: [
+            {
+              kind: "youtube",
+              locator: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              content_type: "video/transcript",
+            },
+            {
+              kind: "youtube",
+              locator: "https://youtu.be/dQw4w9WgXcQ",
+              content_type: "video/transcript",
+            },
+          ],
+        }),
+      (error: unknown) =>
+        error instanceof IngestInputError &&
+        error.code === "DUPLICATE_SOURCE_KEY" &&
+        error.message.includes("youtube:dQw4w9WgXcQ"),
+    );
+  });
+
   it("rejects empty source lists and duplicate stable source keys", () => {
     assert.throws(
       () =>
