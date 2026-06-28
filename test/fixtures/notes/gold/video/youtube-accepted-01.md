@@ -1,7 +1,7 @@
 ---
 type: Video Transcript Note
 title: Sample Video
-description: Valid YouTube transcript note.
+description: Gold video note paired with accepted YouTube transcript envelope.
 contract_version: okf-note-contract/1.0.0
 source:
   source_key: youtube:dQw4w9WgXcQ

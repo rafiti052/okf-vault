@@ -28,6 +28,7 @@ import {
   envelopeHasSlides,
 } from "../../dist/vault/ingestion.js";
 import { commitStagedSource, recoverVault } from "../../dist/vault/transaction.js";
+import { youtubeAccepted, youtubeAmbiguous, youtubeRejected } from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -53,15 +54,15 @@ const VIDEO_ENVELOPE = join(envelopesDir, "video", "accepted-01.json");
 const VIDEO_NOTE = join(goldDir, "video", "accepted-01.md");
 const VIDEO_STAGED = "notes/gold-video-01.md";
 
-const YOUTUBE_ENVELOPE = join(envelopesDir, "youtube-transcript-valid.json");
-const YOUTUBE_NOTE = join(notesDir, "youtube-valid.md");
-const YOUTUBE_STAGED = "notes/youtube-valid.md";
+const YOUTUBE_ENVELOPE = youtubeAccepted.envelopePath;
+const YOUTUBE_NOTE = youtubeAccepted.notePath;
+const YOUTUBE_STAGED = youtubeAccepted.stagedNotePath;
 
-const YOUTUBE_PANEL_ENVELOPE = join(envelopesDir, "youtube-panel-transcript.json");
-const YOUTUBE_PANEL_NOTE = join(goldDir, "panel", "youtube-ambiguous-01.md");
-const YOUTUBE_PANEL_STAGED = "notes/youtube-panel-ambiguous-01.md";
+const YOUTUBE_PANEL_ENVELOPE = youtubeAmbiguous.envelopePath;
+const YOUTUBE_PANEL_NOTE = youtubeAmbiguous.notePath;
+const YOUTUBE_PANEL_STAGED = youtubeAmbiguous.stagedNotePath;
 
-const YOUTUBE_INVALID_ENVELOPE = join(envelopesDir, "youtube-missing-timestamps.json");
+const YOUTUBE_INVALID_ENVELOPE = youtubeRejected.envelopePath;
 
 function prepareVault() {
   const vaultRoot = mkdtempSync(join(tmpdir(), "okf-ingest-"));

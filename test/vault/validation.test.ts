@@ -25,6 +25,7 @@ import {
   validateValidationReport,
   type ValidationReport,
 } from "../../dist/vault/validation.js";
+import { youtubeAccepted, youtubeRejected } from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -46,6 +47,14 @@ function stageNote(
   const targetDir = join(stagingDir, dirname(stagedName));
   mkdirSync(targetDir, { recursive: true });
   copyFileSync(join(notesDir, fixtureName), join(stagingDir, stagedName));
+  return stagingDir;
+}
+
+function stageGoldNote(vaultRoot: string, runId: string, notePath: string, stagedName: string) {
+  const stagingDir = join(vaultRoot, ".okf-vault", "tmp", runId);
+  const targetDir = join(stagingDir, dirname(stagedName));
+  mkdirSync(targetDir, { recursive: true });
+  copyFileSync(notePath, join(stagingDir, stagedName));
   return stagingDir;
 }
 
@@ -97,14 +106,14 @@ describe("validation report schema", () => {
 
 describe("source envelope validation", () => {
   it("loads and accepts a valid YouTube transcript envelope with timestamp anchors", () => {
-    const envelope = loadEnvelope("youtube-transcript-valid.json");
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
     assert.equal(envelope.kind, "youtube");
     const issues = validateSourceEnvelope(envelope);
     assert.equal(issues.length, 0);
   });
 
   it("rejects a YouTube transcript envelope missing timestamp anchors", () => {
-    const envelope = loadEnvelope("youtube-missing-timestamps.json");
+    const envelope = loadSourceEnvelope(youtubeRejected.envelopePath);
     const issues = validateSourceEnvelope(envelope);
     assert.equal(issues.length, 1);
     assert.equal(issues[0]?.code, "INCOMPLETE_TRANSCRIPT_TIMESTAMPS");
@@ -125,7 +134,7 @@ describe("source envelope validation", () => {
   });
 
   it("rejects timestamp anchors with empty timestamp values on YouTube envelopes", () => {
-    const envelope = loadEnvelope("youtube-transcript-valid.json");
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
     envelope.anchors = [
       {
         id: "timestamp-empty",
@@ -256,8 +265,13 @@ describe("staged note contract validation", () => {
   it("accepts a valid MVP YouTube transcript note and envelope pair", () => {
     const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-youtube-pass-"));
     initializeVault(vaultRoot);
-    const stagingDir = stageNote(vaultRoot, "run-youtube", "youtube-valid.md");
-    const envelope = loadEnvelope("youtube-transcript-valid.json");
+    const stagingDir = stageGoldNote(
+      vaultRoot,
+      "run-youtube",
+      youtubeAccepted.notePath,
+      youtubeAccepted.stagedNotePath,
+    );
+    const envelope = loadSourceEnvelope(youtubeAccepted.envelopePath);
     const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
     assert.equal(result.report.status, "pass");
     assert.equal(result.report.issues.length, 0);
@@ -266,8 +280,13 @@ describe("staged note contract validation", () => {
   it("fails staged validation before commit when YouTube envelope lacks timestamps", () => {
     const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-youtube-fail-"));
     initializeVault(vaultRoot);
-    const stagingDir = stageNote(vaultRoot, "run-youtube-bad", "youtube-valid.md");
-    const envelope = loadEnvelope("youtube-missing-timestamps.json");
+    const stagingDir = stageGoldNote(
+      vaultRoot,
+      "run-youtube-bad",
+      youtubeAccepted.notePath,
+      youtubeAccepted.stagedNotePath,
+    );
+    const envelope = loadSourceEnvelope(youtubeRejected.envelopePath);
     const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
     assert.equal(result.report.status, "fail");
     const timestampIssue = result.report.issues.find(
