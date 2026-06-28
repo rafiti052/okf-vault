@@ -7,7 +7,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import { NOTE_CONTRACT_VERSION } from "./constants.js";
-import { loadManifest } from "./manifest.js";
+import { deriveSourceKey, loadManifest } from "./manifest.js";
 
 export const VALIDATION_REPORT_SCHEMA_VERSION = "okf-vault-validation-report/1.0.0" as const;
 export const SOURCE_ENVELOPE_VERSION = "okf-source-envelope/1.0.0" as const;
@@ -88,10 +88,14 @@ export interface DeckSlide {
   image_available: boolean;
 }
 
+export const ENVELOPE_SOURCE_KINDS = ["local", "google_drive", "granola", "youtube"] as const;
+
+export type EnvelopeSourceKind = (typeof ENVELOPE_SOURCE_KINDS)[number];
+
 export interface SourceEnvelope {
   contract_version: string;
   source_key: string;
-  kind: "local" | "google_drive" | "granola";
+  kind: EnvelopeSourceKind;
   content_type: string;
   origin: string;
   canonical_uri: string;
@@ -154,6 +158,60 @@ export function loadSourceEnvelope(envelopePath: string): SourceEnvelope {
     throw new Error(`Unsupported envelope contract_version '${raw.contract_version}'`);
   }
   return raw;
+}
+
+function envelopeHasUsableTimestampAnchors(envelope: SourceEnvelope): boolean {
+  return envelope.anchors.some(
+    (anchor) =>
+      anchor.kind === "timestamp" &&
+      typeof anchor.timestamp === "string" &&
+      anchor.timestamp.trim().length > 0,
+  );
+}
+
+function validateYoutubeEnvelope(envelope: SourceEnvelope): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  try {
+    const expectedKey = deriveSourceKey("youtube", envelope.origin);
+    if (envelope.source_key !== expectedKey) {
+      issues.push(
+        issue(
+          "ENVELOPE_SOURCE_KEY_MISMATCH",
+          `Envelope source_key '${envelope.source_key}' does not match derived key '${expectedKey}'.`,
+        ),
+      );
+    }
+  } catch {
+    issues.push(
+      issue(
+        "INVALID_YOUTUBE_ORIGIN",
+        `Envelope origin '${envelope.origin}' is not a valid YouTube identity.`,
+      ),
+    );
+  }
+
+  if (!envelopeHasUsableTimestampAnchors(envelope)) {
+    issues.push(
+      issue("INCOMPLETE_TRANSCRIPT_TIMESTAMPS", "YouTube transcript requires timestamp anchors."),
+    );
+  }
+
+  return issues;
+}
+
+export function validateSourceEnvelope(envelope: SourceEnvelope): ValidationIssue[] {
+  if (!(ENVELOPE_SOURCE_KINDS as readonly string[]).includes(envelope.kind)) {
+    return [
+      issue("UNSUPPORTED_ENVELOPE_KIND", `Unsupported envelope kind '${String(envelope.kind)}'.`),
+    ];
+  }
+
+  if (envelope.kind === "youtube") {
+    return validateYoutubeEnvelope(envelope);
+  }
+
+  return [];
 }
 
 export function parseNoteContent(
@@ -840,7 +898,7 @@ export function validateStagedNotes(
 ): ValidateStagedResult {
   const manifest = loadManifest(vaultRoot);
   const { notes, issues: stagingIssues } = collectStagedNotes(stagingDir);
-  const issues = [...stagingIssues];
+  const issues = [...stagingIssues, ...validateSourceEnvelope(envelope)];
 
   if (notes.length === 0 && stagingIssues.length === 0) {
     issues.push(issue("STAGING_EMPTY", "No staged Markdown notes were found for validation."));

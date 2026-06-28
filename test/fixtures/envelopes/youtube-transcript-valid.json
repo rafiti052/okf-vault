@@ -1,0 +1,28 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "youtube:dQw4w9WgXcQ",
+  "kind": "youtube",
+  "content_type": "text/vtt",
+  "origin": "youtube:dQw4w9WgXcQ",
+  "canonical_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "title": "Sample Video",
+  "modified_at": "2026-01-01T00:00:00.000Z",
+  "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "normalized_text": "00:00:01 Opening remarks. 00:01:30 Feature overview.",
+  "anchors": [
+    {
+      "id": "timestamp-00:00:01",
+      "kind": "timestamp",
+      "label": "Opening",
+      "text": "Opening remarks.",
+      "timestamp": "00:00:01"
+    },
+    {
+      "id": "timestamp-00:01:30",
+      "kind": "timestamp",
+      "label": "Feature overview",
+      "text": "The product ships quarterly.",
+      "timestamp": "00:01:30"
+    }
+  ]
+}
