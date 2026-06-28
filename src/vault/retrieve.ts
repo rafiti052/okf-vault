@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { type DispatchOutcome, ExitCode, failure } from "../cli/cli.js";
-import { MANIFEST_RELATIVE_PATH } from "./constants.js";
+import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
 
 // ---------------------------------------------------------------------------
 // Retrieval result contract — Task 03
@@ -235,6 +235,96 @@ export const RetrieveErrorCode = {
 
 export type RetrieveErrorCodeValue =
   (typeof RetrieveErrorCode)[keyof typeof RetrieveErrorCode];
+
+// ---------------------------------------------------------------------------
+// Topic candidate loader — Task 04
+// ---------------------------------------------------------------------------
+
+/**
+ * Raw file content entry produced by the topic-map candidate loader.
+ * Contains only the absolute path and unparsed markdown content.
+ * Field extraction and scoring are handled by later pipeline stages.
+ */
+export interface RawTopicFile {
+  /** Absolute path to the topic map markdown file. */
+  path: string;
+  /** Raw markdown content of the file. */
+  content: string;
+}
+
+/**
+ * The filename of the managed topics index, excluded from candidate loading.
+ * Matches the basename component of TOPICS_INDEX_PATH ("index.md").
+ */
+const TOPICS_INDEX_BASENAME = basename(TOPICS_INDEX_PATH);
+
+/**
+ * Load raw topic map candidate files from `<vaultRoot>/topics/`.
+ *
+ * Rules:
+ * - Only `.md` files are included.
+ * - `index.md` (the managed topics index) is excluded.
+ * - Candidates are returned in deterministic ascending lexicographic order
+ *   by filename so ranking tests stay stable across runs.
+ * - Returns an empty array when the `topics/` directory does not exist or
+ *   contains no eligible files — callers decide whether to surface an error.
+ *
+ * This function is the replaceable loader seam described in ADR-003: it
+ * performs only filesystem enumeration and raw content reads, with no
+ * field parsing or scoring.
+ *
+ * @param vaultRoot - Absolute path to the vault root directory.
+ * @returns Sorted array of raw topic file entries.
+ */
+export function loadTopicCandidateFiles(vaultRoot: string): RawTopicFile[] {
+  const topicsDir = join(vaultRoot, "topics");
+
+  if (!fs.existsSync(topicsDir)) {
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(topicsDir);
+  } catch {
+    return [];
+  }
+
+  const candidates: RawTopicFile[] = [];
+
+  for (const entry of entries) {
+    // Exclude non-markdown files.
+    if (extname(entry) !== ".md") continue;
+    // Exclude the managed topics index.
+    if (basename(entry) === TOPICS_INDEX_BASENAME) continue;
+
+    const filePath = join(topicsDir, entry);
+
+    // Skip directories that happen to end in .md (unlikely but safe).
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+
+    let content: string;
+    try {
+      content = fs.readFileSync(filePath, "utf8");
+    } catch {
+      continue;
+    }
+
+    candidates.push({ path: filePath, content });
+  }
+
+  // Deterministic ascending order by filename (not full path) so results
+  // are stable regardless of the vault root location.
+  candidates.sort((a, b) => basename(a.path).localeCompare(basename(b.path)));
+
+  return candidates;
+}
 
 // ---------------------------------------------------------------------------
 // Vault root resolution — Task 02

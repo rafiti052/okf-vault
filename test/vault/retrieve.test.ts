@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -237,5 +237,92 @@ describe("CLI integration — okv retrieve root resolution", () => {
     });
     const output = result.stdout + result.stderr;
     assert.match(output, /NOT_YET_IMPLEMENTED/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadTopicCandidateFiles — unit tests (Task 04)
+// ---------------------------------------------------------------------------
+
+/** Create a vault root with a populated topics/ directory for loader tests. */
+function makeVaultWithTopics(files: Record<string, string>): string {
+  const vault = makeVaultRoot();
+  const topicsDir = join(vault, "topics");
+  mkdirSync(topicsDir, { recursive: true });
+  for (const [name, content] of Object.entries(files)) {
+    writeFileSync(join(topicsDir, name), content, "utf8");
+  }
+  return vault;
+}
+
+describe("loadTopicCandidateFiles", () => {
+  it("returns empty array when topics/ directory does not exist", () => {
+    const vault = makeVaultRoot();
+    // topics/ is not created — loader must not throw
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.deepEqual(candidates, []);
+  });
+
+  it("returns empty array when topics/ exists but has no markdown files", () => {
+    const vault = makeVaultWithTopics({ "readme.txt": "plain text" });
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.deepEqual(candidates, []);
+  });
+
+  it("returns empty array when topics/ contains only index.md", () => {
+    const vault = makeVaultWithTopics({ "index.md": "# Topics\n" });
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.deepEqual(candidates, []);
+  });
+
+  it("excludes index.md and non-markdown files, returns only topic map candidates", () => {
+    const vault = makeVaultWithTopics({
+      "index.md": "# Topics\n",
+      "agents.md": "# Agent Workflows\n",
+      "data.json": "{}",
+      "notes.txt": "plain",
+    });
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.equal(candidates.length, 1);
+    assert.ok(candidates[0]!.path.endsWith("agents.md"));
+    assert.equal(candidates[0]!.content, "# Agent Workflows\n");
+  });
+
+  it("returns candidates in deterministic ascending filename order", () => {
+    const vault = makeVaultWithTopics({
+      "zebra.md": "# Zebra\n",
+      "apple.md": "# Apple\n",
+      "mango.md": "# Mango\n",
+    });
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.equal(candidates.length, 3);
+    const names = candidates.map((c) => c.path.split("/").pop());
+    assert.deepEqual(names, ["apple.md", "mango.md", "zebra.md"]);
+  });
+
+  it("ordering is stable across multiple calls", () => {
+    const vault = makeVaultWithTopics({
+      "c-topic.md": "# C\n",
+      "a-topic.md": "# A\n",
+      "b-topic.md": "# B\n",
+    });
+    const first = loadTopicCandidateFiles(vault).map((c) => c.path);
+    const second = loadTopicCandidateFiles(vault).map((c) => c.path);
+    assert.deepEqual(first, second);
+  });
+
+  it("returns raw file content without modification", () => {
+    const content = "---\ntitle: My Topic\ntags: [foo, bar]\n---\n\n# My Topic\n\nSome prose.\n";
+    const vault = makeVaultWithTopics({ "my-topic.md": content });
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0]!.content, content);
+  });
+
+  it("integration: vault with no topic maps returns empty candidate set without crashing", () => {
+    // Full integration scenario: initialized vault, topics/ dir created but empty
+    const vault = makeVaultWithTopics({});
+    const candidates = loadTopicCandidateFiles(vault);
+    assert.equal(candidates.length, 0);
   });
 });
