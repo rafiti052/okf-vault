@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest, buildRetrieveResponse, RETRIEVE_SCHEMA_VERSION } from "../../dist/vault/retrieve.js";
+import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest, buildRetrieveResponse, RETRIEVE_SCHEMA_VERSION, loadEvalFixtures, runRetrieveEval, checkEvalThresholds, EVAL_THRESHOLDS, RETRIEVE_EVAL_SCHEMA_VERSION } from "../../dist/vault/retrieve.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -176,34 +176,65 @@ describe("handleRetrieve — query mode", () => {
 });
 
 describe("handleRetrieve — eval mode", () => {
+  const evalFixturesPath = join(
+    projectRoot,
+    "test",
+    "fixtures",
+    "retrieve-eval",
+    "eval-cases.json",
+  );
+  const evalVaultRoot = join(
+    projectRoot,
+    "test",
+    "fixtures",
+    "vaults",
+    "retrieve-eval",
+  );
+
   it("returns VAULT_ROOT_NOT_FOUND when --eval supplied with no vault root and bad cwd", () => {
     const plain = makePlainDir();
-    const outcome = handleRetrieve(["--eval"], () => plain);
+    const outcome = handleRetrieve(["--eval"], () => plain, evalFixturesPath);
     assert.equal(outcome.exitCode, ExitCode.USAGE);
     assertErrorCode(outcome.result, "VAULT_ROOT_NOT_FOUND");
   });
 
-  it("reaches NOT_YET_IMPLEMENTED when --eval with valid cwd vault root (cwd fallback)", () => {
-    const vault = makeVaultRoot();
-    const outcome = handleRetrieve(["--eval"], () => vault);
-    assert.equal(outcome.exitCode, ExitCode.USAGE);
-    assertErrorCode(outcome.result, "NOT_YET_IMPLEMENTED");
+  it("returns eval report when --eval with valid cwd vault root (cwd fallback)", () => {
+    const outcome = handleRetrieve(["--eval"], () => evalVaultRoot, evalFixturesPath);
+    // exit 0 or 3 depending on hit rate; always a success result with the report
+    assert.ok(
+      outcome.exitCode === ExitCode.SUCCESS || outcome.exitCode === ExitCode.VALIDATION,
+      `Expected exit 0 or 3, got ${outcome.exitCode}`,
+    );
+    const r = outcome.result as { status: string; command: string; data: Record<string, unknown> };
+    assert.equal(r.status, "ok");
+    assert.equal(r.command, "retrieve");
+    assert.equal(r.data.schema_version, RETRIEVE_EVAL_SCHEMA_VERSION);
   });
 
-  it("reaches NOT_YET_IMPLEMENTED when --eval with explicit vault root", () => {
-    const vault = makeVaultRoot();
+  it("returns eval report when --eval with explicit vault root", () => {
     const plain = makePlainDir();
-    const outcome = handleRetrieve(["--eval", vault], () => plain);
-    assert.equal(outcome.exitCode, ExitCode.USAGE);
-    assertErrorCode(outcome.result, "NOT_YET_IMPLEMENTED");
+    const outcome = handleRetrieve(["--eval", evalVaultRoot], () => plain, evalFixturesPath);
+    assert.ok(
+      outcome.exitCode === ExitCode.SUCCESS || outcome.exitCode === ExitCode.VALIDATION,
+      `Expected exit 0 or 3, got ${outcome.exitCode}`,
+    );
+    const r = outcome.result as { status: string; command: string; data: Record<string, unknown> };
+    assert.equal(r.status, "ok");
+    assert.equal(r.data.schema_version, RETRIEVE_EVAL_SCHEMA_VERSION);
   });
 
   it("returns VAULT_ROOT_NOT_FOUND when --eval with explicit non-vault path and bad cwd", () => {
     const plain = makePlainDir();
     const anotherPlain = makePlainDir();
-    const outcome = handleRetrieve(["--eval", anotherPlain], () => plain);
+    const outcome = handleRetrieve(["--eval", anotherPlain], () => plain, evalFixturesPath);
     assert.equal(outcome.exitCode, ExitCode.USAGE);
     assertErrorCode(outcome.result, "VAULT_ROOT_NOT_FOUND");
+  });
+
+  it("eval report always has status ok regardless of threshold pass/fail", () => {
+    const outcome = handleRetrieve(["--eval", evalVaultRoot], () => makePlainDir(), evalFixturesPath);
+    const r = outcome.result as { status: string };
+    assert.equal(r.status, "ok");
   });
 });
 
@@ -1863,5 +1894,174 @@ describe("buildRetrieveResponse — low-confidence is still a success", () => {
     const r = outcome.result as unknown as { status: string; data: { coverage_gap: boolean } };
     assert.equal(r.status, "ok");
     assert.equal(r.data.coverage_gap, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 13 — loadEvalFixtures
+// ---------------------------------------------------------------------------
+
+describe("loadEvalFixtures", () => {
+  const evalFixturesPath = join(
+    projectRoot,
+    "test",
+    "fixtures",
+    "retrieve-eval",
+    "eval-cases.json",
+  );
+
+  it("returns a non-empty array from the fixture file", () => {
+    const cases = loadEvalFixtures(evalFixturesPath);
+    assert.ok(Array.isArray(cases));
+    assert.ok(cases.length > 0, "Expected at least one eval case");
+  });
+
+  it("each returned case has a non-empty query string", () => {
+    const cases = loadEvalFixtures(evalFixturesPath);
+    for (const c of cases) {
+      assert.ok(typeof c.query === "string" && c.query.trim().length > 0);
+    }
+  });
+
+  it("each returned case has a non-empty expected_topic_paths array", () => {
+    const cases = loadEvalFixtures(evalFixturesPath);
+    for (const c of cases) {
+      assert.ok(Array.isArray(c.expected_topic_paths) && c.expected_topic_paths.length > 0);
+    }
+  });
+
+  it("throws when fixture file does not exist", () => {
+    assert.throws(
+      () => loadEvalFixtures("/does/not/exist/eval-cases.json"),
+      /loadEvalFixtures/,
+    );
+  });
+
+  it("throws when fixture file contains invalid JSON", () => {
+    const tmp = join(tmpdir(), `okv-bad-fixtures-${Date.now()}.json`);
+    writeFileSync(tmp, "not valid json");
+    try {
+      assert.throws(() => loadEvalFixtures(tmp), /loadEvalFixtures/);
+    } finally {
+      unlinkSync(tmp);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 13 — runRetrieveEval
+// ---------------------------------------------------------------------------
+
+describe("runRetrieveEval", () => {
+  const evalFixturesPath = join(
+    projectRoot,
+    "test",
+    "fixtures",
+    "retrieve-eval",
+    "eval-cases.json",
+  );
+  const evalVaultRoot = join(
+    projectRoot,
+    "test",
+    "fixtures",
+    "vaults",
+    "retrieve-eval",
+  );
+
+  it("produces a report with the correct schema_version", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    assert.equal(report.schema_version, RETRIEVE_EVAL_SCHEMA_VERSION);
+  });
+
+  it("report.metrics.total_queries equals fixtures length", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    assert.equal(report.metrics.total_queries, fixtures.length);
+  });
+
+  it("report.metrics.hit_rate is a number between 0 and 1", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    assert.ok(typeof report.metrics.hit_rate === "number");
+    assert.ok(report.metrics.hit_rate >= 0 && report.metrics.hit_rate <= 1);
+  });
+
+  it("report has vault_root and run_at fields", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    assert.equal(report.vault_root, evalVaultRoot);
+    assert.ok(typeof report.run_at === "string" && report.run_at.length > 0);
+  });
+
+  it("query_results length equals fixtures length", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    assert.equal(report.query_results.length, fixtures.length);
+  });
+
+  it("each query_result has required shape fields", () => {
+    const fixtures = loadEvalFixtures(evalFixturesPath);
+    const report = runRetrieveEval(evalVaultRoot, fixtures);
+    for (const qr of report.query_results) {
+      assert.ok(typeof qr.query === "string");
+      assert.ok(typeof qr.hit === "boolean");
+      assert.ok(typeof qr.coverage_gap === "boolean");
+      assert.ok(typeof qr.top_score === "number");
+      assert.ok(typeof qr.duration_ms === "number");
+      assert.ok(
+        qr.confidence === "high" || qr.confidence === "medium" || qr.confidence === "low",
+      );
+      assert.ok(qr.top_result_path === null || typeof qr.top_result_path === "string");
+    }
+  });
+
+  it("returns a report with 0 total_queries when fixtures is empty", () => {
+    const report = runRetrieveEval(evalVaultRoot, []);
+    assert.equal(report.metrics.total_queries, 0);
+    assert.equal(report.metrics.hit_rate, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 14 — checkEvalThresholds
+// ---------------------------------------------------------------------------
+
+describe("checkEvalThresholds", () => {
+  function makeMetrics(hitRate: number) {
+    return {
+      total_queries: 10,
+      hit_count: Math.round(hitRate * 10),
+      hit_rate: hitRate,
+      high_confidence_count: 0,
+      medium_confidence_count: 0,
+      low_confidence_count: 0,
+      coverage_gap_count: 0,
+      median_duration_ms: 1,
+    };
+  }
+
+  it("returns pass when hit_rate equals the minimum threshold", () => {
+    const result = checkEvalThresholds(makeMetrics(EVAL_THRESHOLDS.min_hit_rate));
+    assert.equal(result.pass, true);
+    assert.deepEqual(result.reasons, []);
+  });
+
+  it("returns pass when hit_rate exceeds the minimum threshold", () => {
+    const result = checkEvalThresholds(makeMetrics(1.0));
+    assert.equal(result.pass, true);
+    assert.deepEqual(result.reasons, []);
+  });
+
+  it("returns fail with reason string when hit_rate is below threshold", () => {
+    const result = checkEvalThresholds(makeMetrics(0.5));
+    assert.equal(result.pass, false);
+    assert.ok(result.reasons.length > 0, "Expected at least one failure reason");
+    assert.match(result.reasons[0] as string, /hit_rate/);
+    assert.match(result.reasons[0] as string, /threshold/);
+  });
+
+  it("EVAL_THRESHOLDS.min_hit_rate is 0.8", () => {
+    assert.equal(EVAL_THRESHOLDS.min_hit_rate, 0.8);
   });
 });

@@ -159,6 +159,16 @@ describe("presentHuman", () => {
       ok("visualize", { invoked: true, exit_code: 0, stdout: "", stderr: "" }),
       ok("help", { text: helpText() }),
       ok("version", { version: "0.1.0" }),
+      ok("retrieve", {
+        schema_version: "okv-retrieve/1.0.0",
+        query: "test query",
+        confidence: "high",
+        coverage_gap: false,
+        results: [
+          { path: "/vault/topics/strategy.md", title: "Strategy", excerpt: "Strategy notes.", linked_notes: [], score: 5 },
+        ],
+        broadening_hints: [],
+      }),
       usageError,
     ];
 
@@ -253,5 +263,99 @@ describe("presentHuman", () => {
     assert.match(output, /artifact\s+\| removed \| skipped \| detail/);
     assert.match(output, /Cursor okv-ingest\s+\| ok\s+\| -/);
     assert.match(output, /global okv bin\s+\| -\s+\| ok\s+\| not installed/);
+  });
+
+  it("renders retrieve query response with confidence and topic title", () => {
+    const output = captureHuman(
+      ok("retrieve", {
+        schema_version: "okv-retrieve/1.0.0",
+        query: "business strategy planning",
+        confidence: "high",
+        coverage_gap: false,
+        results: [
+          {
+            path: "/vault/topics/strategy.md",
+            title: "Strategy",
+            excerpt: "Strategy covers business planning and competitive positioning.",
+            linked_notes: [],
+            score: 10,
+          },
+        ],
+        broadening_hints: [],
+      }),
+      noColorOptions,
+    );
+
+    assert.match(output, /Strategy/);
+    assert.match(output, /high/);
+    assert.match(output, /→ next:/);
+  });
+
+  it("renders retrieve eval report with hit rate", () => {
+    const output = captureHuman(
+      ok("retrieve", {
+        schema_version: "okv-retrieve-eval/1.0.0",
+        vault_root: "/vault",
+        run_at: "2026-06-28T10:00:00.000Z",
+        query_results: [
+          {
+            query: "business strategy",
+            top_result_path: "/vault/topics/strategy.md",
+            confidence: "high",
+            hit: true,
+            coverage_gap: false,
+            top_score: 8,
+            duration_ms: 2,
+          },
+          {
+            query: "software architecture",
+            top_result_path: "/vault/topics/engineering.md",
+            confidence: "medium",
+            hit: false,
+            coverage_gap: false,
+            top_score: 3,
+            duration_ms: 1,
+          },
+        ],
+        metrics: {
+          total_queries: 2,
+          hit_count: 1,
+          hit_rate: 0.5,
+          high_confidence_count: 1,
+          medium_confidence_count: 1,
+          low_confidence_count: 0,
+          coverage_gap_count: 0,
+          median_duration_ms: 1.5,
+        },
+      }),
+      noColorOptions,
+    );
+
+    assert.match(output, /50%/);
+    assert.match(output, /hit rate/);
+    assert.match(output, /→ next:/);
+  });
+
+  it("renders retrieve coverage_gap response with coverage gap message", () => {
+    const output = captureHuman(
+      ok("retrieve", {
+        schema_version: "okv-retrieve/1.0.0",
+        query: "quantum entanglement in medieval cooking",
+        confidence: "low",
+        coverage_gap: true,
+        results: [],
+        broadening_hints: [
+          {
+            topic_path: "/vault/topics/strategy.md",
+            reason: "Adjacent topic: Strategy",
+            suggested_query: "business planning",
+          },
+        ],
+      }),
+      noColorOptions,
+    );
+
+    assert.match(output, /No strong topic match/);
+    assert.match(output, /→ next:/);
   });
 });
