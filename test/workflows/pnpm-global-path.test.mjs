@@ -9,6 +9,9 @@ import {
   parseGlobalBinDirFromPnpmError,
   getExecutablePath,
   PNPM_GLOBAL_LINK_ARGS,
+  renderUnixLauncherContent,
+  renderWindowsCmdLauncherContent,
+  isManagedLauncherContent,
 } from "../../scripts/pnpm-global-path.mjs";
 
 describe("pnpm global bin PATH helpers (unit)", () => {
@@ -155,5 +158,107 @@ describe("pnpm global bin PATH helpers (unit)", () => {
       assert.match(path, /\/okf-vault$/);
       assert.equal(path, `${globalBin}/okf-vault`);
     }
+  });
+});
+
+describe("launcher rendering helpers (unit)", () => {
+  it("renderUnixLauncherContent generates shebang and exec invocation", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const content = renderUnixLauncherContent(entryPoint);
+    assert.match(content, /^#!/);
+    assert.match(content, /\/bin\/sh/);
+    assert.match(content, /exec/);
+    assert.match(content, /dist\/main\.js/);
+    assert.match(content, /\$@/);
+  });
+
+  it("renderUnixLauncherContent includes process.execPath (node executable)", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const content = renderUnixLauncherContent(entryPoint);
+    assert.match(content, new RegExp(process.execPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  });
+
+  it("renderUnixLauncherContent for okv targets dist/main.js", () => {
+    const mainJsPath = "/repo/dist/main.js";
+    const content = renderUnixLauncherContent(mainJsPath);
+    assert.match(content, /dist\/main\.js/);
+    assert.equal(content.includes("/repo/dist/main.js"), true);
+  });
+
+  it("renderUnixLauncherContent for okf-vault targets dist/tombstone.js", () => {
+    const tombstonePath = "/repo/dist/tombstone.js";
+    const content = renderUnixLauncherContent(tombstonePath);
+    assert.match(content, /dist\/tombstone\.js/);
+    assert.equal(content.includes("/repo/dist/tombstone.js"), true);
+  });
+
+  it("renderWindowsCmdLauncherContent generates batch syntax", () => {
+    const entryPoint = "C:\\path\\to\\dist\\main.js";
+    const content = renderWindowsCmdLauncherContent(entryPoint);
+    assert.match(content, /@echo off/);
+    assert.match(content, /node\.exe/);
+    assert.match(content, /%\*/);
+    assert.match(content, /main\.js/);
+  });
+
+  it("renderWindowsCmdLauncherContent for okv targets dist/main.js", () => {
+    const mainJsPath = "C:\\repo\\dist\\main.js";
+    const content = renderWindowsCmdLauncherContent(mainJsPath);
+    assert.match(content, /dist\\main\.js/);
+    assert.equal(content.includes("C:\\repo\\dist\\main.js"), true);
+  });
+
+  it("renderWindowsCmdLauncherContent for okf-vault targets dist/tombstone.js", () => {
+    const tombstonePath = "C:\\repo\\dist\\tombstone.js";
+    const content = renderWindowsCmdLauncherContent(tombstonePath);
+    assert.match(content, /dist\\tombstone\.js/);
+    assert.equal(content.includes("C:\\repo\\dist\\tombstone.js"), true);
+  });
+
+  it("isManagedLauncherContent returns true for matching Unix content", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const expected = renderUnixLauncherContent(entryPoint);
+    const isManaged = isManagedLauncherContent(expected, entryPoint);
+    if (process.platform === "win32") {
+      return;
+    }
+    assert.equal(isManaged, true);
+  });
+
+  it("isManagedLauncherContent returns true for matching Windows content", () => {
+    const entryPoint = "C:\\path\\to\\dist\\main.js";
+    const expected = renderWindowsCmdLauncherContent(entryPoint);
+    const isManaged = isManagedLauncherContent(expected, entryPoint);
+    if (process.platform !== "win32") {
+      return;
+    }
+    assert.equal(isManaged, true);
+  });
+
+  it("isManagedLauncherContent returns false for unrelated content", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const unrelatedContent = "#!/bin/sh\necho hello";
+    const isManaged = isManagedLauncherContent(unrelatedContent, entryPoint);
+    assert.equal(isManaged, false);
+  });
+
+  it("isManagedLauncherContent returns false for content with wrong entry point", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const wrongEntryContent = renderUnixLauncherContent("/different/entry/point.js");
+    const isManaged = isManagedLauncherContent(wrongEntryContent, entryPoint);
+    if (process.platform === "win32") {
+      return;
+    }
+    assert.equal(isManaged, false);
+  });
+
+  it("isManagedLauncherContent uses platform-specific check on windows", () => {
+    const unixContent = '#!/bin/sh\nexec node /path/to/main.js "$@"';
+    const windowsEntryPoint = "C:\\path\\to\\dist\\main.js";
+    const isManaged = isManagedLauncherContent(unixContent, windowsEntryPoint);
+    if (process.platform !== "win32") {
+      return;
+    }
+    assert.equal(isManaged, false);
   });
 });

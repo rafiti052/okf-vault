@@ -164,3 +164,42 @@ export function getExecutablePath(globalBinDir, executableName) {
 
 /** Spawn args for `pnpm link --global` from the package root (pnpm 11+ requires a directory). */
 export const PNPM_GLOBAL_LINK_ARGS = ["link", "--global", "."];
+
+/**
+ * Render Unix launcher content for executing a compiled entry point with forwarded arguments.
+ * @param {string} entryPoint - absolute path to compiled entry point (e.g., `/path/to/dist/main.js`)
+ * @returns {string} Unix launcher script content with shebang and exec invocation
+ */
+export function renderUnixLauncherContent(entryPoint) {
+  const nodePath = process.execPath;
+  return `#!/bin/sh
+exec "${nodePath}" "${entryPoint}" "$@"
+`;
+}
+
+/**
+ * Render Windows `.cmd` launcher content for executing a compiled entry point with forwarded arguments.
+ * @param {string} entryPoint - absolute path to compiled entry point (e.g., `C:\\path\\to\\dist\\main.js`)
+ * @returns {string} Windows batch script content
+ */
+export function renderWindowsCmdLauncherContent(entryPoint) {
+  return `@echo off
+node.exe "${entryPoint}" %*
+`;
+}
+
+/**
+ * Check if launcher content matches the expected managed launcher shape.
+ * Returns true only if the content exactly matches the expected output from this session's renderer.
+ * @param {string} content - existing launcher file content to validate
+ * @param {string} entryPoint - expected entry point path
+ * @returns {boolean} true if content matches expected managed launcher
+ */
+export function isManagedLauncherContent(content, entryPoint) {
+  if (process.platform === "win32") {
+    const expected = renderWindowsCmdLauncherContent(entryPoint);
+    return content === expected;
+  }
+  const expected = renderUnixLauncherContent(entryPoint);
+  return content === expected;
+}
