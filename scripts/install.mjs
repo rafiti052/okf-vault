@@ -269,7 +269,7 @@ if (!dryRun) {
     );
   }
   if (!json) {
-    console.log("ok: okv verified from outside the repo");
+    console.log("ok: okv --version verified outside the repo");
   }
 }
 
@@ -286,25 +286,19 @@ if (json) {
   });
 } else if (human || !json) {
   console.log(`
-Setup complete.
+Setup complete. Global \`okv\` command is installed and verified.
 
-Each \`/okv-*\` command is now installed as an individual slash entry in both runtimes
-(Cursor: \`.cursor/skills/<cmd>/SKILL.md\`; Claude: \`.claude/commands/<cmd>.md\`).
-Reload the editor window after the first install so the new commands appear.
+## Next Step
+\`okv init /knowledge-vault\`
 
-The \`okv\` shell command is now on PATH and ready to use.
+## Editor Integration
+Runtime adapters (/okv-* commands) are installed in both Cursor and Claude Code.
+Reload the editor window after the first install to see the new commands.
+- Cursor: .cursor/skills/okv-* commands
+- Claude Code: .claude/skills/okf-vault
 
-## Cursor
-Open this repo in Cursor and type \`/okv-ingest\` (or any \`/okv-*\`).
-
-## Claude Code
-Open this repo in Claude Code. Skill at \`.claude/skills/okf-vault\`; type \`/okv-ingest\`.
-
-## Next Steps
-Run \`okv init /knowledge-vault\` to create your first vault.
-Run \`${cliHelp}\` for deterministic validation, manifest, graph, and Git commands.
-
-Recommended first command: \`okv init /knowledge-vault\`.
+## More Information
+\`${cliHelp}\` shows all available commands.
 Full slash-command list: .agents/skills/okf-vault/commands/registry.md
 `);
 }
