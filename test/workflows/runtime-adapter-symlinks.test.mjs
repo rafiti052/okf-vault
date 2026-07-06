@@ -9,6 +9,7 @@ import {
   symlinkSync,
   readlinkSync,
   lstatSync,
+  chmodSync,
 } from "node:fs";
 import { dirname, join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
@@ -436,6 +437,87 @@ describe("setup adapter installation (integration)", () => {
     } finally {
       rmSync(tempProjectRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("external okv verification (unit)", () => {
+  it("install.mjs verifies okv --version by command name from parent directory", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(scriptContent, /spawnSync\s*\(\s*["']okv["']\s*,\s*\[\s*["']--version["']\s*\]/);
+    assert.match(scriptContent, /cwd:\s*join\s*\(\s*root\s*,\s*["\']\.\.["']\s*\)/);
+  });
+
+  it("install.mjs fails setup when external okv verification exits non-zero", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(
+      scriptContent,
+      /verifyResult\.status\s*!==\s*0.*fail\s*\(\s*["']okv\s+--version\s+verification\s+failed/s,
+    );
+  });
+
+  it("install.mjs never executes okv init as a command", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.doesNotMatch(scriptContent, /spawnSync\s*\(\s*["']okv["']\s*,\s*\[\s*["']init["']/);
+    assert.doesNotMatch(scriptContent, /execa.*okv.*init/i);
+    assert.doesNotMatch(scriptContent, /exec.*okv\s+init/i);
+  });
+
+  it("install.mjs prints okv init only as guidance text after verification succeeds", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    const initMatches = scriptContent.match(/okv init/g);
+    assert.ok(initMatches && initMatches.length > 0, "okv init guidance should be present");
+    assert.match(scriptContent, /okv init \/knowledge-vault/);
+  });
+});
+
+describe("external okv verification (integration)", () => {
+  it("install.mjs --dry-run does not attempt external verification", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-verify-dry-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(root, "scripts", "install.mjs"),
+          "--dry-run",
+          "--json",
+          "--project-root",
+          tempProjectRoot,
+          "--canonical-skill-root",
+          canonicalSkill,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.data.global_cli_installed, false);
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("setup external verification uses parent directory as working directory", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    const verifySection = scriptContent.match(
+      /Verifying okv --version from outside.*?writeJsonSummary/s,
+    )[0];
+    assert.match(verifySection, /join\s*\(\s*root\s*,\s*["\']\.\.["']\s*\)/);
+  });
+
+  it("launcher and verification helpers render deterministic content", () => {
+    const helperContent = readFileSync(join(root, "scripts", "pnpm-global-path.mjs"), "utf8");
+    assert.match(helperContent, /renderUnixLauncherContent/);
+    assert.match(helperContent, /renderWindowsCmdLauncherContent/);
+    assert.match(helperContent, /writeLauncherFile/);
+    assert.match(helperContent, /isManagedLauncherContent/);
+  });
+
+  it("launcher files are idempotent (written only once if content matches)", () => {
+    const helperContent = readFileSync(join(root, "scripts", "pnpm-global-path.mjs"), "utf8");
+    assert.match(
+      helperContent,
+      /If the launcher already exists with correct content, skips the write \(idempotent\)/,
+    );
+    assert.match(helperContent, /existingContent === expectedContent/);
   });
 });
 

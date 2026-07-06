@@ -12,6 +12,8 @@ import {
   renderUnixLauncherContent,
   renderWindowsCmdLauncherContent,
   isManagedLauncherContent,
+  writeLauncherFile,
+  checkCompiledCliArtifacts,
 } from "../../scripts/pnpm-global-path.mjs";
 
 describe("pnpm global bin PATH helpers (unit)", () => {
@@ -260,5 +262,140 @@ describe("launcher rendering helpers (unit)", () => {
       return;
     }
     assert.equal(isManaged, false);
+  });
+});
+
+describe("launcher write and compilation artifact checks (unit)", () => {
+  it("writeLauncherFile skips already-current managed launcher content", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const expectedContent =
+      process.platform === "win32"
+        ? `@echo off\nnode.exe "${entryPoint}" %*\n`
+        : `#!/bin/sh\nexec "${process.execPath}" "${entryPoint}" "$@"\n`;
+
+    let readCalled = false;
+    let writeCalled = false;
+
+    const mockFs = {
+      readFileSync: () => {
+        readCalled = true;
+        return expectedContent;
+      },
+      writeFileSync: () => {
+        writeCalled = true;
+      },
+      chmodSync: () => {},
+    };
+
+    const result = writeLauncherFile("/test/bin/okv", entryPoint, mockFs);
+
+    assert.equal(readCalled, true);
+    assert.equal(writeCalled, false);
+    assert.equal(result.written, false);
+    assert.match(result.reason, /already current/);
+  });
+
+  it("writeLauncherFile replaces stale managed launcher content", () => {
+    const entryPoint = "/path/to/dist/main.js";
+    const staleContent = "#!/bin/sh\necho old";
+
+    let readCalled = false;
+    let writeCalled = false;
+    let chmodCalled = false;
+    let writtenContent = null;
+
+    const mockFs = {
+      readFileSync: () => {
+        readCalled = true;
+        return staleContent;
+      },
+      writeFileSync: (path, content) => {
+        writeCalled = true;
+        writtenContent = content;
+      },
+      chmodSync: () => {
+        if (process.platform !== "win32") {
+          chmodCalled = true;
+        }
+      },
+    };
+
+    const result = writeLauncherFile("/test/bin/okv", entryPoint, mockFs);
+
+    assert.equal(readCalled, true);
+    assert.equal(writeCalled, true);
+    assert.equal(result.written, true);
+    if (process.platform !== "win32") {
+      assert.equal(chmodCalled, true);
+    }
+    assert.match(writtenContent, /exec/);
+  });
+
+  it("writeLauncherFile writes new launcher when file does not exist", () => {
+    const entryPoint = "/path/to/dist/main.js";
+
+    let writeCalled = false;
+    let writtenContent = null;
+
+    const mockFs = {
+      readFileSync: () => {
+        const error = new Error("ENOENT");
+        throw error;
+      },
+      writeFileSync: (path, content) => {
+        writeCalled = true;
+        writtenContent = content;
+      },
+      chmodSync: () => {},
+    };
+
+    const result = writeLauncherFile("/test/bin/okv", entryPoint, mockFs);
+
+    assert.equal(writeCalled, true);
+    assert.equal(result.written, true);
+    assert.match(writtenContent, /exec/);
+  });
+
+  it("checkCompiledCliArtifacts returns ok when both dist files exist", () => {
+    const mockExists = (path) => {
+      return path.includes("main.js") || path.includes("tombstone.js");
+    };
+
+    const result = checkCompiledCliArtifacts("/repo/dist", { existsSync: mockExists });
+
+    assert.equal(result.ok, true);
+  });
+
+  it("checkCompiledCliArtifacts reports missing main.js", () => {
+    const mockExists = (path) => {
+      return path.includes("tombstone.js");
+    };
+
+    const result = checkCompiledCliArtifacts("/repo/dist", { existsSync: mockExists });
+
+    assert.equal(result.ok, false);
+    assert.match(result.missingEntries.join(","), /main\.js/);
+  });
+
+  it("checkCompiledCliArtifacts reports missing tombstone.js", () => {
+    const mockExists = (path) => {
+      return path.includes("main.js");
+    };
+
+    const result = checkCompiledCliArtifacts("/repo/dist", { existsSync: mockExists });
+
+    assert.equal(result.ok, false);
+    assert.match(result.missingEntries.join(","), /tombstone\.js/);
+  });
+
+  it("checkCompiledCliArtifacts reports both missing when neither exists", () => {
+    const mockExists = () => false;
+
+    const result = checkCompiledCliArtifacts("/repo/dist", { existsSync: mockExists });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.missingEntries.length, 2);
+    assert.match(result.missingEntries.join(","), /main\.js/);
+    assert.match(result.missingEntries.join(","), /tombstone\.js/);
   });
 });

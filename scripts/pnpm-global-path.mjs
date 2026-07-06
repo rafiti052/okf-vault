@@ -1,4 +1,10 @@
-import { realpathSync } from "node:fs";
+import {
+  realpathSync,
+  readFileSync as fsReadFileSync,
+  writeFileSync as fsWriteFileSync,
+  chmodSync as fsChmodSync,
+  existsSync as fsExistsSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 
@@ -202,4 +208,82 @@ export function isManagedLauncherContent(content, entryPoint) {
   }
   const expected = renderUnixLauncherContent(entryPoint);
   return content === expected;
+}
+
+/**
+ * Write or update a launcher file in the global bin directory.
+ * If the launcher already exists with correct content, skips the write (idempotent).
+ * On Unix, sets executable permissions (mode 0o755).
+ * @param {string} launcherPath - full path where the launcher should be written
+ * @param {string} entryPoint - absolute path to the compiled entry point
+ * @param {{
+ *   readFileSync?: (path: string) => string;
+ *   writeFileSync?: (path: string, content: string) => void;
+ *   chmodSync?: (path: string, mode: number) => void;
+ * }} [options] - allow injection for testing
+ * @returns {{ written: boolean; reason?: string }}
+ */
+export function writeLauncherFile(launcherPath, entryPoint, options = {}) {
+  const { readFileSync: readFile, writeFileSync: writeFile, chmodSync: chmod } = options;
+
+  // Use injected functions or module-level imports
+  const actualReadFileSync = readFile || fsReadFileSync;
+  const actualWriteFileSync = writeFile || fsWriteFileSync;
+  const actualChmodSync = chmod || fsChmodSync;
+
+  const expectedContent =
+    process.platform === "win32"
+      ? renderWindowsCmdLauncherContent(entryPoint)
+      : renderUnixLauncherContent(entryPoint);
+
+  // Check if existing launcher has correct content
+  try {
+    const existingContent = actualReadFileSync(launcherPath, "utf8");
+    if (existingContent === expectedContent) {
+      return { written: false, reason: "launcher already current" };
+    }
+  } catch {
+    // File doesn't exist or can't be read; proceed with write
+  }
+
+  // Write the launcher file
+  try {
+    actualWriteFileSync(launcherPath, expectedContent, "utf8");
+    if (process.platform !== "win32") {
+      actualChmodSync(launcherPath, 0o755);
+    }
+    return { written: true };
+  } catch (error) {
+    throw new Error(`Failed to write launcher at ${launcherPath}: ${error.message}`);
+  }
+}
+
+/**
+ * Check if compiled CLI entry points exist.
+ * @param {string} distDir - absolute path to dist directory
+ * @param {{
+ *   existsSync?: (path: string) => boolean;
+ * }} [options] - allow injection for testing
+ * @returns {{ ok: boolean; missingEntries?: string[] }}
+ */
+export function checkCompiledCliArtifacts(distDir, options = {}) {
+  const { existsSync: exists } = options;
+  const fsExists = exists || fsExistsSync;
+
+  const mainJs = join(distDir, "main.js");
+  const tombstoneJs = join(distDir, "tombstone.js");
+  const missing = [];
+
+  if (!fsExists(mainJs)) {
+    missing.push("dist/main.js");
+  }
+  if (!fsExists(tombstoneJs)) {
+    missing.push("dist/tombstone.js");
+  }
+
+  if (missing.length > 0) {
+    return { ok: false, missingEntries: missing };
+  }
+
+  return { ok: true };
 }
