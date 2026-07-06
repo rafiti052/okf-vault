@@ -32,11 +32,7 @@ export function normalizePathForComparison(entry) {
  * @param {(entry: string) => string} [normalize]
  * @returns {boolean}
  */
-export function isDirectoryOnPath(
-  targetDir,
-  pathEnv,
-  normalize = normalizePathForComparison,
-) {
+export function isDirectoryOnPath(targetDir, pathEnv, normalize = normalizePathForComparison) {
   const normalizedTarget = normalize(targetDir);
   for (const entry of parsePathEntries(pathEnv)) {
     if (normalize(entry) === normalizedTarget) {
@@ -93,14 +89,39 @@ export function getPnpmGlobalBinDir(spawnSyncFn = defaultSpawnSync) {
 export function formatGlobalBinNotOnPathRemediation(globalBinDir) {
   if (process.platform === "win32") {
     return [
-      'Run "pnpm setup" to update your shell configuration, then restart your shell.',
-      `Or add to your shell profile: set PATH=%PATH%;${globalBinDir}`,
+      `The configured global bin directory is not in PATH:`,
+      `  ${globalBinDir}`,
+      "",
+      `Add it to your shell configuration:`,
+      `  set PATH=%PATH%;${globalBinDir}`,
+      "",
+      `Then restart your shell and rerun: pnpm run setup`,
     ].join("\n");
   }
-  return [
-    'Run "pnpm setup" to update your shell configuration, then restart your shell.',
-    `Or add to your shell profile: export PATH="${globalBinDir}:$PATH"`,
-  ].join("\n");
+
+  const instructions = [
+    `The configured global bin directory is not in PATH:`,
+    `  ${globalBinDir}`,
+    "",
+    `Add it to your shell configuration. Choose one:`,
+    "",
+    `## zsh`,
+    `Add to ~/.zshrc:`,
+    `  export PATH="${globalBinDir}:$PATH"`,
+    "",
+    `## bash`,
+    `Add to ~/.bashrc or ~/.bash_profile:`,
+    `  export PATH="${globalBinDir}:$PATH"`,
+    "",
+    `## fish`,
+    `Run in fish:`,
+    `  set -Ua fish_user_paths ${globalBinDir}`,
+    "",
+    `After updating your shell configuration, restart your shell and rerun:`,
+    `  pnpm run setup`,
+  ];
+
+  return instructions.join("\n");
 }
 
 /**
@@ -126,6 +147,19 @@ export function assertPnpmGlobalBinOnPath(options = {}) {
     globalBinDir,
     message: formatGlobalBinNotOnPathRemediation(globalBinDir),
   };
+}
+
+/**
+ * Get the platform-specific path for a global executable under the pnpm global bin directory.
+ * @param {string} globalBinDir
+ * @param {string} executableName - name without platform-specific extension (e.g., "okv", "okf-vault")
+ * @returns {string}
+ */
+export function getExecutablePath(globalBinDir, executableName) {
+  if (process.platform === "win32") {
+    return join(globalBinDir, `${executableName}.cmd`);
+  }
+  return join(globalBinDir, executableName);
 }
 
 /** Spawn args for `pnpm link --global` from the package root (pnpm 11+ requires a directory). */

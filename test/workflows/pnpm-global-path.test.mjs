@@ -7,6 +7,7 @@ import {
   assertPnpmGlobalBinOnPath,
   formatGlobalBinNotOnPathRemediation,
   parseGlobalBinDirFromPnpmError,
+  getExecutablePath,
   PNPM_GLOBAL_LINK_ARGS,
 } from "../../scripts/pnpm-global-path.mjs";
 
@@ -67,7 +68,7 @@ describe("pnpm global bin PATH helpers (unit)", () => {
 
     assert.equal(result.ok, false);
     assert.equal(result.globalBinDir, globalBin);
-    assert.match(result.message, /pnpm setup/i);
+    assert.match(result.message, /pnpm run setup/i);
     assert.match(result.message, new RegExp(globalBin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 
@@ -94,5 +95,65 @@ describe("pnpm global bin PATH helpers (unit)", () => {
     }
     const message = formatGlobalBinNotOnPathRemediation("/Users/test/Library/pnpm/bin");
     assert.match(message, /export PATH="\/Users\/test\/Library\/pnpm\/bin:\$PATH"/);
+  });
+
+  it("formatGlobalBinNotOnPathRemediation includes shell-specific guidance on unix", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const message = formatGlobalBinNotOnPathRemediation("/Users/test/Library/pnpm/bin");
+    assert.match(message, /## zsh/);
+    assert.match(message, /## bash/);
+    assert.match(message, /## fish/);
+    assert.match(message, /~\/.zshrc/);
+    assert.match(message, /~\/.bashrc/);
+    assert.match(message, /fish_user_paths/);
+  });
+
+  it("formatGlobalBinNotOnPathRemediation includes resolved bin dir and rerun instruction", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const message = formatGlobalBinNotOnPathRemediation(globalBin);
+    assert.match(message, new RegExp(globalBin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(message, /pnpm run setup/);
+  });
+
+  it("formatGlobalBinNotOnPathRemediation includes set PATH on windows", () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+    const message = formatGlobalBinNotOnPathRemediation("C:\\Users\\test\\pnpm\\bin");
+    assert.match(message, /set PATH=%PATH%;C:\\Users\\test\\pnpm\\bin/);
+  });
+
+  it("getExecutablePath returns .cmd extension on windows", () => {
+    const testPath = getExecutablePath("/test/bin", "okv");
+    const isWindows = process.platform === "win32";
+    if (isWindows) {
+      assert.equal(testPath, "\\test\\bin\\okv.cmd");
+    } else {
+      assert.equal(testPath, "/test/bin/okv");
+    }
+  });
+
+  it("getExecutablePath handles okv executable", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const path = getExecutablePath(globalBin, "okv");
+    if (process.platform === "win32") {
+      assert.match(path, /okv\.cmd$/);
+    } else {
+      assert.match(path, /\/okv$/);
+      assert.equal(path, `${globalBin}/okv`);
+    }
+  });
+
+  it("getExecutablePath handles okf-vault executable", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const path = getExecutablePath(globalBin, "okf-vault");
+    if (process.platform === "win32") {
+      assert.match(path, /okf-vault\.cmd$/);
+    } else {
+      assert.match(path, /\/okf-vault$/);
+      assert.equal(path, `${globalBin}/okf-vault`);
+    }
   });
 });
