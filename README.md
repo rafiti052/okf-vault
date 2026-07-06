@@ -15,13 +15,13 @@ flowchart LR
   Helper --> Git[Git transactions]
 ```
 
-| Component | Location | Role |
-| --------- | -------- | ---- |
-| Workflow skill | `.agents/skills/okf-vault/` | Orchestration, curator interaction, conversion profiles |
-| Helper CLI | `src/vault/`, `src/cli.ts` | Deterministic validation, manifest, graph, dossiers, Git |
-| Contracts | `.agents/skills/okf-vault/references/` | Note contract, envelopes, vault layout, helper invocation |
+| Component      | Location                               | Role                                                      |
+| -------------- | -------------------------------------- | --------------------------------------------------------- |
+| Workflow skill | `.agents/skills/okf-vault/`            | Orchestration, curator interaction, conversion profiles   |
+| Helper CLI     | `src/vault/`, `src/cli.ts`             | Deterministic validation, manifest, graph, dossiers, Git  |
+| Contracts      | `.agents/skills/okf-vault/references/` | Note contract, envelopes, vault layout, helper invocation |
 
-The skill decides *what* to process; the helper decides *whether* staged output is safe to commit.
+The skill decides _what_ to process; the helper decides _whether_ staged output is safe to commit.
 
 Two layers work together:
 
@@ -41,30 +41,42 @@ Two layers work together:
 ```bash
 git clone https://github.com/rafiti052/okf-vault
 cd okf-vault
-pnpm run setup          # build CLI + install Cursor and Claude adapters + per-command /okv-* slash entries
+pnpm run setup          # installs CLI + verifies okv works globally + installs Cursor and Claude adapters
 ```
 
-### Init in any repository
+The setup command completes these steps:
 
-One-time, from the okf-vault clone (links the global CLI):
+- Builds the `okv` CLI and installs it into pnpm's global bin directory.
+- Verifies that `okv --version` works outside the okf-vault repository.
+- Installs or validates Cursor and Claude Code adapters and per-command `/okv-*` slash entries.
+
+If setup fails with a PATH error, follow the zsh/bash/fish guidance it prints, restart your shell, and rerun `pnpm run setup`.
+
+**Backwards compatibility:** `pnpm run setup:link` is available as an alias that performs the same install and verification. It is not required for normal end-user setup.
+
+### Create a vault in any repository
+
+After setup succeeds, create a vault in any repository:
 
 ```bash
-pnpm run setup:link     # links okv into pnpm's global bin directory
+cd ~/my-knowledge-vault
+okv init                    # creates ./knowledge/ + Cursor/Claude adapters + curator rule
+# or specify a custom vault root:
+okv init /path/to/vault
 ```
 
-Then, from your target repository:
+For the default setup target, you can use:
 
 ```bash
-cd ~/my-new-vault-repo
-okv init          # creates ./knowledge/ + Cursor/Claude adapters + curator rule
+okv init /knowledge-vault
 ```
 
-`setup:link` requires the pnpm global bin directory (`pnpm bin -g`) on your `PATH`. If linking fails, run `pnpm setup` and restart your shell, or add `export PATH="$(pnpm bin -g):$PATH"` to your shell profile.
+`okv init` accepts no arguments (creates `./knowledge/`) or a vault root path. It does not require the installation repository.
 
-| Command | Scope |
-| ------- | ----- |
+| Command                              | Scope                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
 | `okv init` (no args, from repo root) | Vault at `./knowledge/` plus Cursor/Claude adapters and per-command slash entries |
-| `okv init <vault-root>` | Vault only at the given path (scripting, tests, custom layouts) |
+| `okv init <vault-root>`              | Vault only at the given path (scripting, tests, custom layouts)                   |
 
 ### Simple flow
 
@@ -76,34 +88,34 @@ node dist/main.js validate ./knowledge
 
 ## Slash commands
 
-| Goal | Command |
-| ---- | ------- |
+| Goal                         | Command                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
 | Add new content (start here) | `/okv-ingest` — MCP artifact, local file, or YouTube URL (transcript-dependent MVP) |
-| New vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` |
-| Organize after ingestion | `/okv-organize` |
-| Health check | `/okv-validate` |
-| Graph inspection | `/okv-visualize` |
-| Ingest + validate pipeline | `/okv-ingest-check` |
-| Natural-language query | `/okv-ask` |
+| New vault at `./knowledge/`  | `/okv-init` or `/okv-bootstrap`                                                     |
+| Organize after ingestion     | `/okv-organize`                                                                     |
+| Health check                 | `/okv-validate`                                                                     |
+| Graph inspection             | `/okv-visualize`                                                                    |
+| Ingest + validate pipeline   | `/okv-ingest-check`                                                                 |
+| Natural-language query       | `/okv-ask`                                                                          |
 
 Full command list with availability labels and stub links: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
 ## CLI commands
 
-| Command | Description |
-| ------- | ----------- |
-| `init` | Create vault layout, manifest, indexes, log, and initial Git commit. No args: `./knowledge/` from repo root plus skill adapters. With path: vault only. |
-| `inspect` | Check manifest status (`new`, `already_processed`, or `changed_conflict`) for a source |
-| `validate-staged` | Validate staged notes against the note contract and envelope anchors |
-| `commit` | Atomically install a validated source into the vault and update the manifest |
-| `dossier` | Generate dossiers for organize-mode curation |
-| `validate-proposals` | Validate curation proposal JSON before curator review |
-| `validate-graph` | Check graph navigation, indexes, and link consistency |
-| `validate` | Run the consolidated quality gate (contracts, manifest, graph, recovery state) |
-| `visualize` | Build the configured OKF visualizer HTML output |
-| `recover` | Recover from a failed transaction using the journal |
-| `retrieve <vault-root> <query>` | Natural-language query over topic maps — returns ranked results with confidence and coverage-gap signal |
-| `retrieve --eval <vault-root>` | Run the fixed eval corpus; exits 0 on pass, 3 on threshold miss (hit rate ≥ 0.8) |
+| Command                         | Description                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`                          | Create vault layout, manifest, indexes, log, and initial Git commit. No args: `./knowledge/` from repo root plus skill adapters. With path: vault only. |
+| `inspect`                       | Check manifest status (`new`, `already_processed`, or `changed_conflict`) for a source                                                                  |
+| `validate-staged`               | Validate staged notes against the note contract and envelope anchors                                                                                    |
+| `commit`                        | Atomically install a validated source into the vault and update the manifest                                                                            |
+| `dossier`                       | Generate dossiers for organize-mode curation                                                                                                            |
+| `validate-proposals`            | Validate curation proposal JSON before curator review                                                                                                   |
+| `validate-graph`                | Check graph navigation, indexes, and link consistency                                                                                                   |
+| `validate`                      | Run the consolidated quality gate (contracts, manifest, graph, recovery state)                                                                          |
+| `visualize`                     | Build the configured OKF visualizer HTML output                                                                                                         |
+| `recover`                       | Recover from a failed transaction using the journal                                                                                                     |
+| `retrieve <vault-root> <query>` | Natural-language query over topic maps — returns ranked results with confidence and coverage-gap signal                                                 |
+| `retrieve --eval <vault-root>`  | Run the fixed eval corpus; exits 0 on pass, 3 on threshold miss (hit rate ≥ 0.8)                                                                        |
 
 All commands emit a single JSON object on stdout and human diagnostics on stderr. Exit codes 0–5 map to success, unexpected, usage, validation, conflict, and transaction failures.
 
@@ -113,22 +125,22 @@ All commands emit a single JSON object on stdout and human diagnostics on stderr
 
 Both runtimes are installed and verified by `pnpm run setup`.
 
-| Runtime | Skill path | Slash commands | Notes |
-| ------- | ---------- | -------------- | ----- |
-| **Cursor** | `.cursor/skills/okf-vault/` (symlink) | per-command skill dirs `.cursor/skills/<cmd>/SKILL.md` | Rule: `.cursor/rules/okf-vault.mdc` |
-| **Claude Code** | `.claude/skills/okf-vault/` (symlink) | `.claude/commands/<cmd>.md` | Full skill + references via symlink |
-| **Any agent** | `.agents/skills/okf-vault/` (canonical) | — | Single source of truth; adapters point here |
+| Runtime         | Skill path                              | Slash commands                                         | Notes                                       |
+| --------------- | --------------------------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| **Cursor**      | `.cursor/skills/okf-vault/` (symlink)   | per-command skill dirs `.cursor/skills/<cmd>/SKILL.md` | Rule: `.cursor/rules/okf-vault.mdc`         |
+| **Claude Code** | `.claude/skills/okf-vault/` (symlink)   | `.claude/commands/<cmd>.md`                            | Full skill + references via symlink         |
+| **Any agent**   | `.agents/skills/okf-vault/` (canonical) | —                                                      | Single source of truth; adapters point here |
 
 Invoke the **okf-vault** skill for vault tasks:
 
-| Mode | Purpose |
-| ---- | ------- |
-| `initialize` | Set up a new vault at a curator-chosen path |
-| `ingest` | Process an explicit ordered list of sources one at a time |
-| `organize` | Generate dossiers and curation proposals after ingestion |
-| `validate` | Run quality checks on an existing vault |
-| `visualize` | Open the knowledge graph visualizer after validation passes |
-| `ask` | Natural-language query grounded in committed notes (read-only) |
+| Mode         | Purpose                                                        |
+| ------------ | -------------------------------------------------------------- |
+| `initialize` | Set up a new vault at a curator-chosen path                    |
+| `ingest`     | Process an explicit ordered list of sources one at a time      |
+| `organize`   | Generate dossiers and curation proposals after ingestion       |
+| `validate`   | Run quality checks on an existing vault                        |
+| `visualize`  | Open the knowledge graph visualizer after validation passes    |
+| `ask`        | Natural-language query grounded in committed notes (read-only) |
 
 The skill enforces explicit sources, sequential processing, visible progress events, and ADR-009 failure-stop behavior. See [SKILL.md](.agents/skills/okf-vault/SKILL.md) for phase order and curator rules.
 
