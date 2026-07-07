@@ -2,19 +2,24 @@
 /**
  * Cross-platform setup: install deps, build helper CLI, link runtime adapters, verify, smoke test.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { verifyRuntimeAdapters } from "../test/workflows/workflow-contract.mjs";
 import { linkRuntimeAdapters } from "./link-runtime-adapters.mjs";
-import { assertPnpmGlobalBinOnPath, PNPM_GLOBAL_LINK_ARGS } from "./pnpm-global-path.mjs";
+import {
+  assertPnpmGlobalBinOnPath,
+  getExecutablePath,
+  writeLauncherFile,
+  checkCompiledCliArtifacts,
+} from "./pnpm-global-path.mjs";
 
 export { verifyRuntimeAdapters };
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
-const linkGlobal = args.includes("--link");
+const _linkGlobal = args.includes("--link");
 const dryRun = args.includes("--dry-run");
 const json = args.includes("--json");
 const human = args.includes("--human");
@@ -122,23 +127,63 @@ function checkPnpm() {
   );
 }
 
-function checkPnpmGlobalBinOnPath() {
-  let check;
+function checkCompiledArtifacts() {
+  const distCheck = checkCompiledCliArtifacts(join(root, "dist"));
+  if (!distCheck.ok) {
+    fail(
+      "compiled CLI artifacts missing before launcher installation",
+      `Missing: ${distCheck.missingEntries?.join(", ")}\nRun \`pnpm run build\` to create the compiled artifacts.`,
+    );
+  }
+  console.log("ok: dist/main.js and dist/tombstone.js exist");
+}
+
+function installGlobalLaunchers() {
+  let globalBinDir;
   try {
-    check = assertPnpmGlobalBinOnPath();
+    const check = assertPnpmGlobalBinOnPath();
+    if (!check.ok) {
+      console.error(
+        `[ERROR] The configured global bin directory "${check.globalBinDir}" is not in PATH`,
+      );
+      fail("pnpm global bin directory is not on PATH", check.message);
+    }
+    globalBinDir = check.globalBinDir;
   } catch (error) {
     fail(
       "could not resolve pnpm global bin directory",
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!check.ok) {
-    console.error(
-      `[ERROR] The configured global bin directory "${check.globalBinDir}" is not in PATH`,
-    );
-    fail("pnpm global bin directory is not on PATH", check.message);
+
+  const mainJsPath = join(root, "dist", "main.js");
+  const tombstoneJsPath = join(root, "dist", "tombstone.js");
+
+  // Install okv launcher
+  const okvPath = getExecutablePath(globalBinDir, "okv");
+  const okvResult = writeLauncherFile(okvPath, mainJsPath, {
+    readFileSync,
+    writeFileSync,
+    chmodSync,
+  });
+  if (okvResult.written) {
+    console.log(`  wrote okv launcher`);
+  } else {
+    console.log(`  okv launcher already current`);
   }
-  console.log(`ok: pnpm global bin on PATH (${check.globalBinDir})`);
+
+  // Install okf-vault launcher
+  const legacyPath = getExecutablePath(globalBinDir, "okf-vault");
+  const legacyResult = writeLauncherFile(legacyPath, tombstoneJsPath, {
+    readFileSync,
+    writeFileSync,
+    chmodSync,
+  });
+  if (legacyResult.written) {
+    console.log(`  wrote okf-vault launcher`);
+  } else {
+    console.log(`  okf-vault launcher already current`);
+  }
 }
 
 function reportRemovedArtifacts(removed, rootPath) {
@@ -198,30 +243,37 @@ if (!dryRun) {
   runStep("Smoke test helper CLI", "node", ["dist/main.js", "--version"]);
 }
 
-if (linkGlobal && !dryRun) {
-  checkPnpmGlobalBinOnPath();
-  runStep("Linking okv globally", "pnpm", PNPM_GLOBAL_LINK_ARGS);
-
-  if (!commandExists("okv") || !commandExists("okf-vault")) {
-    const postLinkCheck = assertPnpmGlobalBinOnPath();
-    fail(
-      "okv and/or okf-vault not found on PATH after global link",
-      postLinkCheck.ok
-        ? "Hint: restart your shell, then retry `pnpm run setup:link`."
-        : postLinkCheck.message,
-    );
+if (!dryRun) {
+  if (!json) {
+    console.log("\n→ Installing global CLI launchers");
+  }
+  checkCompiledArtifacts();
+  installGlobalLaunchers();
+  if (!json) {
+    console.log("ok: Global CLI launchers installed");
   }
 
-  runStep("Smoke test global binary", "okv", ["--version"]);
+  // Verify okv from outside the repo
+  if (!json) {
+    console.log("\n→ Verifying okv --version from outside the repo");
+  }
+  const verifyResult = spawnSync("okv", ["--version"], {
+    cwd: join(root, ".."),
+    stdio: json ? "pipe" : "inherit",
+    shell: process.platform === "win32",
+  });
+  if (verifyResult.status !== 0) {
+    fail(
+      "okv --version verification failed from outside the repo",
+      "Hint: check that the global launcher was written correctly and restart your shell if needed.",
+    );
+  }
+  if (!json) {
+    console.log("ok: okv --version verified outside the repo");
+  }
 }
 
-const cliHelp = linkGlobal ? "okv --help" : "node dist/main.js --help";
-
-if (!linkGlobal && !json) {
-  console.warn(
-    "\n[WARN] Setup completed without global link. Cross-project use requires `pnpm run setup:link`.",
-  );
-}
+const cliHelp = "okv --help";
 
 if (json) {
   writeJsonSummary({
@@ -229,27 +281,24 @@ if (json) {
     skipped: adapterResult.skipped,
     removed: adapterResult.removed,
     adapters_verified: true,
+    global_cli_installed: !dryRun,
     dry_run: dryRun,
   });
 } else if (human || !json) {
   console.log(`
-Setup complete.
+Setup complete. Global \`okv\` command is installed and verified.
 
-Each \`/okv-*\` command is now installed as an individual slash entry in both runtimes
-(Cursor: \`.cursor/skills/<cmd>/SKILL.md\`; Claude: \`.claude/commands/<cmd>.md\`).
-Reload the editor window after the first install so the new commands appear.
+## Next Step
+\`okv init /knowledge-vault\`
 
-## Cursor
-Open this repo in Cursor and type \`/okv-ingest\` (or any \`/okv-*\`).
+## Editor Integration
+Runtime adapters (/okv-* commands) are installed in both Cursor and Claude Code.
+Reload the editor window after the first install to see the new commands.
+- Cursor: .cursor/skills/okv-* commands
+- Claude Code: .claude/skills/okf-vault
 
-## Claude Code
-Open this repo in Claude Code. Skill at \`.claude/skills/okf-vault\`; type \`/okv-ingest\`.
-
-## Helper CLI
-Run \`${cliHelp}\` for deterministic validation, manifest, graph, and Git commands.
-
-Recommended first command: \`/okv-ingest\`.
-New vault at \`./knowledge/\`: \`/okv-bootstrap\` or \`/okv-init\`.
+## More Information
+\`${cliHelp}\` shows all available commands.
 Full slash-command list: .agents/skills/okf-vault/commands/registry.md
 `);
 }

@@ -6,15 +6,15 @@ This repository combines a **provider-neutral workflow skill** with a **determin
 
 Use this one-screen decision tree before reading the full skill. Map MCP and filesystem access via [capabilities preflight](.agents/skills/okf-vault/references/capabilities.md) — never assume runtime-specific tool names.
 
-| Your goal | Command | Notes |
-| --------- | ------- | ----- |
-| **Add new content** (recommended starting point) | **`/okv-ingest`** | Interactive ingest wizard — MCP artifact, explicit local file, or **YouTube URL** (transcript-dependent MVP) |
-| Set up a new vault at `./knowledge/` | `/okv-init` or `/okv-bootstrap` | `/okv-init` creates layout; `/okv-bootstrap` runs init then validate (Phase 1b) |
-| Organize notes after ingestion | `/okv-organize` | Dossiers and curation proposals (Phase 1b) |
-| Check vault health / contracts | `/okv-validate` | Contract, manifest, graph checks (Phase 1b) |
-| Inspect the knowledge graph | `/okv-visualize` | OKF visualizer (Phase 1b) |
-| Ingest then validate in one session | `/okv-ingest-check` | Composed pipeline (Phase 1b) |
-| Query the vault in natural language | `/okv-ask` | Read-only retrieve — surfaces ranked notes with confidence and coverage signals (Phase 1c) |
+| Your goal                                        | Command                         | Notes                                                                                                        |
+| ------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Add new content** (recommended starting point) | **`/okv-ingest`**               | Interactive ingest wizard — MCP artifact, explicit local file, or **YouTube URL** (transcript-dependent MVP) |
+| Set up a new vault at `./knowledge/`             | `/okv-init` or `/okv-bootstrap` | `/okv-init` creates layout; `/okv-bootstrap` runs init then validate (Phase 1b)                              |
+| Organize notes after ingestion                   | `/okv-organize`                 | Dossiers and curation proposals (Phase 1b)                                                                   |
+| Check vault health / contracts                   | `/okv-validate`                 | Contract, manifest, graph checks (Phase 1b)                                                                  |
+| Inspect the knowledge graph                      | `/okv-visualize`                | OKF visualizer (Phase 1b)                                                                                    |
+| Ingest then validate in one session              | `/okv-ingest-check`             | Composed pipeline (Phase 1b)                                                                                 |
+| Query the vault in natural language              | `/okv-ask`                      | Read-only retrieve — surfaces ranked notes with confidence and coverage signals (Phase 1c)                   |
 
 Full command list with availability labels: [commands/registry.md](.agents/skills/okf-vault/commands/registry.md).
 
@@ -28,20 +28,22 @@ Read and follow [`.agents/skills/okf-vault/SKILL.md`](.agents/skills/okf-vault/S
 
 | Mode         | Purpose                                                              |
 | ------------ | -------------------------------------------------------------------- |
-| `initialize` | Create vault layout, manifest, indexes, log, and Git repository    |
+| `initialize` | Create vault layout, manifest, indexes, log, and Git repository      |
 | `ingest`     | Sequentially acquire, convert, validate, and commit supplied sources |
 | `organize`   | Generate bounded dossiers and curation proposals after conversion    |
 | `validate`   | Run contract, manifest, graph, and recovery checks                   |
 | `visualize`  | Invoke the configured OKF visualizer for manual graph review         |
-| `ask`        | Answer a natural-language question grounded in the vault (read-only)  |
+| `ask`        | Answer a natural-language question grounded in the vault (read-only) |
 
 The skill orchestrates acquisition, semantic conversion, and curation proposals. The helper owns validation, manifest mutation, graph analysis, dossiers, and Git transactions.
 
 ## Helper CLI
 
-First-time setup in this repository: `pnpm run setup` (see [README.md](README.md#quick-start)).
+First-time setup in this repository: `pnpm run setup` (see [README.md](README.md#quick-start)). This command builds the CLI, installs it globally, and verifies that `okv --version` works outside the installation repository.
 
-One-time global CLI for other repositories: `pnpm run setup:link` in the okf-vault clone, then `okf-vault init` from a new repo root (creates `./knowledge/` and installs skill adapters). `setup:link` requires the pnpm global bin directory on `PATH` — run `pnpm setup` and restart your shell, or add `export PATH="$(pnpm bin -g):$PATH"` to your shell profile.
+To use the global `okv` command in other repositories, run `pnpm run setup` once from the okf-vault clone (it installs the CLI globally and verifies availability), then from your target repository run `okv init` to create a vault. If setup fails with a PATH error, follow the zsh/bash/fish guidance it prints, restart your shell, and rerun `pnpm run setup`.
+
+Advanced: `pnpm run setup:link` is available as a backwards-compatible alias for `pnpm run setup`. It uses the same implementation and is not required for normal end-user setup.
 
 Build before invoking locally:
 
@@ -56,43 +58,45 @@ Invoke as a child process with an **argument array** — never shell-interpolate
 node dist/main.js <command> [args...]
 ```
 
-The binary name is `okv` when installed via `pnpm run setup:link`; during development use `node dist/main.js` directly.
+The binary name is `okv` when installed via `pnpm run setup`; during development use `node dist/main.js` directly.
 
 ### Init from a new repository
 
 ```bash
-# once, in okf-vault clone (pnpm bin -g must be on PATH; run `pnpm setup` if needed)
-pnpm run setup:link
+# once, in okf-vault clone
+pnpm run setup
 
 # in your new repo root
 okv init
+# or with an explicit vault root:
+okv init /knowledge-vault
 ```
 
-No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/okv-*` is individually discoverable. Explicit `okv init <vault-root>` initializes the vault only (backward compatible).
+No-arg `init` creates `./knowledge/` and installs `.cursor`/`.claude` skill adapters, including per-command slash entries for both runtimes (Cursor `.cursor/skills/<cmd>/SKILL.md`, Claude `.claude/commands/<cmd>.md`) so every `/okv-*` is individually discoverable. Explicit `okv init <vault-root>` initializes the vault at the given path (backward compatible).
 
 ## Key contracts
 
 All durable contracts live under [`.agents/skills/okf-vault/references/`](.agents/skills/okf-vault/references/):
 
-| Contract          | File                                                                 |
-| ----------------- | -------------------------------------------------------------------- |
-| Note contract     | [note-contract.md](.agents/skills/okf-vault/references/note-contract.md) |
-| Source envelope   | [source-envelope.md](.agents/skills/okf-vault/references/source-envelope.md) |
-| Vault layout      | [vault-layout.md](.agents/skills/okf-vault/references/vault-layout.md) |
-| Capabilities      | [capabilities.md](.agents/skills/okf-vault/references/capabilities.md) |
+| Contract          | File                                                                             |
+| ----------------- | -------------------------------------------------------------------------------- |
+| Note contract     | [note-contract.md](.agents/skills/okf-vault/references/note-contract.md)         |
+| Source envelope   | [source-envelope.md](.agents/skills/okf-vault/references/source-envelope.md)     |
+| Vault layout      | [vault-layout.md](.agents/skills/okf-vault/references/vault-layout.md)           |
+| Capabilities      | [capabilities.md](.agents/skills/okf-vault/references/capabilities.md)           |
 | Helper invocation | [helper-invocation.md](.agents/skills/okf-vault/references/helper-invocation.md) |
-| Ingest wizard      | [ingest-wizard.md](.agents/skills/okf-vault/references/ingest-wizard.md) |
+| Ingest wizard     | [ingest-wizard.md](.agents/skills/okf-vault/references/ingest-wizard.md)         |
 
 Do not duplicate reference content elsewhere in the repo.
 
 ## Repo boundaries
 
-| Layer              | Location              | Responsibility                                              |
-| ------------------ | --------------------- | ----------------------------------------------------------- |
-| Workflow skill     | `.agents/skills/okf-vault/` | Orchestration, acquisition, conversion, curator interaction |
-| Deterministic gate | `src/vault/`          | Validation, manifest, graph, dossiers, Git transactions     |
-| CLI entry          | `src/cli.ts`, `src/main.ts` | Argument parsing, dispatch, JSON stdout/stderr         |
-| Tests              | `test/fixtures/`, `test/workflows/` | Contract and workflow fixtures                        |
+| Layer              | Location                            | Responsibility                                              |
+| ------------------ | ----------------------------------- | ----------------------------------------------------------- |
+| Workflow skill     | `.agents/skills/okf-vault/`         | Orchestration, acquisition, conversion, curator interaction |
+| Deterministic gate | `src/vault/`                        | Validation, manifest, graph, dossiers, Git transactions     |
+| CLI entry          | `src/cli.ts`, `src/main.ts`         | Argument parsing, dispatch, JSON stdout/stderr              |
+| Tests              | `test/fixtures/`, `test/workflows/` | Contract and workflow fixtures                              |
 
 ## Curator rules (non-negotiable)
 
@@ -105,7 +109,7 @@ Do not duplicate reference content elsewhere in the repo.
 ## What not to do
 
 - Do not add automatic file watchers or batch silent conversion.
-- Do not vendor or require compozy / cy-* workflow skills in this repo.
+- Do not vendor or require compozy / cy-\* workflow skills in this repo.
 - Do not embed runtime-specific MCP tool names in durable instructions — map capabilities at preflight time.
 - Do not create a root `references/` directory; the skill references folder is the single source of truth.
 

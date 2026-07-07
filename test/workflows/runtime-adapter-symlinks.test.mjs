@@ -9,6 +9,7 @@ import {
   symlinkSync,
   readlinkSync,
   lstatSync,
+  chmodSync,
 } from "node:fs";
 import { dirname, join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
@@ -44,6 +45,15 @@ import {
   sweepLegacyArtifacts,
 } from "../../scripts/link-runtime-adapters.mjs";
 import { listLegacyArtifacts, listManagedArtifacts } from "../../scripts/managed-artifacts.mjs";
+import {
+  getExecutablePath,
+  renderUnixLauncherContent,
+  renderWindowsCmdLauncherContent,
+  writeLauncherFile,
+  isManagedLauncherContent,
+  assertPnpmGlobalBinOnPath,
+  formatGlobalBinNotOnPathRemediation,
+} from "../../scripts/pnpm-global-path.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -439,6 +449,109 @@ describe("setup adapter installation (integration)", () => {
   });
 });
 
+describe("external okv verification (unit)", () => {
+  it("install.mjs verifies okv --version by command name from parent directory", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(scriptContent, /spawnSync\s*\(\s*["']okv["']\s*,\s*\[\s*["']--version["']\s*\]/);
+    assert.match(scriptContent, /cwd:\s*join\s*\(\s*root\s*,\s*['"]\.\.["']\s*\)/);
+  });
+
+  it("install.mjs fails setup when external okv verification exits non-zero", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(
+      scriptContent,
+      /verifyResult\.status\s*!==\s*0.*fail\s*\(\s*["']okv\s+--version\s+verification\s+failed/s,
+    );
+  });
+
+  it("install.mjs never executes okv init as a command", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.doesNotMatch(scriptContent, /spawnSync\s*\(\s*["']okv["']\s*,\s*\[\s*["']init["']/);
+    assert.doesNotMatch(scriptContent, /execa.*okv.*init/i);
+    assert.doesNotMatch(scriptContent, /exec.*okv\s+init/i);
+  });
+
+  it("install.mjs prints okv init only as guidance text after verification succeeds", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    const initMatches = scriptContent.match(/okv init/g);
+    assert.ok(initMatches && initMatches.length > 0, "okv init guidance should be present");
+    assert.match(scriptContent, /okv init \/knowledge-vault/);
+  });
+
+  it("install.mjs success output states okv --version was verified outside the repo", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(scriptContent, /okv --version verified outside the repo/);
+  });
+
+  it("install.mjs success output clearly shows okv init as the next step", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(scriptContent, /## Next Step\s+\\`okv init \/knowledge-vault\\`/);
+  });
+
+  it("install.mjs success output does not say setup completed without global link", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.doesNotMatch(scriptContent, /setup.*completed.*without.*link/i);
+    assert.doesNotMatch(scriptContent, /still.*need.*link/i);
+    assert.doesNotMatch(scriptContent, /separate.*link.*step/i);
+  });
+
+  it("install.mjs PATH failure output includes remediation message function", () => {
+    const helperContent = readFileSync(join(root, "scripts", "pnpm-global-path.mjs"), "utf8");
+    assert.match(helperContent, /formatGlobalBinNotOnPathRemediation/);
+  });
+});
+
+describe("external okv verification (integration)", () => {
+  it("install.mjs --dry-run does not attempt external verification", () => {
+    const tempProjectRoot = mkdtempSync(join(tmpdir(), "okf-vault-verify-dry-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(root, "scripts", "install.mjs"),
+          "--dry-run",
+          "--json",
+          "--project-root",
+          tempProjectRoot,
+          "--canonical-skill-root",
+          canonicalSkill,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.data.global_cli_installed, false);
+    } finally {
+      rmSync(tempProjectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("setup external verification uses parent directory as working directory", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    const verifySection = scriptContent.match(
+      /Verifying okv --version from outside.*?writeJsonSummary/s,
+    )[0];
+    assert.match(verifySection, /join\s*\(\s*root\s*,\s*['"]\.\.["']\s*\)/);
+  });
+
+  it("launcher and verification helpers render deterministic content", () => {
+    const helperContent = readFileSync(join(root, "scripts", "pnpm-global-path.mjs"), "utf8");
+    assert.match(helperContent, /renderUnixLauncherContent/);
+    assert.match(helperContent, /renderWindowsCmdLauncherContent/);
+    assert.match(helperContent, /writeLauncherFile/);
+    assert.match(helperContent, /isManagedLauncherContent/);
+  });
+
+  it("launcher files are idempotent (written only once if content matches)", () => {
+    const helperContent = readFileSync(join(root, "scripts", "pnpm-global-path.mjs"), "utf8");
+    assert.match(
+      helperContent,
+      /If the launcher already exists with correct content, skips the write \(idempotent\)/,
+    );
+    assert.match(helperContent, /existingContent === expectedContent/);
+  });
+});
+
 describe("runtime adapter symlinks (integration)", () => {
   it("registry.md is reachable through both runtime adapter paths", () => {
     for (const runtimeDir of [cursorDir, claudeDir]) {
@@ -483,5 +596,178 @@ describe("runtime adapter symlinks (integration)", () => {
         `missing disable-model-invocation in ${command}.md`,
       );
     }
+  });
+});
+
+describe("global launcher installation (integration)", () => {
+  it("launcher install helpers write okv launcher to temp directory", () => {
+    const tempGlobalBin = mkdtempSync(join(tmpdir(), "okf-vault-launcher-write-"));
+    try {
+      const mainJsPath = join(root, "dist", "main.js");
+      const okvPath = getExecutablePath(tempGlobalBin, "okv");
+
+      const result = writeLauncherFile(okvPath, mainJsPath, {
+        readFileSync,
+        writeFileSync,
+        chmodSync,
+      });
+
+      assert.equal(result.written, true);
+      assert.ok(existsSync(okvPath));
+    } finally {
+      rmSync(tempGlobalBin, { recursive: true, force: true });
+    }
+  });
+
+  it("launcher install helpers write okf-vault launcher to temp directory", () => {
+    const tempGlobalBin = mkdtempSync(join(tmpdir(), "okf-vault-launcher-legacy-"));
+    try {
+      const tombstoneJsPath = join(root, "dist", "tombstone.js");
+      const legacyPath = getExecutablePath(tempGlobalBin, "okf-vault");
+
+      const result = writeLauncherFile(legacyPath, tombstoneJsPath, {
+        readFileSync,
+        writeFileSync,
+        chmodSync,
+      });
+
+      assert.equal(result.written, true);
+      assert.ok(existsSync(legacyPath));
+    } finally {
+      rmSync(tempGlobalBin, { recursive: true, force: true });
+    }
+  });
+
+  it("launcher files are executable on Unix platforms", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const tempGlobalBin = mkdtempSync(join(tmpdir(), "okf-vault-launcher-exec-"));
+    try {
+      const mainJsPath = join(root, "dist", "main.js");
+      const okvPath = getExecutablePath(tempGlobalBin, "okv");
+
+      writeLauncherFile(okvPath, mainJsPath, {
+        readFileSync,
+        writeFileSync,
+        chmodSync,
+      });
+
+      assert.ok(existsSync(okvPath));
+      const stat = lstatSync(okvPath);
+      assert.ok(stat.mode & 0o111, "launcher should be executable");
+    } finally {
+      rmSync(tempGlobalBin, { recursive: true, force: true });
+    }
+  });
+
+  it("setup is idempotent when launcher content matches", () => {
+    const tempGlobalBin = mkdtempSync(join(tmpdir(), "okf-vault-idempotent-"));
+    try {
+      const mainJsPath = join(root, "dist", "main.js");
+      const okvPath = getExecutablePath(tempGlobalBin, "okv");
+
+      // First write
+      const firstResult = writeLauncherFile(okvPath, mainJsPath, {
+        readFileSync,
+        writeFileSync,
+        chmodSync,
+      });
+      assert.equal(firstResult.written, true, "first write should succeed");
+
+      // Second write should skip
+      const secondResult = writeLauncherFile(okvPath, mainJsPath, {
+        readFileSync,
+        writeFileSync,
+        chmodSync,
+      });
+      assert.equal(secondResult.written, false, "second write should skip");
+      assert.match(secondResult.reason, /already current/);
+    } finally {
+      rmSync(tempGlobalBin, { recursive: true, force: true });
+    }
+  });
+
+  it("missing PATH is detected before launcher write", () => {
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const result = assertPnpmGlobalBinOnPath({
+      spawnSyncFn: () => ({
+        status: 1,
+        stderr: `[ERROR] The configured global bin directory "${globalBin}" is not in PATH\n`,
+      }),
+      pathEnv: "/usr/bin:/opt/homebrew/bin", // missing globalBin
+      normalize: (entry) => entry,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.globalBinDir, globalBin);
+    assert.match(result.message, /pnpm run setup/);
+  });
+
+  it("missing PATH remediation includes shell-specific guidance", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const globalBin = "/Users/test/Library/pnpm/bin";
+    const message = formatGlobalBinNotOnPathRemediation(globalBin);
+
+    // Verify all three shells are documented
+    assert.match(message, /## zsh/);
+    assert.match(message, /## bash/);
+    assert.match(message, /## fish/);
+    assert.match(message, /~\/.zshrc/);
+    assert.match(message, /~\/.bashrc/);
+    assert.match(message, /fish_user_paths/);
+  });
+
+  it("external verification does not run okv init", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.doesNotMatch(scriptContent, /spawnSync\s*\(\s*["']okv["']\s*,\s*\[\s*["']init["']/);
+    assert.doesNotMatch(scriptContent, /exec.*okv\s+init/i);
+  });
+
+  it("setup does not create /knowledge-vault directory", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.doesNotMatch(scriptContent, /mkdir.*knowledge-vault/);
+    // Verify only "okv init /knowledge-vault" guidance is present, not directory creation
+    assert.match(scriptContent, /okv init \/knowledge-vault/);
+    assert.doesNotMatch(scriptContent, /mkdirSync.*knowledge-vault/);
+    assert.doesNotMatch(scriptContent, /fs\.mkdir.*knowledge-vault/);
+  });
+
+  it("setup prints okv init only as next-step guidance after verification", () => {
+    const scriptContent = readFileSync(join(root, "scripts", "install.mjs"), "utf8");
+    assert.match(scriptContent, /okv init \/knowledge-vault/);
+  });
+
+  it("isManagedLauncherContent detects Unix launcher content", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const entryPoint = join(root, "dist", "main.js");
+    const content = renderUnixLauncherContent(entryPoint);
+    const isManaged = isManagedLauncherContent(content, entryPoint);
+    assert.equal(isManaged, true);
+  });
+
+  it("isManagedLauncherContent detects Windows launcher content", () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const entryPoint = "C:\\repo\\dist\\main.js";
+    const content = renderWindowsCmdLauncherContent(entryPoint);
+    const isManaged = isManagedLauncherContent(content, entryPoint);
+    assert.equal(isManaged, true);
+  });
+
+  it("isManagedLauncherContent rejects unrelated content", () => {
+    const entryPoint = join(root, "dist", "main.js");
+    const unrelatedContent = "#!/bin/sh\necho hello";
+    const isManaged = isManagedLauncherContent(unrelatedContent, entryPoint);
+    assert.equal(isManaged, false);
   });
 });
