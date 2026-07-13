@@ -266,7 +266,7 @@ describe("successful commit integration", () => {
     const vaultRoot = prepareVault();
     writeFileSync(join(vaultRoot, "unrelated.txt"), "leave alone\n", "utf8");
     const revision = manifestRevision(loadManifest(vaultRoot));
-    stageArticle(vaultRoot, "run-success");
+    const stagingDir = stageArticle(vaultRoot, "run-success");
     const beforeHead = runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim();
 
     const result = commitStagedSource({
@@ -295,6 +295,7 @@ describe("successful commit integration", () => {
     assert.equal(record?.status, "committed");
     assert.equal(result.commit, afterHead);
     assert.match(record?.commit ?? "", /^[a-f0-9]{40}$/);
+    assert.equal(existsSync(stagingDir), false);
     assert.equal(getManagedPathStatus(vaultRoot).clean, true);
     assert.equal(existsSync(join(vaultRoot, "unrelated.txt")), true);
     assert.match(runGit(vaultRoot, ["status", "--porcelain"]).stdout, /\?\? unrelated\.txt/);

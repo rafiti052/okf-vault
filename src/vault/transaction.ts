@@ -168,6 +168,16 @@ function removeIfExists(path: string): void {
   }
 }
 
+function removeTreeIfExists(path: string): void {
+  try {
+    if (fs.existsSync(path)) {
+      fs.rmSync(path, { recursive: true, force: true });
+    }
+  } catch {
+    // Cleanup is best-effort after the durable commit has succeeded.
+  }
+}
+
 function isProcessAlive(pid: number): boolean {
   if (pid <= 0) {
     return false;
@@ -556,6 +566,7 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
 
     clearFailureJournal(root);
     releaseVaultLock(root, input.runId);
+    removeTreeIfExists(stagingDir);
 
     const finalRevision = manifestRevision(loadManifest(root));
     return {

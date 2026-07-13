@@ -1,12 +1,12 @@
 import * as fs from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020Import from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
-import { NOTE_CONTRACT_VERSION } from "./constants.js";
+import { NOTE_CONTRACT_VERSION, TMP_DIR } from "./constants.js";
 import { deriveSourceKey, loadManifest } from "./manifest.js";
 
 export const VALIDATION_REPORT_SCHEMA_VERSION = "okf-vault-validation-report/1.0.0" as const;
@@ -864,6 +864,33 @@ function collectStagedNotes(stagingRoot: string): {
   return { notes, issues };
 }
 
+function realpathWithMissingTail(path: string): string {
+  const absolutePath = resolve(path);
+  if (fs.existsSync(absolutePath)) {
+    return fs.realpathSync.native(absolutePath);
+  }
+
+  const parent = dirname(absolutePath);
+  return join(realpathWithMissingTail(parent), absolutePath.slice(parent.length + 1));
+}
+
+function validateStagingRoot(vaultRoot: string, stagingDir: string): ValidationIssue[] {
+  const tmpRoot = realpathWithMissingTail(resolve(vaultRoot, TMP_DIR));
+  const resolvedStaging = realpathWithMissingTail(stagingDir);
+  const relativeToTmp = relative(tmpRoot, resolvedStaging);
+
+  if (relativeToTmp === "" || (!relativeToTmp.startsWith("..") && !isAbsolute(relativeToTmp))) {
+    return [];
+  }
+
+  return [
+    issue(
+      "STAGING_OUTSIDE_VAULT_TMP",
+      `Staging directory must be inside ${tmpRoot}: ${resolvedStaging}`,
+    ),
+  ];
+}
+
 export function buildValidationReport(
   contractVersion: string,
   issues: ValidationIssue[],
@@ -897,10 +924,13 @@ export function validateStagedNotes(
   envelope: SourceEnvelope,
 ): ValidateStagedResult {
   const manifest = loadManifest(vaultRoot);
-  const { notes, issues: stagingIssues } = collectStagedNotes(stagingDir);
+  const stagingRootIssues = validateStagingRoot(vaultRoot, stagingDir);
+  const { notes, issues: stagingIssues } =
+    stagingRootIssues.length === 0 ? collectStagedNotes(stagingDir) : { notes: [], issues: [] };
   const issues = [...stagingIssues, ...validateSourceEnvelope(envelope)];
+  issues.push(...stagingRootIssues);
 
-  if (notes.length === 0 && stagingIssues.length === 0) {
+  if (notes.length === 0 && stagingIssues.length === 0 && stagingRootIssues.length === 0) {
     issues.push(issue("STAGING_EMPTY", "No staged Markdown notes were found for validation."));
   }
 

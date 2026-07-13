@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -158,6 +159,42 @@ describe("staged note contract validation", () => {
     const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
     assert.equal(result.report.status, "pass");
     assert.equal(result.report.issues.length, 0);
+  });
+
+  it("rejects staging directories outside the vault tmp directory", () => {
+    const parentRoot = mkdtempSync(join(tmpdir(), "okf-validate-outside-parent-"));
+    const vaultRoot = join(parentRoot, "knowledge");
+    initializeVault(vaultRoot);
+    const outsideStagingDir = join(dirname(vaultRoot), ".okf-vault", "tmp", "run-outside");
+    const targetDir = join(outsideStagingDir, "notes");
+    mkdirSync(targetDir, { recursive: true });
+    copyFileSync(join(notesDir, "article-valid.md"), join(targetDir, "staged-note.md"));
+    const envelope = loadEnvelope("article-local.json");
+
+    const result = validateStagedNotes(vaultRoot, outsideStagingDir, envelope);
+
+    assert.equal(result.report.status, "fail");
+    assert.ok(result.report.issues.some((entry) => entry.code === "STAGING_OUTSIDE_VAULT_TMP"));
+    assert.deepEqual(result.staged_paths, []);
+  });
+
+  it("rejects staging paths that escape through a symlink", () => {
+    const parentRoot = mkdtempSync(join(tmpdir(), "okf-validate-symlink-parent-"));
+    const vaultRoot = join(parentRoot, "knowledge");
+    initializeVault(vaultRoot);
+    const outsideRoot = join(parentRoot, "outside");
+    const outsideStagingDir = join(outsideRoot, "run-symlink");
+    mkdirSync(outsideStagingDir, { recursive: true });
+    copyFileSync(join(notesDir, "article-valid.md"), join(outsideStagingDir, "staged-note.md"));
+    const linkedStagingDir = join(vaultRoot, ".okf-vault", "tmp", "run-symlink");
+    symlinkSync(outsideStagingDir, linkedStagingDir, "dir");
+    const envelope = loadEnvelope("article-local.json");
+
+    const result = validateStagedNotes(vaultRoot, linkedStagingDir, envelope);
+
+    assert.equal(result.report.status, "fail");
+    assert.ok(result.report.issues.some((entry) => entry.code === "STAGING_OUTSIDE_VAULT_TMP"));
+    assert.deepEqual(result.staged_paths, []);
   });
 
   it("returns structural error codes for missing sections, empty type, or unsupported note type", () => {
@@ -337,11 +374,20 @@ describe("staged validation edge cases", () => {
     initializeVault(vaultRoot);
     const envelope = loadEnvelope("article-local.json");
 
-    const missing = validateStagedNotes(vaultRoot, join(vaultRoot, "missing-staging"), envelope);
+    const outside = validateStagedNotes(vaultRoot, join(vaultRoot, "missing-staging"), envelope);
+    assert.equal(outside.report.status, "fail");
+    assert.ok(outside.report.issues.some((entry) => entry.code === "STAGING_OUTSIDE_VAULT_TMP"));
+
+    const missing = validateStagedNotes(
+      vaultRoot,
+      join(vaultRoot, ".okf-vault", "tmp", "missing-staging"),
+      envelope,
+    );
     assert.equal(missing.report.status, "fail");
     assert.ok(missing.report.issues.some((entry) => entry.code === "STAGING_NOT_FOUND"));
 
-    const emptyDir = mkdtempSync(join(tmpdir(), "okf-empty-staging-"));
+    const emptyDir = join(vaultRoot, ".okf-vault", "tmp", "empty-staging");
+    mkdirSync(emptyDir, { recursive: true });
     const empty = validateStagedNotes(vaultRoot, emptyDir, envelope);
     assert.equal(empty.report.status, "fail");
     assert.ok(empty.report.issues.some((entry) => entry.code === "STAGING_EMPTY"));

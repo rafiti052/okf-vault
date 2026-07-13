@@ -305,6 +305,24 @@ describe("init and inspect CLI integration", () => {
     assert.equal(existsSync(join(projectRoot, ".claude", "skills", "okf-vault")), false);
   });
 
+  it("rejects flag-looking init vault roots instead of creating sibling flag directories", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "okf-init-flag-root-"));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(projectRoot);
+      const outcome = dispatch(parseArgs(["init", "--dry-run"]));
+      assert.equal(outcome.exitCode, ExitCode.USAGE);
+      assert.equal(outcome.result?.status, "error");
+      if (outcome.result?.status === "error") {
+        assert.equal(outcome.result.code, "USAGE_INVALID_VAULT_ROOT");
+      }
+      assert.equal(existsSync(join(projectRoot, "--dry-run")), false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it("no-arg init sweeps legacy curator rule and reports removed paths", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "okf-legacy-rule-init-"));
     const legacyRule = join(projectRoot, ".cursor", "rules", "okf-vault.mdc");

@@ -453,6 +453,28 @@ export function installCuratorRule(projectRoot: string, installRoot: string): bo
 
 export function handleInit(args: string[]): DispatchOutcome {
   const explicitVaultRoot = args[0];
+  if (args.length > 1) {
+    return {
+      exitCode: ExitCode.USAGE,
+      result: failure(
+        "init",
+        "USAGE_UNEXPECTED_ARGS",
+        "Usage: init [vault-root]. Init does not support additional flags.",
+      ),
+      diagnostic: "Unexpected arguments for init.",
+    };
+  }
+  if (explicitVaultRoot?.startsWith("-") === true) {
+    return {
+      exitCode: ExitCode.USAGE,
+      result: failure(
+        "init",
+        "USAGE_INVALID_VAULT_ROOT",
+        "Vault root must be a path, not an option flag. Use './' before paths that begin with '-'.",
+      ),
+      diagnostic: "Invalid vault root argument for init.",
+    };
+  }
   const repoRootBootstrap = explicitVaultRoot === undefined;
   const projectRoot = resolve(process.cwd());
   const vaultRoot = repoRootBootstrap ? join(projectRoot, "knowledge") : explicitVaultRoot;
