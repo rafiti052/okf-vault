@@ -9,6 +9,15 @@ import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js"
 import { NOTE_CONTRACT_VERSION, TMP_DIR } from "./constants.js";
 import { deriveSourceKey, loadManifest } from "./manifest.js";
 
+export {
+  SOURCE_SPAN_VALIDATION_CODES,
+  sourceSpanContentSha256,
+  validateSourceSpanDocuments,
+  type SourceSpanMarkdownDocument,
+  type SourceSpanValidationEnvelope,
+  type SourceSpanValidationInput,
+} from "./source-spans-validation.js";
+
 export const VALIDATION_REPORT_SCHEMA_VERSION = "okf-vault-validation-report/1.0.0" as const;
 export const SOURCE_ENVELOPE_VERSION = "okf-source-envelope/1.0.0" as const;
 
