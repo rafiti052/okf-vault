@@ -17,6 +17,7 @@ import {
   getManagedPathStatus,
   isGitRepository,
   readManagedFileFromHead,
+  runGit,
   stageManagedPaths,
   unstageManagedPaths,
 } from "./git.js";
@@ -26,13 +27,25 @@ import {
   loadManifest,
   ManifestRevisionMismatchError,
   manifestRevision,
+  removeSourceRecord,
   serializeManifest,
+  sourceSpanPathsForRecord,
   upsertCommittedSource,
   utcNow,
   type Manifest,
   type SourceRecord,
+  type SourceSpanIndex,
 } from "./manifest.js";
-import { loadSourceEnvelope, validateStagedNotes } from "./validation.js";
+import { renderSourceSpanMarkdown } from "./source-spans.js";
+import {
+  detectStagedSourceProfile,
+  generateSourceSpanDocuments,
+  loadSourceEnvelope,
+  sourceSpanContentSha256,
+  validateStagedNotes,
+  type SourceEnvelope,
+  type ValidateStagedResult,
+} from "./validation.js";
 
 export const TRANSACTION_JOURNAL_VERSION = "okf-vault-transaction-journal/1.0.0" as const;
 export const PLACEHOLDER_COMMIT = "0000000";
@@ -106,6 +119,8 @@ export interface CommitStagedInput {
   runId: string;
   envelopePath: string;
   expectedRevision: string;
+  /** Required to replace a committed record whose source bytes changed. */
+  supersede?: boolean;
   hooks?: TransactionHooks;
 }
 
@@ -116,6 +131,25 @@ export interface CommitStagedResult {
   commit: string;
   revision: string;
   staged_paths: string[];
+  source_profile: SourceSpanIndex["profile"];
+  source_span_count: number;
+  source_span_paths: string[];
+}
+
+export interface PurgeCommittedSourceInput {
+  vaultRoot: string;
+  runId: string;
+  sourceKey: string;
+  expectedRevision: string;
+  hooks?: Pick<TransactionHooks, "renameSync" | "createCommit">;
+}
+
+export interface PurgeCommittedSourceResult {
+  run_id: string;
+  source_key: string;
+  removed_paths: string[];
+  commit: string;
+  revision: string;
 }
 
 function lockPath(vaultRoot: string): string {
@@ -266,15 +300,21 @@ export function updateVaultLockPhase(vaultRoot: string, phase: VaultLockPayload[
   writeJsonAtomic(lockPath(vaultRoot), { ...existing, phase });
 }
 
-export function captureManagedSnapshot(vaultRoot: string, notePath: string): ManagedSnapshot {
+export function captureManagedSnapshot(
+  vaultRoot: string,
+  notePath: string,
+  additionalNotePaths: readonly string[] = [],
+): ManagedSnapshot {
   const root = resolve(vaultRoot);
   const manifestPath = join(root, MANIFEST_RELATIVE_PATH);
   const logFilePath = join(root, LOG_PATH);
   const notes: Record<string, string> = {};
 
-  const noteFullPath = join(root, notePath);
-  if (fs.existsSync(noteFullPath)) {
-    notes[notePath] = fs.readFileSync(noteFullPath, "utf8");
+  for (const managedNotePath of new Set([notePath, ...additionalNotePaths])) {
+    const noteFullPath = join(root, managedNotePath);
+    if (fs.existsSync(noteFullPath)) {
+      notes[managedNotePath] = fs.readFileSync(noteFullPath, "utf8");
+    }
   }
 
   const sourceSpans: Record<string, string> = {};
@@ -333,17 +373,6 @@ export function restoreManagedSnapshot(vaultRoot: string, snapshot: ManagedSnaps
     writeFileAtomic(join(root, relativePath), content, fs.renameSync);
   }
 
-  const installedNotePaths = fs
-    .readdirSync(join(root, "notes"), { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md")
-    .map((entry) => join("notes", entry.name).split("\\").join("/"));
-
-  for (const relativePath of installedNotePaths) {
-    if (!(relativePath in snapshot.notes)) {
-      removeIfExists(join(root, relativePath));
-    }
-  }
-
   if (snapshot.source_spans !== undefined) {
     const sourceSpanEntries = Object.entries(snapshot.source_spans)
       .map(
@@ -366,6 +395,18 @@ export function writeFailureJournal(vaultRoot: string, journal: TransactionJourn
 
 export function clearFailureJournal(vaultRoot: string): void {
   removeIfExists(journalPath(vaultRoot));
+}
+
+function removeInstalledNotesAbsentFromSnapshot(
+  vaultRoot: string,
+  installedPaths: readonly string[],
+  snapshot: ManagedSnapshot,
+): void {
+  for (const relativePath of installedPaths) {
+    if (relativePath.startsWith("notes/") && !(relativePath in snapshot.notes)) {
+      removeIfExists(join(resolve(vaultRoot), relativePath));
+    }
+  }
 }
 
 function assertVaultReady(vaultRoot: string): void {
@@ -420,11 +461,67 @@ function buildLogEntry(sourceKey: string, notePath: string, processedAt: string)
   return `\n## ${processedAt} — ${sourceKey}\n\n- note: ${notePath}\n`;
 }
 
+function buildPurgeLogEntry(sourceKey: string, notePath: string, processedAt: string): string {
+  return `\n## ${processedAt} — ${sourceKey}\n\n- purged: ${notePath}\n`;
+}
+
+function validatePreparedStaging(
+  vaultRoot: string,
+  stagingDir: string,
+  envelope: SourceEnvelope,
+): ValidateStagedResult {
+  let validation = validateStagedNotes(vaultRoot, stagingDir, envelope);
+  if (validation.report.status !== "pass") {
+    throw new TransactionPreflightError(validation.report.summary, "STAGED_VALIDATION_FAILED", {
+      issues: validation.report.issues,
+    });
+  }
+  if (validation.staged_paths.length !== 1) {
+    throw new TransactionPreflightError(
+      "Exactly one staged note is required per transaction",
+      "STAGED_NOTE_COUNT_INVALID",
+      { staged_paths: validation.staged_paths },
+    );
+  }
+
+  if (validation.source_span_count === 0) {
+    const sourceProfile = detectStagedSourceProfile(stagingDir);
+    if (sourceProfile === undefined) {
+      throw new TransactionPreflightError(
+        "Exactly one supported source-note profile is required to generate source spans",
+        "STAGED_SOURCE_PROFILE_INVALID",
+      );
+    }
+    const documents = generateSourceSpanDocuments(sourceProfile, envelope);
+    for (const document of documents) {
+      writeFileAtomic(
+        join(stagingDir, document.relativePath),
+        renderSourceSpanMarkdown(document),
+        fs.renameSync,
+      );
+    }
+    validation = validateStagedNotes(vaultRoot, stagingDir, envelope);
+  }
+
+  if (
+    validation.report.status !== "pass" ||
+    validation.source_span_index === undefined ||
+    validation.source_profile === undefined ||
+    validation.source_span_count === 0
+  ) {
+    throw new TransactionPreflightError(validation.report.summary, "STAGED_VALIDATION_FAILED", {
+      issues: validation.report.issues,
+    });
+  }
+  return validation;
+}
+
 function buildCommittedRecord(
   envelope: ReturnType<typeof loadSourceEnvelope>,
   notePath: string,
   commit: string,
   processedAt: string,
+  sourceSpanIndex: SourceSpanIndex,
 ): SourceRecord {
   return {
     source_key: envelope.source_key,
@@ -435,6 +532,7 @@ function buildCommittedRecord(
     status: "committed",
     note_path: notePath,
     commit,
+    source_span_index: sourceSpanIndex,
     processed_at: processedAt,
   };
 }
@@ -443,10 +541,14 @@ function installManagedFiles(
   vaultRoot: string,
   notePath: string,
   stagingDir: string,
+  sourceSpanPaths: readonly string[],
+  sourceSpanIndex: SourceSpanIndex,
+  stalePaths: readonly string[],
   manifest: Manifest,
   logContent: string,
   renameSync: typeof fs.renameSync,
-): string[] {
+  installedPaths: string[],
+): void {
   const root = resolve(vaultRoot);
   const stagedNotePath = join(stagingDir, notePath);
   if (!fs.existsSync(stagedNotePath)) {
@@ -455,17 +557,45 @@ function installManagedFiles(
     });
   }
 
-  const installedPaths: string[] = [];
   writeFileAtomic(join(root, notePath), fs.readFileSync(stagedNotePath, "utf8"), renameSync);
   installedPaths.push(notePath);
+
+  for (const sourceSpanPath of sourceSpanPaths) {
+    const stagedSourceSpanPath = join(stagingDir, sourceSpanPath);
+    if (!fs.existsSync(stagedSourceSpanPath)) {
+      throw new TransactionFailureError(
+        `Staged source span missing at ${sourceSpanPath}`,
+        "STAGED_SOURCE_SPAN_MISSING",
+        { path: sourceSpanPath },
+      );
+    }
+    const content = fs.readFileSync(stagedSourceSpanPath, "utf8");
+    const indexedSpan = sourceSpanIndex.spans.find((span) => span.path === sourceSpanPath);
+    if (indexedSpan === undefined || sourceSpanContentSha256(content) !== indexedSpan.sha256) {
+      throw new TransactionFailureError(
+        `Staged source span changed after validation at ${sourceSpanPath}`,
+        "STAGED_SOURCE_SPAN_CHANGED",
+        { path: sourceSpanPath },
+      );
+    }
+    writeFileAtomic(join(root, sourceSpanPath), content, renameSync);
+    installedPaths.push(sourceSpanPath);
+  }
+
+  const retainedPaths = new Set([notePath, ...sourceSpanPaths]);
+  for (const stalePath of stalePaths) {
+    if (retainedPaths.has(stalePath)) {
+      continue;
+    }
+    removeIfExists(join(root, stalePath));
+    installedPaths.push(stalePath);
+  }
 
   writeFileAtomic(join(root, MANIFEST_RELATIVE_PATH), serializeManifest(manifest), renameSync);
   installedPaths.push(MANIFEST_RELATIVE_PATH);
 
   writeFileAtomic(join(root, LOG_PATH), logContent, renameSync);
   installedPaths.push(LOG_PATH);
-
-  return installedPaths;
 }
 
 function rollbackFailure(
@@ -476,11 +606,33 @@ function rollbackFailure(
   snapshot: ManagedSnapshot,
   installedPaths: string[],
   error: unknown,
+  previousHead?: string,
 ): never {
+  let headRollbackError: string | undefined;
+  if (previousHead !== undefined) {
+    const currentHead = getHeadCommit(vaultRoot);
+    if (currentHead !== previousHead) {
+      const restoreHead = runGit(vaultRoot, ["update-ref", "HEAD", previousHead, currentHead]);
+      if (restoreHead.status !== 0) {
+        headRollbackError =
+          restoreHead.stderr || restoreHead.stdout || "git update-ref failed without diagnostics";
+      }
+    }
+  }
   restoreManagedSnapshot(vaultRoot, snapshot);
+  removeInstalledNotesAbsentFromSnapshot(vaultRoot, installedPaths, snapshot);
   unstageManagedPaths(vaultRoot, installedPaths);
-  const message = error instanceof Error ? error.message : "Transaction failed";
-  const code = error instanceof TransactionFailureError ? error.code : "TRANSACTION_FAILED";
+  const originalMessage = error instanceof Error ? error.message : "Transaction failed";
+  const message =
+    headRollbackError === undefined
+      ? originalMessage
+      : `${originalMessage}; failed to restore Git HEAD: ${headRollbackError}`;
+  const code =
+    headRollbackError !== undefined
+      ? "GIT_HEAD_ROLLBACK_FAILED"
+      : error instanceof TransactionFailureError
+        ? error.code
+        : "TRANSACTION_FAILED";
   writeFailureJournal(vaultRoot, {
     schema_version: TRANSACTION_JOURNAL_VERSION,
     run_id: runId,
@@ -528,31 +680,17 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
       { source_key: envelope.source_key },
     );
   }
-  if (inspectOutcome === "changed_conflict") {
+  if (inspectOutcome === "changed_conflict" && input.supersede !== true) {
     throw new TransactionPreflightError(
       `Source '${envelope.source_key}' content hash changed`,
       "SOURCE_CHANGED_CONFLICT",
-      { source_key: envelope.source_key },
+      { source_key: envelope.source_key, supersede_required: true },
     );
   }
 
-  const validation = validateStagedNotes(root, stagingDir, envelope);
-  if (validation.report.status !== "pass") {
-    throw new TransactionPreflightError(validation.report.summary, "STAGED_VALIDATION_FAILED", {
-      issues: validation.report.issues,
-    });
-  }
-  if (validation.staged_paths.length !== 1) {
-    throw new TransactionPreflightError(
-      "Exactly one staged note is required per transaction",
-      "STAGED_NOTE_COUNT_INVALID",
-      { staged_paths: validation.staged_paths },
-    );
-  }
+  let validation = validatePreparedStaging(root, stagingDir, envelope);
 
   input.hooks?.afterValidation?.(root);
-
-  const notePath = validation.staged_paths[0]!;
   acquireVaultLock(root, input.runId, input.expectedRevision);
 
   try {
@@ -560,24 +698,46 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
     assertManifestRevision(currentManifest, input.expectedRevision);
     assertCleanManagedPaths(root);
 
-    const snapshot = captureManagedSnapshot(root, notePath);
+    validation = validatePreparedStaging(root, stagingDir, envelope);
+    const notePath = validation.staged_paths[0]!;
+    const sourceSpanIndex = validation.source_span_index!;
+    const existingRecord = currentManifest.sources.find(
+      (record) => record.source_key === envelope.source_key,
+    );
+    const stalePaths =
+      input.supersede === true && existingRecord !== undefined
+        ? [
+            ...(existingRecord.note_path === undefined ? [] : [existingRecord.note_path]),
+            ...sourceSpanPathsForRecord(existingRecord),
+          ]
+        : [];
+
+    const snapshot = captureManagedSnapshot(
+      root,
+      notePath,
+      existingRecord?.note_path === undefined ? [] : [existingRecord.note_path],
+    );
     const processedAt = utcNow();
     const logContent = `${snapshot.log}${buildLogEntry(envelope.source_key, notePath, processedAt)}`;
     const pendingManifest = upsertCommittedSource(
       currentManifest,
-      buildCommittedRecord(envelope, notePath, PLACEHOLDER_COMMIT, processedAt),
+      buildCommittedRecord(envelope, notePath, PLACEHOLDER_COMMIT, processedAt, sourceSpanIndex),
     );
 
     updateVaultLockPhase(root, "installing");
-    let installedPaths: string[] = [];
+    const installedPaths: string[] = [];
     try {
-      installedPaths = installManagedFiles(
+      installManagedFiles(
         root,
         notePath,
         stagingDir,
+        validation.source_span_paths,
+        sourceSpanIndex,
+        stalePaths,
         pendingManifest,
         logContent,
         renameSync,
+        installedPaths,
       );
     } catch (error) {
       rollbackFailure(
@@ -592,6 +752,7 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
     }
 
     updateVaultLockPhase(root, "committing");
+    const previousHead = getHeadCommit(root);
     try {
       stageManagedPaths(root, installedPaths);
       const message = `okf-vault: commit ${envelope.source_key}`;
@@ -599,7 +760,7 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
       let commitHash = getHeadCommit(root);
       const committedManifest = upsertCommittedSource(
         currentManifest,
-        buildCommittedRecord(envelope, notePath, commitHash, processedAt),
+        buildCommittedRecord(envelope, notePath, commitHash, processedAt, sourceSpanIndex),
       );
       writeFileAtomic(
         join(root, MANIFEST_RELATIVE_PATH),
@@ -621,6 +782,7 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
         snapshot,
         installedPaths,
         error,
+        previousHead,
       );
     }
 
@@ -636,6 +798,110 @@ export function commitStagedSource(input: CommitStagedInput): CommitStagedResult
       commit: getHeadCommit(root),
       revision: finalRevision,
       staged_paths: validation.staged_paths,
+      source_profile: sourceSpanIndex.profile,
+      source_span_count: sourceSpanIndex.spans.length,
+      source_span_paths: sourceSpanIndex.spans.map((span) => span.path),
+    };
+  } catch (error) {
+    releaseVaultLock(root, input.runId);
+    throw error;
+  }
+}
+
+/**
+ * Removes one committed source from the current tree in a new commit.
+ * Historical commits are intentionally left untouched.
+ */
+export function purgeCommittedSource(input: PurgeCommittedSourceInput): PurgeCommittedSourceResult {
+  const root = resolve(input.vaultRoot);
+  const sourceKey = input.sourceKey.trim();
+  const renameSync = input.hooks?.renameSync ?? fs.renameSync;
+  const createCommitHook = input.hooks?.createCommit ?? createCommit;
+
+  if (sourceKey.length === 0) {
+    throw new TransactionPreflightError("Source key must be non-empty", "SOURCE_KEY_INVALID");
+  }
+  assertVaultReady(root);
+  assertNoUnresolvedTransactionState(root, input.runId);
+  assertCleanManagedPaths(root);
+
+  const manifest = loadManifest(root);
+  assertManifestRevision(manifest, input.expectedRevision);
+  const initialRecord = manifest.sources.find((record) => record.source_key === sourceKey);
+  if (initialRecord?.status !== "committed" || initialRecord.note_path === undefined) {
+    throw new TransactionPreflightError(
+      `Committed source '${sourceKey}' was not found`,
+      "SOURCE_NOT_COMMITTED",
+      { source_key: sourceKey },
+    );
+  }
+
+  acquireVaultLock(root, input.runId, input.expectedRevision);
+  try {
+    const currentManifest = loadManifest(root);
+    assertManifestRevision(currentManifest, input.expectedRevision);
+    assertCleanManagedPaths(root);
+    const record = currentManifest.sources.find((entry) => entry.source_key === sourceKey);
+    if (record?.status !== "committed" || record.note_path === undefined) {
+      throw new TransactionPreflightError(
+        `Committed source '${sourceKey}' was not found`,
+        "SOURCE_NOT_COMMITTED",
+        { source_key: sourceKey },
+      );
+    }
+
+    const snapshot = captureManagedSnapshot(root, record.note_path);
+    const removedPaths = [record.note_path, ...sourceSpanPathsForRecord(record)];
+    const installedPaths = [...removedPaths, MANIFEST_RELATIVE_PATH, LOG_PATH];
+    const processedAt = utcNow();
+    const nextManifest = removeSourceRecord(currentManifest, sourceKey);
+    const logContent = `${snapshot.log}${buildPurgeLogEntry(
+      sourceKey,
+      record.note_path,
+      processedAt,
+    )}`;
+
+    updateVaultLockPhase(root, "installing");
+    try {
+      for (const relativePath of removedPaths) {
+        removeIfExists(join(root, relativePath));
+      }
+      writeFileAtomic(
+        join(root, MANIFEST_RELATIVE_PATH),
+        serializeManifest(nextManifest),
+        renameSync,
+      );
+      writeFileAtomic(join(root, LOG_PATH), logContent, renameSync);
+    } catch (error) {
+      rollbackFailure(root, input.runId, sourceKey, "install", snapshot, installedPaths, error);
+    }
+
+    updateVaultLockPhase(root, "committing");
+    const previousHead = getHeadCommit(root);
+    try {
+      stageManagedPaths(root, installedPaths);
+      createCommitHook(root, `okf-vault: purge ${sourceKey}`);
+    } catch (error) {
+      rollbackFailure(
+        root,
+        input.runId,
+        sourceKey,
+        "commit",
+        snapshot,
+        installedPaths,
+        error,
+        previousHead,
+      );
+    }
+
+    clearFailureJournal(root);
+    releaseVaultLock(root, input.runId);
+    return {
+      run_id: input.runId,
+      source_key: sourceKey,
+      removed_paths: removedPaths,
+      commit: getHeadCommit(root),
+      revision: manifestRevision(loadManifest(root)),
     };
   } catch (error) {
     releaseVaultLock(root, input.runId);
@@ -662,11 +928,7 @@ export function recoverVault(vaultRoot: string): RecoverVaultResult {
 
   if (journal !== undefined) {
     restoreManagedSnapshot(root, journal.snapshot);
-    for (const relativePath of journal.installed_paths) {
-      if (!(relativePath in journal.snapshot.notes) && relativePath.startsWith("notes/")) {
-        removeIfExists(join(root, relativePath));
-      }
-    }
+    removeInstalledNotesAbsentFromSnapshot(root, journal.installed_paths, journal.snapshot);
     unstageManagedPaths(root, journal.installed_paths);
     clearFailureJournal(root);
     releaseVaultLock(root, journal.run_id);
@@ -694,19 +956,22 @@ export function handleCommit(args: string[]): DispatchOutcome {
   const runId = args[1];
   const envelopePath = args[2];
   const expectedRevision = args[3];
+  const mode = args[4];
 
   if (
     vaultRoot === undefined ||
     runId === undefined ||
     envelopePath === undefined ||
-    expectedRevision === undefined
+    expectedRevision === undefined ||
+    args.length > 5 ||
+    (mode !== undefined && mode !== "--supersede")
   ) {
     return {
       exitCode: ExitCode.USAGE,
       result: failure(
         "commit",
         "USAGE_MISSING_ARGS",
-        "Usage: commit <vault-root> <run-id> <envelope-json-path> <expected-manifest-revision>",
+        "Usage: commit <vault-root> <run-id> <envelope-json-path> <expected-manifest-revision> [--supersede]",
       ),
       diagnostic: "Missing required arguments for commit.",
     };
@@ -718,6 +983,7 @@ export function handleCommit(args: string[]): DispatchOutcome {
       runId,
       envelopePath,
       expectedRevision,
+      ...(mode === "--supersede" ? { supersede: true } : {}),
     });
     return {
       exitCode: ExitCode.SUCCESS,

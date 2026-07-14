@@ -262,6 +262,27 @@ export function upsertSkippedSource(manifest: Manifest, record: SourceRecord): M
   return upsertCommittedSource(manifest, record);
 }
 
+/** Returns the managed source-span paths owned by one manifest record. */
+export function sourceSpanPathsForRecord(record: SourceRecord): string[] {
+  return (
+    record.source_span_index?.spans
+      .map((span) => span.path)
+      .sort((left, right) => left.localeCompare(right)) ?? []
+  );
+}
+
+/** Removes one current-tree source record without mutating the supplied manifest. */
+export function removeSourceRecord(manifest: Manifest, sourceKey: string): Manifest {
+  const normalizedSourceKey = sourceKey.trim();
+  if (normalizedSourceKey.length === 0) {
+    throw new ManifestValidationError("sourceKey must be non-empty");
+  }
+  return canonicalizeManifest({
+    ...manifest,
+    sources: manifest.sources.filter((record) => record.source_key !== normalizedSourceKey),
+  });
+}
+
 export function validateManifestSchema(manifest: Manifest): void {
   if (manifest.schema_version !== MANIFEST_SCHEMA_VERSION) {
     throw new ManifestValidationError(

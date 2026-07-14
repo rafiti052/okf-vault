@@ -225,6 +225,11 @@ describe("staged note contract validation", () => {
     assert.equal(result.source_profile, "article");
     assert.equal(result.source_span_count, sourceSpanPaths.length);
     assert.deepEqual(result.source_span_paths, sourceSpanPaths);
+    assert.equal(result.source_span_index?.profile, "article");
+    assert.deepEqual(
+      result.source_span_index?.spans.map((span) => span.path),
+      sourceSpanPaths,
+    );
     assert.deepEqual(result.staged_paths, ["notes/staged-note.md"]);
   });
 

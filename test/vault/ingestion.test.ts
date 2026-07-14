@@ -28,7 +28,11 @@ import {
   envelopeHasSlides,
 } from "../../dist/vault/ingestion.js";
 import { commitStagedSource, recoverVault } from "../../dist/vault/transaction.js";
-import { youtubeAccepted, youtubeAmbiguous, youtubeRejected } from "../fixtures/youtube-fixtures.js";
+import {
+  youtubeAccepted,
+  youtubeAmbiguous,
+  youtubeRejected,
+} from "../fixtures/youtube-fixtures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..", "..");
@@ -287,10 +291,7 @@ describe("profile selection", () => {
     );
     assert.equal(selectConversionProfile("panel/transcript", { kind: "youtube" }), "panel");
     assert.equal(selectConversionProfile("text/vtt", { kind: "youtube" }), "video");
-    assert.equal(
-      selectConversionProfile("text/plain", { kind: "youtube" }),
-      "video",
-    );
+    assert.equal(selectConversionProfile("text/plain", { kind: "youtube" }), "video");
   });
 
   it("keeps granola panel routing and non-youtube transcript heuristics unchanged", () => {
@@ -362,13 +363,7 @@ describe("youtube ingest integration", () => {
     });
 
     const outcome = dispatch(
-      parseArgs([
-        "commit",
-        vaultRoot,
-        "run-youtube-invalid",
-        YOUTUBE_INVALID_ENVELOPE,
-        revision,
-      ]),
+      parseArgs(["commit", vaultRoot, "run-youtube-invalid", YOUTUBE_INVALID_ENVELOPE, revision]),
     );
     assert.equal(outcome.exitCode, ExitCode.VALIDATION);
     assert.equal(runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim(), beforeHead);
@@ -377,7 +372,7 @@ describe("youtube ingest integration", () => {
 });
 
 describe("article ingest integration", () => {
-  it("commits one article fixture updating note, manifest, and log with exactly one git commit", () => {
+  it("commits one article fixture with note, spans, manifest, and log in one git commit", () => {
     const vaultRoot = prepareVault();
     const revision = manifestRevision(loadManifest(vaultRoot));
     const beforeHead = runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim();
@@ -395,6 +390,9 @@ describe("article ingest integration", () => {
     assert.notEqual(afterHead, beforeHead);
     assert.equal(countCommitsSince(vaultRoot, beforeHead), 1);
     assert.equal(existsSync(join(vaultRoot, result.note_path)), true);
+    for (const sourceSpanPath of result.source_span_paths) {
+      assert.equal(existsSync(join(vaultRoot, sourceSpanPath)), true);
+    }
     assert.equal(existsSync(join(vaultRoot, MANIFEST_RELATIVE_PATH)), true);
     assert.match(readFileSync(join(vaultRoot, LOG_PATH), "utf8"), /sample-article/);
 
@@ -402,7 +400,10 @@ describe("article ingest integration", () => {
       .stdout.split("\n")
       .filter(Boolean)
       .sort();
-    assert.deepEqual(changed, [LOG_PATH, MANIFEST_RELATIVE_PATH, result.note_path].sort());
+    assert.deepEqual(
+      changed,
+      [LOG_PATH, MANIFEST_RELATIVE_PATH, result.note_path, ...result.source_span_paths].sort(),
+    );
   });
 });
 

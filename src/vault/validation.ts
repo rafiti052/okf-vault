@@ -922,7 +922,11 @@ function sourceSpanProfileForNotes(notes: readonly ParsedNote[]): SourceSpanProf
   return profiles.size === 1 ? [...profiles][0] : undefined;
 }
 
-function generateExpectedSourceSpans(
+export function detectStagedSourceProfile(stagingDir: string): SourceSpanProfile | undefined {
+  return sourceSpanProfileForNotes(collectStagedOutput(stagingDir).notes);
+}
+
+export function generateSourceSpanDocuments(
   profile: SourceSpanProfile,
   envelope: SourceEnvelope,
 ): SourceSpanDocument[] {
@@ -966,7 +970,7 @@ function validateStagedSourceSpans(
   notes: readonly ParsedNote[],
   sourceSpans: readonly SourceSpanMarkdownDocument[],
   envelope: SourceEnvelope,
-): { issues: ValidationIssue[]; profile?: SourceSpanProfile } {
+): { issues: ValidationIssue[]; profile?: SourceSpanProfile; index?: SourceSpanIndex } {
   if (sourceSpans.length === 0) {
     return { issues: [] };
   }
@@ -984,13 +988,15 @@ function validateStagedSourceSpans(
   }
 
   try {
-    const expectedDocuments = generateExpectedSourceSpans(profile, envelope);
+    const expectedDocuments = generateSourceSpanDocuments(profile, envelope);
+    const index = buildExpectedSourceSpanIndex(profile, expectedDocuments);
     return {
       profile,
+      index,
       issues: validateSourceSpanDocuments({
         profile,
         envelope,
-        index: buildExpectedSourceSpanIndex(profile, expectedDocuments),
+        index,
         documents: sourceSpans,
       }),
     };
@@ -1066,6 +1072,7 @@ export interface ValidateStagedResult {
   source_span_count: number;
   source_span_paths: string[];
   source_profile?: SourceSpanProfile;
+  source_span_index?: SourceSpanIndex;
 }
 
 export function validateStagedNotes(
@@ -1109,6 +1116,9 @@ export function validateStagedNotes(
     ...(sourceSpanValidation.profile === undefined
       ? {}
       : { source_profile: sourceSpanValidation.profile }),
+    ...(sourceSpanValidation.index === undefined
+      ? {}
+      : { source_span_index: sourceSpanValidation.index }),
   };
 }
 

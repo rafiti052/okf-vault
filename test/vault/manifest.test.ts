@@ -9,8 +9,10 @@ import {
   inspectSource,
   loadManifest,
   manifestRevision,
+  removeSourceRecord,
   saveManifest,
   serializeManifest,
+  sourceSpanPathsForRecord,
   validateSourceRecord,
   createEmptyManifest,
   ManifestValidationError,
@@ -169,6 +171,16 @@ describe("manifest source identity and serialization", () => {
       "anchor-a",
       "anchor-b",
     ]);
+  });
+
+  it("removes a source record and its span index together without mutating the input", () => {
+    const record = committedRecord({ source_span_index: sourceSpanIndex() });
+    const manifest = { ...createEmptyManifest(), sources: [record] };
+
+    assert.deepEqual(sourceSpanPathsForRecord(record), ["references/sources/article/span-001.md"]);
+    assert.deepEqual(removeSourceRecord(manifest, record.source_key).sources, []);
+    assert.equal(manifest.sources[0]?.source_span_index?.spans.length, 1);
+    assert.throws(() => removeSourceRecord(manifest, "   "), ManifestValidationError);
   });
 });
 

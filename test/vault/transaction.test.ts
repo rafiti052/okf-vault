@@ -1,10 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   writeFileSync,
@@ -31,6 +33,7 @@ import {
   acquireVaultLock,
   captureManagedSnapshot,
   commitStagedSource,
+  purgeCommittedSource,
   readTransactionJournal,
   readVaultLock,
   recoverVault,
@@ -54,6 +57,32 @@ function stageArticle(vaultRoot: string, runId: string, noteName = "notes/sample
   mkdirSync(targetDir, { recursive: true });
   copyFileSync(join(notesDir, "article-valid.md"), join(stagingDir, noteName));
   return stagingDir;
+}
+
+function stageProfileNote(vaultRoot: string, runId: string, fixtureName: string, noteName: string) {
+  const stagingDir = join(vaultRoot, ".okf-vault", "tmp", runId);
+  const targetDir = join(stagingDir, dirname(noteName));
+  mkdirSync(targetDir, { recursive: true });
+  copyFileSync(join(notesDir, fixtureName), join(stagingDir, noteName));
+  return stagingDir;
+}
+
+function installedSourceSpanPaths(vaultRoot: string): string[] {
+  const rootPath = join(vaultRoot, SOURCE_SPANS_DIR);
+  const paths: string[] = [];
+  const walk = (directory: string, relativeDirectory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = join(directory, entry.name);
+      const relativePath = join(relativeDirectory, entry.name).split("\\").join("/");
+      if (entry.isDirectory()) {
+        walk(fullPath, relativePath);
+      } else if (entry.isFile()) {
+        paths.push(relativePath);
+      }
+    }
+  };
+  walk(rootPath, SOURCE_SPANS_DIR);
+  return paths.sort();
 }
 
 function prepareVault() {
@@ -263,6 +292,8 @@ describe("install rollback", () => {
 
     assert.equal(readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8"), beforeManifest);
     assert.equal(readFileSync(join(vaultRoot, LOG_PATH), "utf8"), beforeLog);
+    assert.equal(existsSync(join(vaultRoot, "notes/sample-article.md")), false);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), []);
     assert.ok(readTransactionJournal(vaultRoot));
   });
 });
@@ -294,6 +325,7 @@ describe("commit rollback", () => {
     assert.equal(readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8"), beforeManifest);
     assert.equal(readFileSync(join(vaultRoot, LOG_PATH), "utf8"), beforeLog);
     assert.equal(loadManifest(vaultRoot).sources.length, 0);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), []);
   });
 
   it("restores the previous source-span tree when a transaction fails before commit", () => {
@@ -330,6 +362,34 @@ describe("commit rollback", () => {
     assert.deepEqual(readTransactionJournal(vaultRoot)?.snapshot.source_spans, {
       [existingSpanPath]: "# Before transaction\n",
     });
+  });
+
+  it("restores the previous HEAD and removes partial span state when amend fails", () => {
+    const vaultRoot = prepareVault();
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    stageArticle(vaultRoot, "run-amend-fail");
+    const beforeHead = runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim();
+
+    assert.throws(
+      () =>
+        commitStagedSource({
+          vaultRoot,
+          runId: "run-amend-fail",
+          envelopePath: join(envelopesDir, "article-local.json"),
+          expectedRevision: revision,
+          hooks: {
+            amendCommit: () => {
+              throw new Error("simulated amend failure");
+            },
+          },
+        }),
+      /simulated amend failure/,
+    );
+
+    assert.equal(runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim(), beforeHead);
+    assert.equal(loadManifest(vaultRoot).sources.length, 0);
+    assert.equal(existsSync(join(vaultRoot, "notes/sample-article.md")), false);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), []);
   });
 });
 
@@ -370,7 +430,7 @@ describe("journal recovery", () => {
 });
 
 describe("successful commit integration", () => {
-  it("creates exactly one commit touching only the note, manifest, and log", () => {
+  it("creates exactly one commit containing the note, span docs, manifest index, and log", () => {
     const vaultRoot = prepareVault();
     writeFileSync(join(vaultRoot, "unrelated.txt"), "leave alone\n", "utf8");
     const revision = manifestRevision(loadManifest(vaultRoot));
@@ -397,12 +457,32 @@ describe("successful commit integration", () => {
       .stdout.split("\n")
       .filter(Boolean)
       .sort();
-    assert.deepEqual(changed, [LOG_PATH, MANIFEST_RELATIVE_PATH, "notes/sample-article.md"].sort());
+    assert.deepEqual(
+      changed,
+      [
+        LOG_PATH,
+        MANIFEST_RELATIVE_PATH,
+        "notes/sample-article.md",
+        ...result.source_span_paths,
+      ].sort(),
+    );
 
     const record = loadManifest(vaultRoot).sources[0];
     assert.equal(record?.status, "committed");
     assert.equal(result.commit, afterHead);
     assert.match(record?.commit ?? "", /^[a-f0-9]{40}$/);
+    assert.equal(result.source_profile, "article");
+    assert.equal(result.source_span_count, 1);
+    assert.deepEqual(
+      record?.source_span_index?.spans.map((span) => span.path),
+      result.source_span_paths,
+    );
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), result.source_span_paths);
+    for (const span of record?.source_span_index?.spans ?? []) {
+      const content = readFileSync(join(vaultRoot, span.path), "utf8");
+      assert.equal(createHash("sha256").update(content).digest("hex"), span.sha256);
+      assert.equal(runGit(vaultRoot, ["show", `${afterHead}:${span.path}`]).status, 0);
+    }
     assert.equal(existsSync(stagingDir), false);
     assert.equal(getManagedPathStatus(vaultRoot).clean, true);
     assert.equal(existsSync(join(vaultRoot, "unrelated.txt")), true);
@@ -456,6 +536,203 @@ describe("successful commit integration", () => {
     assert.equal(readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8"), beforeManifest);
     assert.equal(readFileSync(join(vaultRoot, LOG_PATH), "utf8"), beforeLog);
     assert.equal(existsSync(join(vaultRoot, "notes/sample-article.md")), false);
+  });
+});
+
+describe("profile-complete atomic span commits", () => {
+  it("commits indexed source-span trees for article, video, panel, and deck profiles", () => {
+    const cases = [
+      {
+        profile: "article",
+        noteFixture: "article-valid.md",
+        notePath: "notes/sample-article.md",
+        envelopeFixture: "article-local.json",
+      },
+      {
+        profile: "video",
+        noteFixture: "video-valid.md",
+        notePath: "notes/demo-video.md",
+        envelopeFixture: "video-transcript.json",
+      },
+      {
+        profile: "panel",
+        noteFixture: "panel-valid.md",
+        notePath: "notes/panel-discussion.md",
+        envelopeFixture: "panel-transcript.json",
+      },
+      {
+        profile: "deck",
+        noteFixture: "deck-valid.md",
+        notePath: "notes/five-slide-deck.md",
+        envelopeFixture: "deck-five-slides.json",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const vaultRoot = prepareVault();
+      const runId = `run-${testCase.profile}-commit`;
+      stageProfileNote(vaultRoot, runId, testCase.noteFixture, testCase.notePath);
+      const result = commitStagedSource({
+        vaultRoot,
+        runId,
+        envelopePath: join(envelopesDir, testCase.envelopeFixture),
+        expectedRevision: manifestRevision(loadManifest(vaultRoot)),
+      });
+
+      const record = loadManifest(vaultRoot).sources[0];
+      assert.equal(result.source_profile, testCase.profile);
+      assert.equal(record?.source_span_index?.profile, testCase.profile);
+      assert.ok(result.source_span_count > 0);
+      assert.deepEqual(installedSourceSpanPaths(vaultRoot), result.source_span_paths);
+      assert.deepEqual(
+        record?.source_span_index?.spans.map((span) => span.path),
+        result.source_span_paths,
+      );
+    }
+  });
+});
+
+describe("source-span supersede and logical purge", () => {
+  it("explicit supersede replaces stale span docs and index in one new commit", () => {
+    const vaultRoot = prepareVault();
+    const firstRun = "run-before-supersede";
+    stageArticle(vaultRoot, firstRun);
+    const first = commitStagedSource({
+      vaultRoot,
+      runId: firstRun,
+      envelopePath: join(envelopesDir, "article-local.json"),
+      expectedRevision: manifestRevision(loadManifest(vaultRoot)),
+    });
+    const firstHead = first.commit;
+    const oldSpanPaths = [...first.source_span_paths];
+
+    const changedHash = "b".repeat(64);
+    const changedEnvelopePath = join(vaultRoot, "superseded-envelope.json");
+    const changedEnvelope = JSON.parse(
+      readFileSync(join(envelopesDir, "article-local.json"), "utf8"),
+    ) as { content_sha256: string };
+    changedEnvelope.content_sha256 = changedHash;
+    writeFileSync(changedEnvelopePath, `${JSON.stringify(changedEnvelope, null, 2)}\n`, "utf8");
+
+    const secondRun = "run-after-supersede";
+    const secondStaging = stageArticle(vaultRoot, secondRun);
+    const stagedNotePath = join(secondStaging, "notes/sample-article.md");
+    writeFileSync(
+      stagedNotePath,
+      readFileSync(stagedNotePath, "utf8").replace("a".repeat(64), changedHash),
+      "utf8",
+    );
+    const revision = manifestRevision(loadManifest(vaultRoot));
+
+    assert.throws(
+      () =>
+        commitStagedSource({
+          vaultRoot,
+          runId: secondRun,
+          envelopePath: changedEnvelopePath,
+          expectedRevision: revision,
+        }),
+      /content hash changed/,
+    );
+
+    const second = commitStagedSource({
+      vaultRoot,
+      runId: secondRun,
+      envelopePath: changedEnvelopePath,
+      expectedRevision: revision,
+      supersede: true,
+    });
+    const record = loadManifest(vaultRoot).sources[0];
+
+    assert.notDeepEqual(second.source_span_paths, oldSpanPaths);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), second.source_span_paths);
+    assert.deepEqual(
+      record?.source_span_index?.spans.map((span) => span.path),
+      second.source_span_paths,
+    );
+    for (const oldPath of oldSpanPaths) {
+      assert.equal(existsSync(join(vaultRoot, oldPath)), false);
+      assert.equal(runGit(vaultRoot, ["show", `${firstHead}:${oldPath}`]).status, 0);
+    }
+    assert.equal(runGit(vaultRoot, ["merge-base", "--is-ancestor", firstHead, "HEAD"]).status, 0);
+    assert.equal(
+      runGit(vaultRoot, ["rev-list", "--count", `${firstHead}..HEAD`]).stdout.trim(),
+      "1",
+    );
+  });
+
+  it("logical purge removes current note, spans, and manifest record without rewriting history", () => {
+    const vaultRoot = prepareVault();
+    stageArticle(vaultRoot, "run-before-purge");
+    const committed = commitStagedSource({
+      vaultRoot,
+      runId: "run-before-purge",
+      envelopePath: join(envelopesDir, "article-local.json"),
+      expectedRevision: manifestRevision(loadManifest(vaultRoot)),
+    });
+    const beforePurgeHead = committed.commit;
+    const sourceKey = loadManifest(vaultRoot).sources[0]!.source_key;
+
+    const purged = purgeCommittedSource({
+      vaultRoot,
+      runId: "run-purge",
+      sourceKey,
+      expectedRevision: manifestRevision(loadManifest(vaultRoot)),
+    });
+
+    assert.equal(loadManifest(vaultRoot).sources.length, 0);
+    assert.equal(existsSync(join(vaultRoot, committed.note_path)), false);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), []);
+    assert.deepEqual(
+      purged.removed_paths.sort(),
+      [committed.note_path, ...committed.source_span_paths].sort(),
+    );
+    for (const spanPath of committed.source_span_paths) {
+      assert.equal(runGit(vaultRoot, ["show", `${beforePurgeHead}:${spanPath}`]).status, 0);
+      assert.notEqual(runGit(vaultRoot, ["show", `HEAD:${spanPath}`]).status, 0);
+    }
+    assert.equal(
+      runGit(vaultRoot, ["merge-base", "--is-ancestor", beforePurgeHead, "HEAD"]).status,
+      0,
+    );
+    assert.equal(
+      runGit(vaultRoot, ["rev-list", "--count", `${beforePurgeHead}..HEAD`]).stdout.trim(),
+      "1",
+    );
+  });
+
+  it("restores the note, spans, and manifest index when a purge commit fails", () => {
+    const vaultRoot = prepareVault();
+    stageArticle(vaultRoot, "run-before-failed-purge");
+    const committed = commitStagedSource({
+      vaultRoot,
+      runId: "run-before-failed-purge",
+      envelopePath: join(envelopesDir, "article-local.json"),
+      expectedRevision: manifestRevision(loadManifest(vaultRoot)),
+    });
+    const beforeManifest = loadManifest(vaultRoot);
+    const beforeHead = committed.commit;
+
+    assert.throws(
+      () =>
+        purgeCommittedSource({
+          vaultRoot,
+          runId: "run-failed-purge",
+          sourceKey: beforeManifest.sources[0]!.source_key,
+          expectedRevision: manifestRevision(beforeManifest),
+          hooks: {
+            createCommit: () => {
+              throw new Error("simulated purge commit failure");
+            },
+          },
+        }),
+      /simulated purge commit failure/,
+    );
+
+    assert.equal(runGit(vaultRoot, ["rev-parse", "HEAD"]).stdout.trim(), beforeHead);
+    assert.deepEqual(loadManifest(vaultRoot), beforeManifest);
+    assert.equal(existsSync(join(vaultRoot, committed.note_path)), true);
+    assert.deepEqual(installedSourceSpanPaths(vaultRoot), committed.source_span_paths);
   });
 });
 
