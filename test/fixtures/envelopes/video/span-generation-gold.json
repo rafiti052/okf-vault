@@ -1,0 +1,35 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/training-launch.vtt",
+  "kind": "local",
+  "content_type": "text/vtt",
+  "origin": "/tmp/sources/training-launch.vtt",
+  "canonical_uri": "file:///tmp/sources/training-launch.vtt",
+  "title": "Training Launch Recording",
+  "modified_at": "2026-07-10T14:00:00.000Z",
+  "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "normalized_text": "Welcome to the launch. Reliability is the first principle. Review the rollout checklist before deployment.",
+  "anchors": [
+    {
+      "id": "timestamp-00:00:05",
+      "kind": "timestamp",
+      "label": "Opening",
+      "timestamp": "00:00:05",
+      "text": "Welcome to the launch."
+    },
+    {
+      "id": "timestamp-00:02:10",
+      "kind": "timestamp",
+      "label": "Reliability",
+      "timestamp": "00:02:10",
+      "text": "Reliability is the first principle."
+    },
+    {
+      "id": "timestamp-00:05:45",
+      "kind": "timestamp",
+      "label": "Rollout",
+      "timestamp": "00:05:45",
+      "text": "Review the rollout checklist before deployment."
+    }
+  ]
+}
