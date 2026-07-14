@@ -1,0 +1,19 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "drive:plain-article-001",
+  "kind": "google_drive",
+  "content_type": "application/vnd.google-apps.document",
+  "origin": "drive:plain-article-001",
+  "canonical_uri": "https://drive.google.com/file/d/plain-article-001/view",
+  "title": "Plain Article",
+  "modified_at": "2026-07-14T12:00:00.000Z",
+  "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "normalized_text": "A deterministic fallback keeps unheaded prose inspectable.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "text": "A deterministic fallback keeps unheaded prose inspectable."
+    }
+  ]
+}

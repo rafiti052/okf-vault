@@ -1,0 +1,32 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/revenue-brief.md",
+  "kind": "local",
+  "content_type": "text/markdown",
+  "origin": "/tmp/sources/revenue-brief.md",
+  "canonical_uri": "file:///tmp/sources/revenue-brief.md",
+  "title": "Revenue Brief",
+  "modified_at": "2026-07-14T12:00:00.000Z",
+  "content_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "normalized_text": "# Revenue Brief\n\n## Growth\nRevenue grew 12% year over year.\n\n## Rollout\nPhase one begins in Q3 with pilot sites.\n\nPhase two expands to twelve regions by year end.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "label": "Growth metrics",
+      "text": "Revenue grew 12% year over year."
+    },
+    {
+      "id": "anchor-002",
+      "kind": "text",
+      "label": "Rollout phase one",
+      "text": "Phase one begins in Q3 with pilot sites."
+    },
+    {
+      "id": "anchor-003",
+      "kind": "text",
+      "label": "Rollout phase two",
+      "text": "Phase two expands to twelve regions by year end."
+    }
+  ]
+}
