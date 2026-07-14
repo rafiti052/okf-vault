@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MANIFEST_RELATIVE_PATH, NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
@@ -14,6 +14,9 @@ import {
   validateSourceRecord,
   createEmptyManifest,
   ManifestValidationError,
+  type SourceSpanIndex,
+  type SourceSpanProfile,
+  type SourceSpanRef,
   type SourceRecord,
 } from "../../dist/vault/manifest.js";
 const VALID_SHA = "a".repeat(64);
@@ -31,6 +34,25 @@ function committedRecord(overrides: Partial<SourceRecord> = {}): SourceRecord {
     note_path: "notes/article.md",
     commit: "abc1234",
     processed_at: VALID_TS,
+    ...overrides,
+  };
+}
+
+function sourceSpanIndex(overrides: Partial<SourceSpanIndex> = {}): SourceSpanIndex {
+  return {
+    schema_version: "okf-source-spans/1.0.0",
+    profile: "article",
+    default_expansion: { previous: 1, next: 1 },
+    spans: [
+      {
+        id: "span-001",
+        path: "references/sources/article/span-001.md",
+        sha256: VALID_SHA_B,
+        profile: "article",
+        sequence: 1,
+        anchor_ids: ["anchor-001"],
+      },
+    ],
     ...overrides,
   };
 }
@@ -101,6 +123,52 @@ describe("manifest source identity and serialization", () => {
       sources: [recordA, recordB],
     });
     assert.equal(first, second);
+  });
+
+  it("canonicalizes source spans and anchor coverage deterministically", () => {
+    const firstSpan: SourceSpanRef = {
+      id: "span-001",
+      path: "references/sources/article/span-001.md",
+      sha256: VALID_SHA,
+      profile: "article",
+      sequence: 1,
+      anchor_ids: ["anchor-b", "anchor-a"],
+      next_id: "span-002",
+    };
+    const secondSpan: SourceSpanRef = {
+      id: "span-002",
+      path: "references/sources/article/span-002.md",
+      sha256: VALID_SHA_B,
+      profile: "article",
+      sequence: 2,
+      anchor_ids: ["anchor-c"],
+      prev_id: "span-001",
+    };
+    const first = serializeManifest({
+      ...createEmptyManifest(),
+      sources: [
+        committedRecord({
+          source_span_index: sourceSpanIndex({ spans: [secondSpan, firstSpan] }),
+        }),
+      ],
+    });
+    const second = serializeManifest({
+      ...createEmptyManifest(),
+      sources: [
+        committedRecord({
+          source_span_index: sourceSpanIndex({
+            spans: [{ ...firstSpan, anchor_ids: [...firstSpan.anchor_ids].reverse() }, secondSpan],
+          }),
+        }),
+      ],
+    });
+
+    assert.equal(first, second);
+    const parsed = JSON.parse(first) as { sources: SourceRecord[] };
+    assert.deepEqual(parsed.sources[0]?.source_span_index?.spans[0]?.anchor_ids, [
+      "anchor-a",
+      "anchor-b",
+    ]);
   });
 });
 
@@ -238,5 +306,132 @@ describe("manifest inspection and invariants", () => {
     delete skipped.note_path;
     delete skipped.commit;
     validateSourceRecord(skipped);
+  });
+
+  it("round-trips valid source-span index metadata through save and load", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-span-roundtrip-"));
+    const manifest = {
+      ...createEmptyManifest(),
+      sources: [committedRecord({ source_span_index: sourceSpanIndex() })],
+    };
+
+    saveManifest(vaultRoot, manifest);
+
+    assert.deepEqual(loadManifest(vaultRoot), manifest);
+    const serialized = readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8");
+    assert.match(serialized, /"path": "references\/sources\/article\/span-001\.md"/);
+    assert.doesNotMatch(serialized, /source text|full_text|"text"/);
+  });
+
+  it("rejects unknown or inconsistent source-span schema versions and profiles", () => {
+    const badVersion = sourceSpanIndex();
+    (badVersion as unknown as { schema_version: string }).schema_version = "okf-source-spans/9.9.9";
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: badVersion })),
+      ManifestValidationError,
+    );
+
+    const badProfile = sourceSpanIndex();
+    (badProfile as unknown as { profile: string }).profile = "podcast";
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: badProfile })),
+      ManifestValidationError,
+    );
+
+    const mismatchedProfile = sourceSpanIndex();
+    mismatchedProfile.spans[0]!.profile = "video";
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: mismatchedProfile })),
+      ManifestValidationError,
+    );
+  });
+
+  it("accepts source-span indexes for every current conversion profile", () => {
+    const profiles: SourceSpanProfile[] = ["article", "video", "panel", "deck"];
+
+    for (const profile of profiles) {
+      const index = sourceSpanIndex({
+        profile,
+        spans: sourceSpanIndex().spans.map((span) => ({ ...span, profile })),
+      });
+      validateSourceRecord(committedRecord({ source_span_index: index }));
+    }
+  });
+
+  it("rejects missing or malformed source-span hashes and anchor coverage", () => {
+    const missingHash = sourceSpanIndex();
+    delete (missingHash.spans[0] as Partial<SourceSpanRef>).sha256;
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: missingHash })),
+      ManifestValidationError,
+    );
+
+    const malformedHash = sourceSpanIndex();
+    malformedHash.spans[0]!.sha256 = "not-a-sha256";
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: malformedHash })),
+      ManifestValidationError,
+    );
+
+    const missingAnchors = sourceSpanIndex();
+    delete (missingAnchors.spans[0] as Partial<SourceSpanRef>).anchor_ids;
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: missingAnchors })),
+      ManifestValidationError,
+    );
+  });
+
+  it("fails closed when loading source-span paths outside the managed references tree", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-span-path-"));
+    const manifest = {
+      ...createEmptyManifest(),
+      sources: [
+        committedRecord({
+          source_span_index: sourceSpanIndex({
+            spans: [
+              {
+                ...sourceSpanIndex().spans[0]!,
+                path: "references/sources/article/../../notes/private.md",
+              },
+            ],
+          }),
+        }),
+      ],
+    };
+    const manifestPath = join(vaultRoot, MANIFEST_RELATIVE_PATH);
+    mkdirSync(join(vaultRoot, ".okf-vault"), { recursive: true });
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    assert.throws(() => loadManifest(vaultRoot), ManifestValidationError);
+  });
+
+  it("rejects embedded source text, unknown metadata, and span indexes on skipped records", () => {
+    const embeddedText = sourceSpanIndex();
+    (embeddedText.spans[0] as SourceSpanRef & { text?: string }).text = "raw evidence";
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: embeddedText })),
+      ManifestValidationError,
+    );
+
+    const unboundedExpansion = sourceSpanIndex();
+    (
+      unboundedExpansion.default_expansion as unknown as {
+        previous: number;
+        next: number;
+      }
+    ).previous = 2;
+    assert.throws(
+      () => validateSourceRecord(committedRecord({ source_span_index: unboundedExpansion })),
+      ManifestValidationError,
+    );
+
+    const skipped = committedRecord({
+      status: "skipped",
+      skip_reason: "curator declined",
+      source_span_index: sourceSpanIndex(),
+    });
+    delete skipped.note_path;
+    delete skipped.commit;
+    assert.throws(() => validateSourceRecord(skipped), ManifestValidationError);
   });
 });

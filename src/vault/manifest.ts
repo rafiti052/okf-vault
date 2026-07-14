@@ -23,6 +23,29 @@ import {
 export type SourceKind = "local" | "google_drive" | "granola" | "youtube";
 export type SourceStatus = "committed" | "skipped";
 export type InspectOutcome = "new" | "already_processed" | "changed_conflict";
+export type SourceSpanProfile = "article" | "video" | "panel" | "deck";
+export type SourceSpanSchemaVersion = "okf-source-spans/1.0.0";
+
+export interface SourceSpanRef {
+  id: string;
+  path: string;
+  sha256: string;
+  profile: SourceSpanProfile;
+  sequence: number;
+  anchor_ids: string[];
+  prev_id?: string;
+  next_id?: string;
+}
+
+export interface SourceSpanIndex {
+  schema_version: SourceSpanSchemaVersion;
+  profile: SourceSpanProfile;
+  default_expansion: {
+    previous: 1;
+    next: 1;
+  };
+  spans: SourceSpanRef[];
+}
 
 export interface SourceRecord {
   source_key: string;
@@ -34,6 +57,7 @@ export interface SourceRecord {
   status: SourceStatus;
   commit?: string;
   skip_reason?: string;
+  source_span_index?: SourceSpanIndex;
   processed_at: string;
 }
 
@@ -158,9 +182,39 @@ export function canonicalizeManifest(manifest: Manifest): Manifest {
   return {
     schema_version: manifest.schema_version,
     note_contract_version: manifest.note_contract_version,
-    sources: [...manifest.sources].sort((left, right) =>
-      left.source_key.localeCompare(right.source_key),
-    ),
+    sources: manifest.sources
+      .map((record) => canonicalizeSourceRecord(record))
+      .sort((left, right) => left.source_key.localeCompare(right.source_key)),
+  };
+}
+
+function canonicalizeSourceRecord(record: SourceRecord): SourceRecord {
+  if (record.source_span_index === undefined) {
+    return { ...record };
+  }
+
+  return {
+    ...record,
+    source_span_index: {
+      schema_version: record.source_span_index.schema_version,
+      profile: record.source_span_index.profile,
+      default_expansion: {
+        previous: record.source_span_index.default_expansion.previous,
+        next: record.source_span_index.default_expansion.next,
+      },
+      spans: record.source_span_index.spans
+        .map((span) => ({
+          id: span.id,
+          path: span.path,
+          sha256: span.sha256,
+          profile: span.profile,
+          sequence: span.sequence,
+          anchor_ids: [...span.anchor_ids].sort((left, right) => left.localeCompare(right)),
+          ...(span.prev_id === undefined ? {} : { prev_id: span.prev_id }),
+          ...(span.next_id === undefined ? {} : { next_id: span.next_id }),
+        }))
+        .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)),
+    },
   };
 }
 
@@ -243,10 +297,22 @@ export function validateSourceRecord(record: SourceRecord): void {
     if (record.commit === undefined || record.commit.length < 7) {
       throw new ManifestValidationError("Committed records require commit");
     }
+    if (
+      record.source_span_index?.spans.some(
+        (span) => span.profile !== record.source_span_index?.profile,
+      ) === true
+    ) {
+      throw new ManifestValidationError(
+        "Source span profiles must match source_span_index.profile",
+      );
+    }
   }
   if (record.status === "skipped") {
     if (record.skip_reason === undefined || record.skip_reason.trim() === "") {
       throw new ManifestValidationError("Skipped records require skip_reason");
+    }
+    if (record.source_span_index !== undefined) {
+      throw new ManifestValidationError("Skipped records cannot include source_span_index");
     }
   }
   validateManifestSchema({
