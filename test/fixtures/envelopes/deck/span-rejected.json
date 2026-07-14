@@ -1,0 +1,30 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/unanchored-notes-deck.json",
+  "kind": "local",
+  "content_type": "application/json",
+  "origin": "/tmp/sources/unanchored-notes-deck.json",
+  "canonical_uri": "file:///tmp/sources/unanchored-notes-deck.json",
+  "title": "Unanchored Notes Deck",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "4545454545454545454545454545454545454545454545454545454545454545",
+  "normalized_text": "One slide with unanchored speaker notes.",
+  "anchors": [
+    {
+      "id": "slide-001",
+      "kind": "slide",
+      "slide_number": 1,
+      "text": "One slide"
+    }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "One slide",
+      "text": "One slide",
+      "speaker_notes": "These notes have no speaker-note anchor.",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}

@@ -1,0 +1,35 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/span-video.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/span-video.txt",
+  "canonical_uri": "file:///tmp/sources/span-video.txt",
+  "title": "Profile Span Video",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "2424242424242424242424242424242424242424242424242424242424242424",
+  "normalized_text": "Opening context. Exact demonstration. Closing context.",
+  "anchors": [
+    {
+      "id": "timestamp-00:00:10",
+      "kind": "timestamp",
+      "label": "Opening",
+      "timestamp": "00:00:10",
+      "text": "Opening context for the demonstration."
+    },
+    {
+      "id": "timestamp-00:00:20",
+      "kind": "timestamp",
+      "label": "Demonstration",
+      "timestamp": "00:00:20",
+      "text": "The exact demonstration is deterministic."
+    },
+    {
+      "id": "timestamp-00:00:30",
+      "kind": "timestamp",
+      "label": "Closing",
+      "timestamp": "00:00:30",
+      "text": "Closing context remains bounded."
+    }
+  ]
+}

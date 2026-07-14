@@ -268,7 +268,11 @@ describe("compiled executable integration", () => {
     const bin = join(root, "dist", "main.js");
     const result = spawnSync(process.execPath, [bin, "retrieve", "--json"], { encoding: "utf8" });
     assert.equal(result.status, ExitCode.USAGE);
-    const payload = JSON.parse(result.stdout.trim()) as { status: string; command: string; code?: string };
+    const payload = JSON.parse(result.stdout.trim()) as {
+      status: string;
+      command: string;
+      code?: string;
+    };
     assert.equal(payload.status, "error");
     assert.equal(payload.command, "retrieve");
     assert.match(payload.code ?? "", /USAGE/);

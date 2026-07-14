@@ -1,0 +1,19 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/empty-panel.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/empty-panel.txt",
+  "canonical_uri": "file:///tmp/sources/empty-panel.txt",
+  "title": "Empty Profile Span Panel",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "3535353535353535353535353535353535353535353535353535353535353535",
+  "normalized_text": "No supported transcript turns were normalized.",
+  "anchors": [
+    {
+      "id": "paragraph-001",
+      "kind": "text",
+      "text": "No supported transcript turns were normalized."
+    }
+  ]
+}

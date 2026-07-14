@@ -1,0 +1,19 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/empty-span-article.md",
+  "kind": "local",
+  "content_type": "text/markdown",
+  "origin": "/tmp/sources/empty-span-article.md",
+  "canonical_uri": "file:///tmp/sources/empty-span-article.md",
+  "title": "Empty Profile Span Article",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "1515151515151515151515151515151515151515151515151515151515151515",
+  "normalized_text": " ",
+  "anchors": [
+    {
+      "id": "anchor-empty",
+      "kind": "text",
+      "text": " "
+    }
+  ]
+}

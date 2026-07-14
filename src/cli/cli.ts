@@ -154,9 +154,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 }
 
 export function helpText(): string {
-  const otherCommands = RESERVED_COMMANDS.filter(
-    (name) => name !== "init" && name !== "retrieve",
-  )
+  const otherCommands = RESERVED_COMMANDS.filter((name) => name !== "init" && name !== "retrieve")
     .map((name) => `  ${name}`)
     .join("\n");
   return [

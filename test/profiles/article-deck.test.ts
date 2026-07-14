@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
 import { NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
+import { generateArticleSpanDocuments } from "../../dist/vault/source-spans-article.js";
+import { generateDeckSourceSpans } from "../../dist/vault/source-spans-deck.js";
+import { renderSourceSpanMarkdown } from "../../dist/vault/source-spans.js";
 import {
   loadSourceEnvelope,
   validateStagedNotes,
@@ -95,6 +98,88 @@ describe("conversion profile documents", () => {
         );
       }
     }
+  });
+});
+
+describe("article and deck source-span fixture matrix", () => {
+  it("generates deterministic profile-specific spans from accepted fixtures", () => {
+    const articleEnvelope = loadSourceEnvelope(join(articleEnvelopeDir, "span-accepted.json"));
+    const firstArticle = generateArticleSpanDocuments(articleEnvelope);
+    const secondArticle = generateArticleSpanDocuments(articleEnvelope);
+    assert.deepEqual(
+      firstArticle.map(renderSourceSpanMarkdown),
+      secondArticle.map(renderSourceSpanMarkdown),
+    );
+    assert.equal(firstArticle.length, 3);
+    assert.deepEqual(
+      firstArticle.map((document) => ({
+        anchor_ids: document.frontmatter.okv.anchor_ids,
+        heading: document.frontmatter.okv.heading,
+        parent_label: document.frontmatter.okv.parent_label,
+        profile: document.frontmatter.okv.profile,
+        sequence: document.frontmatter.okv.sequence,
+      })),
+      [
+        {
+          anchor_ids: ["anchor-001"],
+          heading: "Context",
+          parent_label: "Context section",
+          profile: "article",
+          sequence: 1,
+        },
+        {
+          anchor_ids: ["anchor-002"],
+          heading: "Result",
+          parent_label: "Result section",
+          profile: "article",
+          sequence: 2,
+        },
+        {
+          anchor_ids: ["anchor-003"],
+          heading: "Follow-up",
+          parent_label: "Follow-up section",
+          profile: "article",
+          sequence: 3,
+        },
+      ],
+    );
+
+    const deckEnvelope = loadSourceEnvelope(join(deckEnvelopeDir, "span-accepted.json"));
+    const firstDeck = generateDeckSourceSpans(deckEnvelope);
+    const secondDeck = generateDeckSourceSpans(deckEnvelope);
+    assert.deepEqual(
+      firstDeck.map(renderSourceSpanMarkdown),
+      secondDeck.map(renderSourceSpanMarkdown),
+    );
+    assert.deepEqual(
+      firstDeck.map((document) => ({
+        anchor_kind: document.frontmatter.okv.anchor_kind,
+        profile: document.frontmatter.okv.profile,
+        sequence: document.frontmatter.okv.sequence,
+        slide_number: document.frontmatter.okv.slide_number,
+      })),
+      [
+        { anchor_kind: "slide", profile: "deck", sequence: 1, slide_number: 1 },
+        { anchor_kind: "slide", profile: "deck", sequence: 2, slide_number: 2 },
+        { anchor_kind: "speaker_note", profile: "deck", sequence: 3, slide_number: 2 },
+        { anchor_kind: "slide", profile: "deck", sequence: 4, slide_number: 3 },
+      ],
+    );
+  });
+
+  it("rejects malformed article and deck span fixtures with stable reasons", () => {
+    assert.throws(
+      () =>
+        generateArticleSpanDocuments(
+          loadSourceEnvelope(join(articleEnvelopeDir, "span-rejected.json")),
+        ),
+      /requires normalized_text or at least one text anchor/u,
+    );
+    assert.throws(
+      () =>
+        generateDeckSourceSpans(loadSourceEnvelope(join(deckEnvelopeDir, "span-rejected.json"))),
+      /speaker notes must have a speaker_note anchor/u,
+    );
   });
 });
 

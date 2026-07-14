@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
 import { ExitCode } from "../../dist/cli/cli.js";
 import { initializeVault } from "../../dist/vault/manifest.js";
 import { NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
+import { generatePanelSourceSpans } from "../../dist/vault/source-spans-panel.js";
+import { generateVideoSourceSpans } from "../../dist/vault/source-spans-video.js";
+import { renderSourceSpanMarkdown } from "../../dist/vault/source-spans.js";
 import {
   loadSourceEnvelope,
   validateStagedNotes,
@@ -114,6 +117,107 @@ describe("conversion profile documents", () => {
     assert.match(content, /paragraph/i);
     assert.match(content, /granularity|paragraph-level|paragraph boundaries/i);
     assert.match(content, /nearest preceding/i);
+  });
+});
+
+describe("panel and video source-span fixture matrix", () => {
+  it("generates deterministic profile-specific spans from accepted fixtures", () => {
+    const panelEnvelope = loadSourceEnvelope(join(panelEnvelopeDir, "span-accepted.json"));
+    const firstPanel = generatePanelSourceSpans(panelEnvelope);
+    const secondPanel = generatePanelSourceSpans(panelEnvelope);
+    assert.deepEqual(
+      firstPanel.map(renderSourceSpanMarkdown),
+      secondPanel.map(renderSourceSpanMarkdown),
+    );
+    assert.deepEqual(
+      firstPanel.map((document) => ({
+        anchor_ids: document.frontmatter.okv.anchor_ids,
+        anchor_kind: document.frontmatter.okv.anchor_kind,
+        profile: document.frontmatter.okv.profile,
+        sequence: document.frontmatter.okv.sequence,
+        speaker: document.frontmatter.okv.speaker,
+        timestamp: document.frontmatter.timestamp,
+      })),
+      [
+        {
+          anchor_ids: ["speaker-ada-001", "timestamp-00:01:00"],
+          anchor_kind: "timestamp-speaker",
+          profile: "panel",
+          sequence: 1,
+          speaker: "Ada",
+          timestamp: "00:01:00",
+        },
+        {
+          anchor_ids: ["speaker-bruno-001", "timestamp-00:02:00"],
+          anchor_kind: "timestamp-speaker",
+          profile: "panel",
+          sequence: 2,
+          speaker: "Bruno",
+          timestamp: "00:02:00",
+        },
+        {
+          anchor_ids: ["speaker-ada-002", "timestamp-00:03:00"],
+          anchor_kind: "timestamp-speaker",
+          profile: "panel",
+          sequence: 3,
+          speaker: "Ada",
+          timestamp: "00:03:00",
+        },
+      ],
+    );
+
+    const videoEnvelope = loadSourceEnvelope(join(videoEnvelopeDir, "span-accepted.json"));
+    const firstVideo = generateVideoSourceSpans(videoEnvelope);
+    const secondVideo = generateVideoSourceSpans(videoEnvelope);
+    assert.deepEqual(
+      firstVideo.map(renderSourceSpanMarkdown),
+      secondVideo.map(renderSourceSpanMarkdown),
+    );
+    assert.deepEqual(
+      firstVideo.map((document) => ({
+        anchor_ids: document.frontmatter.okv.anchor_ids,
+        anchor_kind: document.frontmatter.okv.anchor_kind,
+        profile: document.frontmatter.okv.profile,
+        sequence: document.frontmatter.okv.sequence,
+        timestamp: document.frontmatter.timestamp,
+      })),
+      [
+        {
+          anchor_ids: ["timestamp-00:00:10"],
+          anchor_kind: "timestamp",
+          profile: "video",
+          sequence: 1,
+          timestamp: "00:00:10",
+        },
+        {
+          anchor_ids: ["timestamp-00:00:20"],
+          anchor_kind: "timestamp",
+          profile: "video",
+          sequence: 2,
+          timestamp: "00:00:20",
+        },
+        {
+          anchor_ids: ["timestamp-00:00:30"],
+          anchor_kind: "timestamp",
+          profile: "video",
+          sequence: 3,
+          timestamp: "00:00:30",
+        },
+      ],
+    );
+  });
+
+  it("rejects malformed panel and video span fixtures with stable reasons", () => {
+    assert.throws(
+      () =>
+        generatePanelSourceSpans(loadSourceEnvelope(join(panelEnvelopeDir, "span-rejected.json"))),
+      /no usable transcript turns/u,
+    );
+    assert.throws(
+      () =>
+        generateVideoSourceSpans(loadSourceEnvelope(join(videoEnvelopeDir, "span-rejected.json"))),
+      /timestamp must be non-empty/u,
+    );
   });
 });
 
@@ -316,7 +420,10 @@ describe("profile validation harness integration", () => {
       pairedYoutubeEnvelopePath(youtubeAmbiguous.notePath, "panel"),
       youtubeAmbiguous.envelopePath,
     );
-    assert.equal(pairedEnvelopePath(youtubeAccepted.notePath, "video"), youtubeAccepted.envelopePath);
+    assert.equal(
+      pairedEnvelopePath(youtubeAccepted.notePath, "video"),
+      youtubeAccepted.envelopePath,
+    );
     assert.equal(
       pairedEnvelopePath(youtubeAmbiguous.notePath, "panel"),
       youtubeAmbiguous.envelopePath,

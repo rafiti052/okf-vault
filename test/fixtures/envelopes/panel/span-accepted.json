@@ -1,0 +1,56 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/span-panel.txt",
+  "kind": "local",
+  "content_type": "text/plain",
+  "origin": "/tmp/sources/span-panel.txt",
+  "canonical_uri": "file:///tmp/sources/span-panel.txt",
+  "title": "Profile Span Panel",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "3434343434343434343434343434343434343434343434343434343434343434",
+  "normalized_text": "Ada opens. Bruno answers. Ada closes.",
+  "anchors": [
+    {
+      "id": "speaker-ada-001",
+      "kind": "speaker",
+      "label": "Ada",
+      "speaker": "Ada",
+      "text": "Ada opening turn"
+    },
+    {
+      "id": "timestamp-00:01:00",
+      "kind": "timestamp",
+      "timestamp": "00:01:00",
+      "speaker": "Ada",
+      "text": "Reliability establishes the baseline."
+    },
+    {
+      "id": "speaker-bruno-001",
+      "kind": "speaker",
+      "label": "Bruno",
+      "speaker": "Bruno",
+      "text": "Bruno response turn"
+    },
+    {
+      "id": "timestamp-00:02:00",
+      "kind": "timestamp",
+      "timestamp": "00:02:00",
+      "speaker": "Bruno",
+      "text": "Iteration supplies the exact counterpoint."
+    },
+    {
+      "id": "speaker-ada-002",
+      "kind": "speaker",
+      "label": "Ada",
+      "speaker": "Ada",
+      "text": "Ada closing turn"
+    },
+    {
+      "id": "timestamp-00:03:00",
+      "kind": "timestamp",
+      "timestamp": "00:03:00",
+      "speaker": "Ada",
+      "text": "The conclusion keeps both concerns bounded."
+    }
+  ]
+}

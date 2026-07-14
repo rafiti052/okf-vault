@@ -165,7 +165,13 @@ describe("presentHuman", () => {
         confidence: "high",
         coverage_gap: false,
         results: [
-          { path: "/vault/topics/strategy.md", title: "Strategy", excerpt: "Strategy notes.", linked_notes: [], score: 5 },
+          {
+            path: "/vault/topics/strategy.md",
+            title: "Strategy",
+            excerpt: "Strategy notes.",
+            linked_notes: [],
+            score: 5,
+          },
         ],
         broadening_hints: [],
       }),

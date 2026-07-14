@@ -8,21 +8,9 @@ import type { RetrieveEvalCase } from "../../dist/vault/retrieve.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
 
-const fixturePath = join(
-  projectRoot,
-  "test",
-  "fixtures",
-  "retrieve-eval",
-  "eval-cases.json",
-);
+const fixturePath = join(projectRoot, "test", "fixtures", "retrieve-eval", "eval-cases.json");
 
-const evalVaultRoot = join(
-  projectRoot,
-  "test",
-  "fixtures",
-  "vaults",
-  "retrieve-eval",
-);
+const evalVaultRoot = join(projectRoot, "test", "fixtures", "vaults", "retrieve-eval");
 
 // ---------------------------------------------------------------------------
 // Task 12 — Eval fixture corpus
@@ -30,10 +18,7 @@ const evalVaultRoot = join(
 
 describe("eval fixture corpus", () => {
   it("fixture file exists at the expected path", () => {
-    assert.ok(
-      existsSync(fixturePath),
-      `Expected eval-cases.json at ${fixturePath}`,
-    );
+    assert.ok(existsSync(fixturePath), `Expected eval-cases.json at ${fixturePath}`);
   });
 
   it("fixture file is valid JSON", () => {
@@ -61,8 +46,7 @@ describe("eval fixture corpus", () => {
     for (let i = 0; i < cases.length; i++) {
       const entry = cases[i] as RetrieveEvalCase;
       assert.ok(
-        Array.isArray(entry.expected_topic_paths) &&
-          entry.expected_topic_paths.length > 0,
+        Array.isArray(entry.expected_topic_paths) && entry.expected_topic_paths.length > 0,
         `entry[${i}].expected_topic_paths must be a non-empty array`,
       );
     }
@@ -70,18 +54,12 @@ describe("eval fixture corpus", () => {
 
   it("contains at least 8 eval cases", () => {
     const cases = JSON.parse(readFileSync(fixturePath, "utf8")) as RetrieveEvalCase[];
-    assert.ok(
-      cases.length >= 8,
-      `Expected at least 8 eval cases, got ${cases.length}`,
-    );
+    assert.ok(cases.length >= 8, `Expected at least 8 eval cases, got ${cases.length}`);
   });
 
   it("eval vault fixture exists and has a valid manifest", () => {
     const manifestPath = join(evalVaultRoot, ".okf-vault", "manifest.json");
-    assert.ok(
-      existsSync(manifestPath),
-      `Expected manifest.json at ${manifestPath}`,
-    );
+    assert.ok(existsSync(manifestPath), `Expected manifest.json at ${manifestPath}`);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
     assert.equal(manifest.schema_version, "okf-vault-manifest/1.0.0");
   });
@@ -101,10 +79,7 @@ describe("eval fixture corpus", () => {
       "strategy.md",
     ];
     for (const expected of expectedTopics) {
-      assert.ok(
-        files.includes(expected),
-        `Expected topic map ${expected} in eval vault topics/`,
-      );
+      assert.ok(files.includes(expected), `Expected topic map ${expected} in eval vault topics/`);
     }
   });
 
@@ -119,13 +94,8 @@ describe("eval fixture corpus", () => {
 
     for (const topicPath of topicFiles) {
       const topicBasename = topicPath.split("/").pop() as string;
-      const covered = allExpected.some(
-        (p) => p === topicPath || p.endsWith(topicBasename),
-      );
-      assert.ok(
-        covered,
-        `Topic map ${topicPath} has no coverage in eval-cases.json`,
-      );
+      const covered = allExpected.some((p) => p === topicPath || p.endsWith(topicBasename));
+      assert.ok(covered, `Topic map ${topicPath} has no coverage in eval-cases.json`);
     }
   });
 });

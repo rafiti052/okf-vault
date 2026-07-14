@@ -1,0 +1,32 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/span-article.md",
+  "kind": "local",
+  "content_type": "text/markdown",
+  "origin": "/tmp/sources/span-article.md",
+  "canonical_uri": "file:///tmp/sources/span-article.md",
+  "title": "Profile Span Article",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "1414141414141414141414141414141414141414141414141414141414141414",
+  "normalized_text": "# Context\nThe baseline is deterministic.\n\n# Result\nThe measured result is reproducible.\n\n# Follow-up\nThe next experiment is bounded.",
+  "anchors": [
+    {
+      "id": "anchor-001",
+      "kind": "text",
+      "label": "Context section",
+      "text": "The baseline is deterministic."
+    },
+    {
+      "id": "anchor-002",
+      "kind": "text",
+      "label": "Result section",
+      "text": "The measured result is reproducible."
+    },
+    {
+      "id": "anchor-003",
+      "kind": "text",
+      "label": "Follow-up section",
+      "text": "The next experiment is bounded."
+    }
+  ]
+}

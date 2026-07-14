@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync, unlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,6 +10,7 @@ import { ExitCode } from "../../dist/cli/cli.js";
 import {
   initializeVault,
   loadManifest,
+  manifestRevision,
   upsertCommittedSource,
   saveManifest,
   type SourceSpanIndex,
@@ -48,6 +49,7 @@ import {
   renderSourceSpanMarkdown,
 } from "../../dist/vault/source-spans.js";
 import { sourceSpanContentSha256 } from "../../dist/vault/source-spans-validation.js";
+import { commitStagedSource } from "../../dist/vault/transaction.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -2289,6 +2291,119 @@ describe("buildRetrieveResponse — bounded source-span hydration", () => {
     const note = response.results[0]?.linked_notes[0];
     assert.ok(note !== undefined);
     assert.equal("source_spans" in note, false);
+  });
+});
+
+describe("profile fixture commit-to-retrieval integration", () => {
+  it("commits and hydrates bounded evidence for article, video, panel, and deck fixtures", () => {
+    const cases = [
+      {
+        profile: "article",
+        envelopeFixture: "article/accepted-01.json",
+        noteFixture: "article/accepted-01.md",
+        expectedHydrationCount: 1,
+        spanOnlyNeedle: "Revenue",
+      },
+      {
+        profile: "video",
+        envelopeFixture: "video/accepted-01.json",
+        noteFixture: "video/accepted-01.md",
+        expectedHydrationCount: 2,
+        spanOnlyNeedle: "watching",
+      },
+      {
+        profile: "panel",
+        envelopeFixture: "panel/accepted-01.json",
+        noteFixture: "panel/accepted-01.md",
+        expectedHydrationCount: 2,
+        spanOnlyNeedle: "Iteration",
+      },
+      {
+        profile: "deck",
+        envelopeFixture: "deck/accepted-01.json",
+        noteFixture: "deck/accepted-01.md",
+        expectedHydrationCount: 2,
+        spanOnlyNeedle: "Background",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const vault = makeVaultRoot();
+      const runId = `run-${testCase.profile}-retrieve`;
+      const noteRelativePath = `notes/profile-${testCase.profile}.md`;
+      const stagingDir = join(vault, ".okf-vault", "tmp", runId);
+      mkdirSync(join(stagingDir, "notes"), { recursive: true });
+      copyFileSync(
+        join(projectRoot, "test", "fixtures", "notes", "gold", testCase.noteFixture),
+        join(stagingDir, noteRelativePath),
+      );
+
+      const committed = commitStagedSource({
+        vaultRoot: vault,
+        runId,
+        envelopePath: join(projectRoot, "test", "fixtures", "envelopes", testCase.envelopeFixture),
+        expectedRevision: manifestRevision(loadManifest(vault)),
+      });
+      assert.equal(committed.source_profile, testCase.profile);
+
+      const topicPath = join(vault, "topics", `profile-${testCase.profile}.md`);
+      const topicContent = [
+        "---",
+        `title: Profile ${testCase.profile} evidence`,
+        `tags: [profile-${testCase.profile}, evidence]`,
+        `description: Retrieval entry for committed ${testCase.profile} evidence.`,
+        "---",
+        `Profile ${testCase.profile} evidence links to [[../${noteRelativePath.replace(/\.md$/u, "")}]].`,
+        "",
+      ].join("\n");
+      writeFileSync(topicPath, topicContent, "utf8");
+
+      const candidates = loadTopicCandidateFiles(vault).map(parseTopicCandidateFile);
+      assert.equal(candidates.length, 1);
+      assert.equal(candidates[0]!.prose.includes(testCase.spanOnlyNeedle), false);
+      assert.equal(rankCandidates(testCase.spanOnlyNeedle, candidates)[0]?.score, 0);
+
+      const response = buildRetrieveResponse(
+        `profile ${testCase.profile} evidence`,
+        vault,
+        candidates,
+      );
+      const note = response.results[0]?.linked_notes[0];
+      assert.ok(note !== undefined, `${testCase.profile} linked note should be hydrated`);
+      assert.ok(note.path.endsWith(noteRelativePath));
+      assert.equal(note.source_spans?.length, testCase.expectedHydrationCount);
+
+      for (const spanSet of note.source_spans ?? []) {
+        assert.equal(spanSet.profile, testCase.profile);
+        assert.ok(spanSet.exact.anchor_ids.includes(spanSet.anchor_id));
+        assert.ok(
+          [spanSet.previous, spanSet.exact, spanSet.next].filter(Boolean).length <= 3,
+          `${testCase.profile} hydration must remain bounded to three spans`,
+        );
+      }
+
+      const exact = note.source_spans?.[0]?.exact;
+      assert.ok(exact !== undefined);
+      switch (testCase.profile) {
+        case "article":
+          assert.equal(exact.parent_label, "Opening paragraph");
+          assert.equal(exact.anchor_kind, "text");
+          break;
+        case "video":
+          assert.equal(exact.timestamp, "00:03:45");
+          assert.equal(exact.anchor_kind, "timestamp");
+          break;
+        case "panel":
+          assert.equal(exact.timestamp, "00:02:15");
+          assert.equal(exact.speaker, "Speaker A");
+          assert.equal(exact.anchor_kind, "timestamp-speaker");
+          break;
+        case "deck":
+          assert.equal(exact.slide_number, 3);
+          assert.equal(exact.anchor_kind, "slide");
+          break;
+      }
+    }
   });
 });
 

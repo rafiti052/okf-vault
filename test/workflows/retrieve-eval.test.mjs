@@ -88,9 +88,12 @@ describe("okv retrieve --eval", () => {
       `Expected exit 0 or 3, got ${result.status}. stderr: ${result.stderr}`,
     );
     let payload;
-    assert.doesNotThrow(() => {
-      payload = JSON.parse(result.stdout);
-    }, `--eval stdout must be parseable JSON. got: ${result.stdout.slice(0, 200)}`);
+    assert.doesNotThrow(
+      () => {
+        payload = JSON.parse(result.stdout);
+      },
+      `--eval stdout must be parseable JSON. got: ${result.stdout.slice(0, 200)}`,
+    );
     assert.equal(payload.status, "ok");
     assert.equal(payload.command, "retrieve");
     assert.equal(
@@ -111,10 +114,7 @@ describe("okv retrieve --eval", () => {
       typeof data.metrics === "object" && data.metrics !== null,
       "data.metrics must be an object",
     );
-    assert.ok(
-      typeof data.metrics.hit_rate === "number",
-      "data.metrics.hit_rate must be a number",
-    );
+    assert.ok(typeof data.metrics.hit_rate === "number", "data.metrics.hit_rate must be a number");
     assert.ok(
       typeof data.metrics.total_queries === "number",
       "data.metrics.total_queries must be a number",

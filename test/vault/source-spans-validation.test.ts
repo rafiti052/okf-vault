@@ -66,19 +66,19 @@ function buildFixture(
 function fixtureFor(profile: SourceSpanProfile): ValidationFixture {
   switch (profile) {
     case "article": {
-      const envelope = loadEnvelope("article/span-sections.json");
+      const envelope = loadEnvelope("article/span-accepted.json");
       return buildFixture(profile, envelope, generateArticleSpanDocuments(envelope));
     }
     case "video": {
-      const envelope = loadEnvelope("video/span-generation-gold.json");
+      const envelope = loadEnvelope("video/span-accepted.json");
       return buildFixture(profile, envelope, generateVideoSourceSpans(envelope));
     }
     case "panel": {
-      const envelope = loadEnvelope("panel/accepted-01.json");
+      const envelope = loadEnvelope("panel/span-accepted.json");
       return buildFixture(profile, envelope, generatePanelSourceSpans(envelope));
     }
     case "deck": {
-      const envelope = loadEnvelope("deck/span-generation.json");
+      const envelope = loadEnvelope("deck/span-accepted.json");
       return buildFixture(profile, envelope, generateDeckSourceSpans(envelope));
     }
   }

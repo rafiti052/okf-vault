@@ -1,0 +1,62 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/span-deck.json",
+  "kind": "local",
+  "content_type": "application/json",
+  "origin": "/tmp/sources/span-deck.json",
+  "canonical_uri": "file:///tmp/sources/span-deck.json",
+  "title": "Profile Span Deck",
+  "modified_at": "2026-07-08T12:00:00.000Z",
+  "content_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "normalized_text": "Opening slide. Result slide with notes. Closing slide.",
+  "anchors": [
+    {
+      "id": "slide-001",
+      "kind": "slide",
+      "slide_number": 1,
+      "text": "Opening slide"
+    },
+    {
+      "id": "slide-002",
+      "kind": "slide",
+      "slide_number": 2,
+      "text": "Result slide"
+    },
+    {
+      "id": "speaker-note-002",
+      "kind": "speaker_note",
+      "slide_number": 2,
+      "text": "The exact result depends on controlled inputs."
+    },
+    {
+      "id": "slide-003",
+      "kind": "slide",
+      "slide_number": 3,
+      "text": "Closing slide"
+    }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "Opening",
+      "text": "Opening slide",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 2,
+      "title": "Result",
+      "text": "Result slide",
+      "speaker_notes": "The exact result depends on controlled inputs.",
+      "image_available": true
+    },
+    {
+      "number": 3,
+      "title": "Closing",
+      "text": "Closing slide",
+      "speaker_notes": "",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}

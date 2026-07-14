@@ -544,27 +544,31 @@ describe("profile-complete atomic span commits", () => {
     const cases = [
       {
         profile: "article",
-        noteFixture: "article-valid.md",
-        notePath: "notes/sample-article.md",
-        envelopeFixture: "article-local.json",
+        noteFixture: "gold/article/accepted-01.md",
+        notePath: "notes/profile-article.md",
+        envelopeFixture: "article/accepted-01.json",
+        expectedSpanCount: 1,
       },
       {
         profile: "video",
-        noteFixture: "video-valid.md",
-        notePath: "notes/demo-video.md",
-        envelopeFixture: "video-transcript.json",
+        noteFixture: "gold/video/accepted-01.md",
+        notePath: "notes/profile-video.md",
+        envelopeFixture: "video/accepted-01.json",
+        expectedSpanCount: 4,
       },
       {
         profile: "panel",
-        noteFixture: "panel-valid.md",
-        notePath: "notes/panel-discussion.md",
-        envelopeFixture: "panel-transcript.json",
+        noteFixture: "gold/panel/accepted-01.md",
+        notePath: "notes/profile-panel.md",
+        envelopeFixture: "panel/accepted-01.json",
+        expectedSpanCount: 2,
       },
       {
         profile: "deck",
-        noteFixture: "deck-valid.md",
-        notePath: "notes/five-slide-deck.md",
-        envelopeFixture: "deck-five-slides.json",
+        noteFixture: "gold/deck/accepted-01.md",
+        notePath: "notes/profile-deck.md",
+        envelopeFixture: "deck/accepted-01.json",
+        expectedSpanCount: 6,
       },
     ] as const;
 
@@ -582,12 +586,18 @@ describe("profile-complete atomic span commits", () => {
       const record = loadManifest(vaultRoot).sources[0];
       assert.equal(result.source_profile, testCase.profile);
       assert.equal(record?.source_span_index?.profile, testCase.profile);
-      assert.ok(result.source_span_count > 0);
+      assert.equal(result.source_span_count, testCase.expectedSpanCount);
       assert.deepEqual(installedSourceSpanPaths(vaultRoot), result.source_span_paths);
       assert.deepEqual(
         record?.source_span_index?.spans.map((span) => span.path),
         result.source_span_paths,
       );
+      assert.equal(getManagedPathStatus(vaultRoot).clean, true);
+      for (const span of record?.source_span_index?.spans ?? []) {
+        const content = readFileSync(join(vaultRoot, span.path), "utf8");
+        assert.equal(createHash("sha256").update(content).digest("hex"), span.sha256);
+        assert.equal(runGit(vaultRoot, ["show", `${result.commit}:${span.path}`]).status, 0);
+      }
     }
   });
 });

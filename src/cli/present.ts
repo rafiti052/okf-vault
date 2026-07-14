@@ -455,17 +455,17 @@ function retrieveSummary(data: JsonRecord, context: PresenterContext): string {
 
   // Query mode: normal result.
   const sections: string[] = [];
-  const topResult = Array.isArray(data.results) && data.results.length > 0
-    ? data.results[0]
-    : undefined;
+  const topResult =
+    Array.isArray(data.results) && data.results.length > 0 ? data.results[0] : undefined;
 
   if (isRecord(topResult)) {
     const summaryTable = createTable(["field", "value"], context);
     summaryTable.push(["topic", normalizeCell(topResult.title)]);
     summaryTable.push(["confidence", normalizeCell(data.confidence)]);
-    summaryTable.push(["linked notes", normalizeCell(
-      Array.isArray(topResult.linked_notes) ? topResult.linked_notes.length : 0,
-    )]);
+    summaryTable.push([
+      "linked notes",
+      normalizeCell(Array.isArray(topResult.linked_notes) ? topResult.linked_notes.length : 0),
+    ]);
     if (typeof topResult.excerpt === "string" && topResult.excerpt.length > 0) {
       summaryTable.push(["excerpt", topResult.excerpt.slice(0, 120)]);
     }
@@ -484,10 +484,7 @@ function retrieveSummary(data: JsonRecord, context: PresenterContext): string {
     const hintsTable = createTable(["hint", "suggested query"], context);
     for (const hint of hints) {
       if (!isRecord(hint)) continue;
-      hintsTable.push([
-        normalizeCell(hint.reason),
-        normalizeCell(hint.suggested_query ?? ""),
-      ]);
+      hintsTable.push([normalizeCell(hint.reason), normalizeCell(hint.suggested_query ?? "")]);
     }
     sections.push(hintsTable.toString());
   }

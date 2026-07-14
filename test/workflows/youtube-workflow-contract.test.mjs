@@ -59,7 +59,12 @@ describe("YouTube workflow contract consistency", () => {
       assert.match(text, /youtube/i, `${doc} must mention youtube`);
     }
 
-    for (const doc of ["capabilities.md", "source-envelope.md", "normalization.md", "ingestion-loop.md"]) {
+    for (const doc of [
+      "capabilities.md",
+      "source-envelope.md",
+      "normalization.md",
+      "ingestion-loop.md",
+    ]) {
       const text = readRef(doc);
       assert.doesNotMatch(text, PROVIDER_TOOL_PATTERN, `${doc} must stay provider-neutral`);
     }
