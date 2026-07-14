@@ -1,0 +1,28 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/timestamp-only-panel.txt",
+  "kind": "local",
+  "content_type": "panel/transcript",
+  "origin": "/tmp/sources/timestamp-only-panel.txt",
+  "canonical_uri": "file:///tmp/sources/timestamp-only-panel.txt",
+  "title": "Timestamp-Only Panel Transcript",
+  "modified_at": "2026-06-19T12:00:00.000Z",
+  "content_sha256": "f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3",
+  "normalized_text": "The discussion opens. A second point follows.",
+  "anchors": [
+    {
+      "id": "timestamp-00:01:00",
+      "kind": "timestamp",
+      "label": "Opening",
+      "timestamp": "00:01:00",
+      "text": "The discussion opens."
+    },
+    {
+      "id": "timestamp-00:03:30",
+      "kind": "timestamp",
+      "label": "Second point",
+      "timestamp": "00:03:30",
+      "text": "A second point follows."
+    }
+  ]
+}
