@@ -11,9 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
-import { LOG_PATH, MANIFEST_RELATIVE_PATH } from "../../dist/vault/constants.js";
+import { LOG_PATH, MANIFEST_RELATIVE_PATH, SOURCE_SPANS_DIR } from "../../dist/vault/constants.js";
 import { initializeVault, loadManifest, manifestRevision } from "../../dist/vault/manifest.js";
-import { runGit } from "../../dist/vault/git.js";
+import { getManagedPathStatus, runGit } from "../../dist/vault/git.js";
 import {
   acquireVaultLock,
   commitStagedSource,
@@ -41,6 +41,46 @@ function stageArticle(vaultRoot: string, runId: string) {
 }
 
 describe("interrupted transaction recovery integration", () => {
+  it("removes partial span installs and restores the previous span tree", () => {
+    const vaultRoot = prepareVault();
+    const existingSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-001.md`;
+    const partialSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-002.md`;
+    mkdirSync(join(vaultRoot, SOURCE_SPANS_DIR, "sample-article"), { recursive: true });
+    writeFileSync(join(vaultRoot, existingSpanPath), "# Before transaction\n", "utf8");
+    assert.equal(runGit(vaultRoot, ["add", "--", existingSpanPath]).status, 0);
+    assert.equal(runGit(vaultRoot, ["commit", "-m", "seed source span"]).status, 0);
+
+    const snapshot = {
+      manifest: readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8"),
+      log: readFileSync(join(vaultRoot, LOG_PATH), "utf8"),
+      notes: {},
+      source_spans: {
+        [existingSpanPath]: "# Before transaction\n",
+      },
+    };
+    writeFileSync(join(vaultRoot, existingSpanPath), "# Mutated\n", "utf8");
+    writeFileSync(join(vaultRoot, partialSpanPath), "# Partial install\n", "utf8");
+    assert.equal(runGit(vaultRoot, ["add", "--", existingSpanPath, partialSpanPath]).status, 0);
+    writeFailureJournal(vaultRoot, {
+      schema_version: TRANSACTION_JOURNAL_VERSION,
+      run_id: "run-span-recover",
+      source_key: "local:/tmp/sources/sample-article.md",
+      phase: "commit",
+      failed_at: "2026-06-19T12:00:00.000Z",
+      error_code: "TRANSACTION_FAILED",
+      error_message: "interrupted span install",
+      snapshot,
+      installed_paths: [existingSpanPath, partialSpanPath],
+    });
+
+    const result = recoverVault(vaultRoot);
+
+    assert.equal(result.recovered, true);
+    assert.equal(readFileSync(join(vaultRoot, existingSpanPath), "utf8"), "# Before transaction\n");
+    assert.equal(existsSync(join(vaultRoot, partialSpanPath)), false);
+    assert.deepEqual(getManagedPathStatus(vaultRoot), { clean: true, dirtyPaths: [] });
+  });
+
   it("restores managed paths from journal snapshots without touching unrelated files", () => {
     const vaultRoot = prepareVault();
     writeFileSync(join(vaultRoot, "unrelated.txt"), "preserve\n", "utf8");

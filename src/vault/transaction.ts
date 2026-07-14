@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
 import {
   JOURNAL_RELATIVE_PATH,
@@ -7,6 +7,7 @@ import {
   LOG_PATH,
   MANIFEST_RELATIVE_PATH,
   NOTE_CONTRACT_VERSION,
+  SOURCE_SPANS_DIR,
   TMP_DIR,
 } from "./constants.js";
 import {
@@ -17,6 +18,7 @@ import {
   isGitRepository,
   readManagedFileFromHead,
   stageManagedPaths,
+  unstageManagedPaths,
 } from "./git.js";
 import {
   assertManifestRevision,
@@ -68,6 +70,8 @@ export interface ManagedSnapshot {
   manifest: string;
   log: string;
   notes: Record<string, string>;
+  /** Absent only in journals written before source-span transaction support. */
+  source_spans?: Record<string, string>;
 }
 
 export interface VaultLockPayload {
@@ -273,11 +277,51 @@ export function captureManagedSnapshot(vaultRoot: string, notePath: string): Man
     notes[notePath] = fs.readFileSync(noteFullPath, "utf8");
   }
 
+  const sourceSpans: Record<string, string> = {};
+  const sourceSpansRoot = join(root, SOURCE_SPANS_DIR);
+  const captureSourceSpanDirectory = (fullDirectory: string, relativeDirectory: string): void => {
+    const entries = fs
+      .readdirSync(fullDirectory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const fullPath = join(fullDirectory, entry.name);
+      const relativePath = join(relativeDirectory, entry.name).split("\\").join("/");
+      if (entry.isDirectory()) {
+        captureSourceSpanDirectory(fullPath, relativePath);
+      } else if (entry.isFile()) {
+        sourceSpans[relativePath] = fs.readFileSync(fullPath, "utf8");
+      }
+    }
+  };
+  if (fs.existsSync(sourceSpansRoot)) {
+    captureSourceSpanDirectory(sourceSpansRoot, SOURCE_SPANS_DIR);
+  }
+
   return {
     manifest: fs.readFileSync(manifestPath, "utf8"),
     log: fs.readFileSync(logFilePath, "utf8"),
     notes,
+    source_spans: sourceSpans,
   };
+}
+
+function resolveSnapshotSourceSpanPath(root: string, relativePath: string): string {
+  const sourceSpansRoot = resolve(root, SOURCE_SPANS_DIR);
+  const fullPath = resolve(root, relativePath);
+  const relativeToSourceSpans = relative(sourceSpansRoot, fullPath);
+  if (
+    relativeToSourceSpans.length === 0 ||
+    relativeToSourceSpans === ".." ||
+    relativeToSourceSpans.startsWith(`..${sep}`) ||
+    isAbsolute(relativeToSourceSpans)
+  ) {
+    throw new TransactionFailureError(
+      `Source-span snapshot path is outside '${SOURCE_SPANS_DIR}': ${relativePath}`,
+      "SOURCE_SPAN_SNAPSHOT_PATH_INVALID",
+      { path: relativePath },
+    );
+  }
+  return fullPath;
 }
 
 export function restoreManagedSnapshot(vaultRoot: string, snapshot: ManagedSnapshot): void {
@@ -297,6 +341,21 @@ export function restoreManagedSnapshot(vaultRoot: string, snapshot: ManagedSnaps
   for (const relativePath of installedNotePaths) {
     if (!(relativePath in snapshot.notes)) {
       removeIfExists(join(root, relativePath));
+    }
+  }
+
+  if (snapshot.source_spans !== undefined) {
+    const sourceSpanEntries = Object.entries(snapshot.source_spans)
+      .map(
+        ([relativePath, content]) =>
+          [relativePath, resolveSnapshotSourceSpanPath(root, relativePath), content] as const,
+      )
+      .sort(([left], [right]) => left.localeCompare(right));
+    const sourceSpansRoot = join(root, SOURCE_SPANS_DIR);
+    fs.rmSync(sourceSpansRoot, { recursive: true, force: true });
+    fs.mkdirSync(sourceSpansRoot, { recursive: true });
+    for (const [, fullPath, content] of sourceSpanEntries) {
+      writeFileAtomic(fullPath, content, fs.renameSync);
     }
   }
 }
@@ -419,6 +478,7 @@ function rollbackFailure(
   error: unknown,
 ): never {
   restoreManagedSnapshot(vaultRoot, snapshot);
+  unstageManagedPaths(vaultRoot, installedPaths);
   const message = error instanceof Error ? error.message : "Transaction failed";
   const code = error instanceof TransactionFailureError ? error.code : "TRANSACTION_FAILED";
   writeFailureJournal(vaultRoot, {
@@ -607,6 +667,7 @@ export function recoverVault(vaultRoot: string): RecoverVaultResult {
         removeIfExists(join(root, relativePath));
       }
     }
+    unstageManagedPaths(root, journal.installed_paths);
     clearFailureJournal(root);
     releaseVaultLock(root, journal.run_id);
     return {

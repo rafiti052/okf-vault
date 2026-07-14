@@ -186,6 +186,16 @@ export function stageManagedPaths(vaultRoot: string, paths: readonly string[]): 
   }
 }
 
+export function unstageManagedPaths(vaultRoot: string, paths: readonly string[]): void {
+  if (paths.length === 0) {
+    return;
+  }
+  const reset = runGit(vaultRoot, ["reset", "--quiet", "HEAD", "--", ...paths]);
+  if (reset.status !== 0) {
+    throw new Error(`git reset failed: ${reset.stderr || reset.stdout}`);
+  }
+}
+
 export function createCommit(vaultRoot: string, message: string): string {
   const commit = runGit(vaultRoot, ["commit", "-m", message]);
   if (commit.status !== 0) {

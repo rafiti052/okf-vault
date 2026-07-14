@@ -29,10 +29,12 @@ import {
 import { runGit, getManagedPathStatus } from "../../dist/vault/git.js";
 import {
   acquireVaultLock,
+  captureManagedSnapshot,
   commitStagedSource,
   readTransactionJournal,
   readVaultLock,
   recoverVault,
+  restoreManagedSnapshot,
   writeFailureJournal,
   type ManagedSnapshot,
   TRANSACTION_JOURNAL_VERSION,
@@ -190,6 +192,38 @@ describe("managed path preflight", () => {
   });
 });
 
+describe("managed source-span snapshots", () => {
+  it("captures installed source-span documents recursively", () => {
+    const vaultRoot = prepareVault();
+    const spanPath = `${SOURCE_SPANS_DIR}/sample-article/span-001.md`;
+    mkdirSync(dirname(join(vaultRoot, spanPath)), { recursive: true });
+    writeFileSync(join(vaultRoot, spanPath), "# Existing source span\n", "utf8");
+
+    const snapshot = captureManagedSnapshot(vaultRoot, "notes/sample-article.md");
+
+    assert.deepEqual(snapshot.source_spans, {
+      [spanPath]: "# Existing source span\n",
+    });
+  });
+
+  it("restores prior source-span bytes and removes documents absent from the snapshot", () => {
+    const vaultRoot = prepareVault();
+    const existingSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-001.md`;
+    const partialSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-002.md`;
+    mkdirSync(dirname(join(vaultRoot, existingSpanPath)), { recursive: true });
+    writeFileSync(join(vaultRoot, existingSpanPath), "# Before transaction\n", "utf8");
+    const snapshot = captureManagedSnapshot(vaultRoot, "notes/sample-article.md");
+
+    writeFileSync(join(vaultRoot, existingSpanPath), "# Mutated\n", "utf8");
+    writeFileSync(join(vaultRoot, partialSpanPath), "# Partial install\n", "utf8");
+
+    restoreManagedSnapshot(vaultRoot, snapshot);
+
+    assert.equal(readFileSync(join(vaultRoot, existingSpanPath), "utf8"), "# Before transaction\n");
+    assert.equal(existsSync(join(vaultRoot, partialSpanPath)), false);
+  });
+});
+
 describe("install rollback", () => {
   it("restores pre-transaction note, manifest, and log contents after rename failure", () => {
     const vaultRoot = prepareVault();
@@ -260,6 +294,42 @@ describe("commit rollback", () => {
     assert.equal(readFileSync(join(vaultRoot, MANIFEST_RELATIVE_PATH), "utf8"), beforeManifest);
     assert.equal(readFileSync(join(vaultRoot, LOG_PATH), "utf8"), beforeLog);
     assert.equal(loadManifest(vaultRoot).sources.length, 0);
+  });
+
+  it("restores the previous source-span tree when a transaction fails before commit", () => {
+    const vaultRoot = prepareVault();
+    const existingSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-001.md`;
+    const partialSpanPath = `${SOURCE_SPANS_DIR}/sample-article/span-002.md`;
+    mkdirSync(dirname(join(vaultRoot, existingSpanPath)), { recursive: true });
+    writeFileSync(join(vaultRoot, existingSpanPath), "# Before transaction\n", "utf8");
+    assert.equal(runGit(vaultRoot, ["add", "--", existingSpanPath]).status, 0);
+    assert.equal(runGit(vaultRoot, ["commit", "-m", "seed source span"]).status, 0);
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    stageArticle(vaultRoot, "run-span-commit-fail");
+
+    assert.throws(
+      () =>
+        commitStagedSource({
+          vaultRoot,
+          runId: "run-span-commit-fail",
+          envelopePath: join(envelopesDir, "article-local.json"),
+          expectedRevision: revision,
+          hooks: {
+            createCommit: () => {
+              writeFileSync(join(vaultRoot, existingSpanPath), "# Mutated\n", "utf8");
+              writeFileSync(join(vaultRoot, partialSpanPath), "# Partial install\n", "utf8");
+              throw new Error("simulated span-aware commit failure");
+            },
+          },
+        }),
+      /simulated span-aware commit failure/,
+    );
+
+    assert.equal(readFileSync(join(vaultRoot, existingSpanPath), "utf8"), "# Before transaction\n");
+    assert.equal(existsSync(join(vaultRoot, partialSpanPath)), false);
+    assert.deepEqual(readTransactionJournal(vaultRoot)?.snapshot.source_spans, {
+      [existingSpanPath]: "# Before transaction\n",
+    });
   });
 });
 
