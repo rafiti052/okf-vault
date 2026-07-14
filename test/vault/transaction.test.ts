@@ -18,6 +18,7 @@ import {
   LOG_PATH,
   MANIFEST_RELATIVE_PATH,
   NOTE_CONTRACT_VERSION,
+  SOURCE_SPANS_DIR,
 } from "../../dist/vault/constants.js";
 import {
   initializeVault,
@@ -148,6 +149,43 @@ describe("managed path preflight", () => {
     if (outcome.result?.status === "error") {
       assert.equal(outcome.result.code, "MANAGED_PATH_CONFLICT");
       assert.match(outcome.result.message, /log\.md/);
+    }
+  });
+
+  it("reports and rejects untracked and staged source-span documents as managed conflicts", () => {
+    const vaultRoot = prepareVault();
+    const revision = manifestRevision(loadManifest(vaultRoot));
+    stageArticle(vaultRoot, "run-dirty-span");
+    const spanPath = `${SOURCE_SPANS_DIR}/example/span-001.md`;
+    mkdirSync(dirname(join(vaultRoot, spanPath)), { recursive: true });
+    writeFileSync(join(vaultRoot, spanPath), "# Source span\n", "utf8");
+
+    assert.deepEqual(getManagedPathStatus(vaultRoot), {
+      clean: false,
+      dirtyPaths: [spanPath],
+    });
+
+    assert.equal(runGit(vaultRoot, ["add", "--", spanPath]).status, 0);
+    assert.deepEqual(getManagedPathStatus(vaultRoot), {
+      clean: false,
+      dirtyPaths: [spanPath],
+    });
+
+    const outcome = dispatch(
+      parseArgs([
+        "commit",
+        vaultRoot,
+        "run-dirty-span",
+        join(envelopesDir, "article-local.json"),
+        revision,
+      ]),
+    );
+    assert.equal(outcome.exitCode, ExitCode.CONFLICT);
+    assert.equal(outcome.result?.status, "error");
+    if (outcome.result?.status === "error") {
+      assert.equal(outcome.result.code, "MANAGED_PATH_CONFLICT");
+      assert.equal(outcome.result.details?.path, spanPath);
+      assert.deepEqual(outcome.result.details?.dirty_paths, [spanPath]);
     }
   });
 });

@@ -9,6 +9,7 @@ import {
   MANAGED_CLEAN_PATHSPECS,
   REVIEWS_DIR,
   REVIEWS_GITKEEP,
+  SOURCE_SPANS_DIR,
   TMP_DIR,
 } from "./constants.js";
 
@@ -75,6 +76,7 @@ export function ensureInitDirectories(vaultRoot: string): InitDirectoryResult {
   let updated = false;
   updated = ensureDirectory(vaultRoot, "notes") || updated;
   updated = ensureDirectory(vaultRoot, "topics") || updated;
+  updated = ensureDirectory(vaultRoot, SOURCE_SPANS_DIR) || updated;
   updated = ensureDirectory(vaultRoot, REVIEWS_DIR) || updated;
   updated = ensureDirectory(vaultRoot, TMP_DIR) || updated;
 
@@ -144,13 +146,30 @@ function parsePorcelainPaths(stdout: string): string[] {
   return [...paths].sort();
 }
 
+function parseNameOnlyPaths(stdout: string): string[] {
+  return [
+    ...new Set(
+      stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ),
+  ].sort();
+}
+
 export function getManagedPathStatus(vaultRoot: string): ManagedPathStatus {
   const pathspecs = [...MANAGED_CLEAN_PATHSPECS];
   const indexStatus = runGit(vaultRoot, ["diff", "--cached", "--name-only", "--", ...pathspecs]);
-  const worktreeStatus = runGit(vaultRoot, ["status", "--porcelain", "--", ...pathspecs]);
+  const worktreeStatus = runGit(vaultRoot, [
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    ...pathspecs,
+  ]);
   const dirtyPaths = [
     ...new Set([
-      ...parsePorcelainPaths(indexStatus.stdout),
+      ...parseNameOnlyPaths(indexStatus.stdout),
       ...parsePorcelainPaths(worktreeStatus.stdout),
     ]),
   ].sort();

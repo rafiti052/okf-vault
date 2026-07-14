@@ -21,6 +21,7 @@ import {
   NOTE_CONTRACT_VERSION,
   NOTES_INDEX_PATH,
   ROOT_INDEX_PATH,
+  SOURCE_SPANS_DIR,
   TOPICS_INDEX_PATH,
 } from "../../dist/vault/constants.js";
 import {
@@ -30,7 +31,7 @@ import {
   installCuratorRule,
   loadManifest,
 } from "../../dist/vault/manifest.js";
-import { isGitRepository, runGit } from "../../dist/vault/git.js";
+import { getManagedPathStatus, isGitRepository, runGit } from "../../dist/vault/git.js";
 import { ExitCode, dispatch, parseArgs, type CliSuccess } from "../../dist/cli/cli.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +58,7 @@ describe("vault initialization", () => {
     assert.equal(existsSync(join(vaultRoot, "log.md")), true);
     assert.equal(existsSync(join(vaultRoot, NOTES_INDEX_PATH)), true);
     assert.equal(existsSync(join(vaultRoot, TOPICS_INDEX_PATH)), true);
+    assert.equal(existsSync(join(vaultRoot, SOURCE_SPANS_DIR)), true);
     assert.equal(existsSync(join(vaultRoot, MANIFEST_RELATIVE_PATH)), true);
     assert.equal(existsSync(join(vaultRoot, ".okf-vault/reviews/.gitkeep")), true);
     assert.equal(existsSync(join(vaultRoot, ".okf-vault/tmp")), true);
@@ -67,6 +69,7 @@ describe("vault initialization", () => {
 
     const status = runGit(vaultRoot, ["status", "--porcelain"]);
     assert.equal(status.stdout.trim(), "");
+    assert.deepEqual(getManagedPathStatus(vaultRoot), { clean: true, dirtyPaths: [] });
   });
 
   it("is idempotent and preserves existing vault content and manifest records", () => {
@@ -101,6 +104,7 @@ describe("vault initialization", () => {
     assert.equal(second.committed, false);
     assert.equal(readFileSync(join(vaultRoot, ROOT_INDEX_PATH), "utf8"), "# user content\n");
     assert.equal(readFileSync(notePath, "utf8"), "# Custom note\n\nPreserve this.\n");
+    assert.equal(existsSync(join(vaultRoot, SOURCE_SPANS_DIR)), true);
     const afterManifest = loadManifest(vaultRoot);
     assert.deepEqual(afterManifest, beforeManifest);
     assert.equal(afterManifest.sources[0]!.source_key, beforeRevision);

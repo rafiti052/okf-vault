@@ -13,6 +13,9 @@ export const ROOT_INDEX_PATH = "index.md";
 export const LOG_PATH = "log.md";
 export const NOTES_INDEX_PATH = "notes/index.md";
 export const TOPICS_INDEX_PATH = "topics/index.md";
+export const REFERENCES_DIR = "references";
+export const SOURCE_SPANS_DIR = `${REFERENCES_DIR}/sources`;
+export const SOURCE_SPANS_PATHSPEC = `${SOURCE_SPANS_DIR}/`;
 export const GITIGNORE_PATH = ".gitignore";
 
 /** Pathspecs checked for clean index and working tree before transactions. */
@@ -24,6 +27,7 @@ export const MANAGED_CLEAN_PATHSPECS = [
   MANIFEST_RELATIVE_PATH,
   "notes/",
   "topics/",
+  SOURCE_SPANS_PATHSPEC,
 ] as const;
 
 export const ROOT_INDEX_CONTENT = `# OKF Knowledge Vault
