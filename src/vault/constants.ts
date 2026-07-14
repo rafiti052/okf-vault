@@ -1,6 +1,7 @@
-/** Supported manifest and note contract versions for task-03. */
+/** Supported persisted contract versions. */
 export const MANIFEST_SCHEMA_VERSION = "okf-vault-manifest/1.0.0" as const;
 export const NOTE_CONTRACT_VERSION = "okf-note-contract/1.0.0" as const;
+export const SOURCE_SPAN_CONTRACT_VERSION = "okf-source-spans/1.0.0" as const;
 
 export const MANIFEST_RELATIVE_PATH = ".okf-vault/manifest.json";
 export const LOCK_RELATIVE_PATH = ".okf-vault/lock";
