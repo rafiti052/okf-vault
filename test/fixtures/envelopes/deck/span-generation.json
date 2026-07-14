@@ -1,0 +1,73 @@
+{
+  "contract_version": "okf-source-envelope/1.0.0",
+  "source_key": "local:/tmp/sources/product-roadmap.pptx",
+  "kind": "local",
+  "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "origin": "/tmp/sources/product-roadmap.pptx",
+  "canonical_uri": "file:///tmp/sources/product-roadmap.pptx",
+  "title": "Product Roadmap",
+  "modified_at": "2026-07-14T12:00:00.000Z",
+  "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "normalized_text": "Three-slide roadmap with speaker notes on slide 2.",
+  "anchors": [
+    {
+      "id": "slide-001",
+      "kind": "slide",
+      "label": "Slide 1",
+      "text": "Current state",
+      "slide_number": 1
+    },
+    {
+      "id": "slide-002-detail",
+      "kind": "slide",
+      "label": "Slide 2 detail",
+      "text": "Ship the evidence path first",
+      "slide_number": 2
+    },
+    {
+      "id": "slide-002",
+      "kind": "slide",
+      "label": "Slide 2",
+      "text": "Next release",
+      "slide_number": 2
+    },
+    {
+      "id": "speaker-002",
+      "kind": "speaker_note",
+      "label": "Slide 2 notes",
+      "text": "Keep the rollout bounded and deterministic.",
+      "slide_number": 2
+    },
+    {
+      "id": "slide-003",
+      "kind": "slide",
+      "label": "Slide 3",
+      "text": "Success measures",
+      "slide_number": 3
+    }
+  ],
+  "slides": [
+    {
+      "number": 1,
+      "title": "Current state",
+      "text": "Current state",
+      "speaker_notes": "",
+      "image_available": true
+    },
+    {
+      "number": 2,
+      "title": "Next release",
+      "text": "Next release\nShip the evidence path first",
+      "speaker_notes": "Keep the rollout bounded and deterministic.",
+      "image_available": true
+    },
+    {
+      "number": 3,
+      "title": "Success measures",
+      "text": "Success measures",
+      "speaker_notes": "",
+      "image_available": true
+    }
+  ],
+  "deck_complete": true
+}
