@@ -1,10 +1,21 @@
 import * as fs from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
-import { MANIFEST_RELATIVE_PATH, TOPICS_INDEX_PATH } from "./constants.js";
-import { loadManifest } from "./manifest.js";
+import {
+  MANIFEST_RELATIVE_PATH,
+  SOURCE_SPAN_CONTRACT_VERSION,
+  SOURCE_SPANS_DIR,
+  TOPICS_INDEX_PATH,
+} from "./constants.js";
+import {
+  loadManifest,
+  type SourceSpanIndex,
+  type SourceSpanProfile,
+  type SourceSpanRef,
+} from "./manifest.js";
+import { sourceSpanContentSha256 } from "./source-spans-validation.js";
 
 // ---------------------------------------------------------------------------
 // Retrieval result contract — Task 03
@@ -46,6 +57,45 @@ export interface NoteProvenance {
   kind: string;
 }
 
+/** A validated source-span document returned as bounded linked-note evidence. */
+export interface HydratedSourceSpan {
+  /** Stable source-span identity from the committed manifest index. */
+  id: string;
+  /** Absolute path to the managed source-span Markdown document. */
+  path: string;
+  /** Conversion profile that defines this span's evidence anatomy. */
+  profile: SourceSpanProfile;
+  /** One-based position in the source's ordered span set. */
+  sequence: number;
+  /** Source anchors covered by this span. */
+  anchor_ids: string[];
+  /** Exact source text from the managed Markdown document body. */
+  text: string;
+  /** Human-readable span title from frontmatter. */
+  title: string;
+  /** Profile metadata, present only when the source profile provides it. */
+  timestamp?: string;
+  speaker?: string;
+  slide_number?: number;
+  anchor_kind?: string;
+  heading?: string;
+  parent_label?: string;
+}
+
+/** Exact evidence for one claim anchor plus its bounded adjacent context. */
+export interface HydratedSourceSpanSet {
+  /** Claim anchor from the already-selected linked note that triggered hydration. */
+  anchor_id: string;
+  /** Profile shared by every span in this bounded hydration set. */
+  profile: SourceSpanProfile;
+  /** The single manifest span that covers anchor_id. */
+  exact: HydratedSourceSpan;
+  /** At most one immediate previous sibling. */
+  previous?: HydratedSourceSpan;
+  /** At most one immediate next sibling. */
+  next?: HydratedSourceSpan;
+}
+
 /**
  * A linked note entry inside a RetrieveResult.
  */
@@ -56,6 +106,8 @@ export interface LinkedNote {
   summary: string;
   /** Manifest-derived provenance for the note. */
   provenance: NoteProvenance;
+  /** Optional post-selection evidence; omitted when no valid span index resolves. */
+  source_spans?: HydratedSourceSpanSet[];
 }
 
 /**
@@ -236,8 +288,7 @@ export const RetrieveErrorCode = {
   UNEXPECTED_IO_ERROR: "UNEXPECTED_IO_ERROR",
 } as const;
 
-export type RetrieveErrorCodeValue =
-  (typeof RetrieveErrorCode)[keyof typeof RetrieveErrorCode];
+export type RetrieveErrorCodeValue = (typeof RetrieveErrorCode)[keyof typeof RetrieveErrorCode];
 
 // ---------------------------------------------------------------------------
 // Topic candidate loader — Task 04
@@ -648,10 +699,7 @@ const MAX_RESULTS = 5;
  * @param scores   - All scores from the ranked list (must include topScore).
  * @returns Confidence tier string.
  */
-export function assignConfidence(
-  topScore: number,
-  scores: number[],
-): "high" | "medium" | "low" {
+export function assignConfidence(topScore: number, scores: number[]): "high" | "medium" | "low" {
   if (topScore < CONFIDENCE_LOW_MINIMUM_THRESHOLD) return "low";
 
   // Compute median of all scores.
@@ -686,9 +734,7 @@ export function assignConfidence(
  *                 by score (as returned by `rankCandidates`).
  * @returns Object with the selected `candidates` subset and derived `confidence`.
  */
-export function selectResults(
-  ranked: Array<{ candidate: TopicMapCandidate; score: number }>,
-): {
+export function selectResults(ranked: Array<{ candidate: TopicMapCandidate; score: number }>): {
   candidates: Array<{ candidate: TopicMapCandidate; score: number }>;
   confidence: "high" | "medium" | "low";
 } {
@@ -887,10 +933,7 @@ export function extractNoteSummary(content: string): string {
  * @returns Array of hydrated `LinkedNote` records (may be shorter than
  *          `linkedNotePaths` when files are missing or unreadable).
  */
-export function hydrateLinkedNotes(
-  candidate: TopicMapCandidate,
-  _vaultRoot: string,
-): LinkedNote[] {
+export function hydrateLinkedNotes(candidate: TopicMapCandidate, _vaultRoot: string): LinkedNote[] {
   const results: LinkedNote[] = [];
 
   for (const notePath of candidate.linkedNotePaths) {
@@ -953,6 +996,301 @@ export function filterNotesViaManifest(
       return { ...note, provenance: prov };
     })
     .filter((n): n is LinkedNote => n !== null);
+}
+
+/** Manifest data needed to hydrate one committed note's managed span documents. */
+export interface ManifestSpanHydrationRecord {
+  source_key: string;
+  content_sha256: string;
+  source_span_index: SourceSpanIndex;
+}
+
+/**
+ * Build a second, post-selection manifest index for committed notes with source spans.
+ * Keeping this separate from buildManifestIndex preserves its legacy provenance shape.
+ */
+export function buildManifestSpanIndex(
+  vaultRoot: string,
+): Map<string, ManifestSpanHydrationRecord> {
+  let manifest;
+  try {
+    manifest = loadManifest(vaultRoot);
+  } catch {
+    return new Map();
+  }
+
+  const index = new Map<string, ManifestSpanHydrationRecord>();
+  for (const record of manifest.sources) {
+    if (
+      record.status === "committed" &&
+      record.note_path !== undefined &&
+      record.source_span_index !== undefined
+    ) {
+      index.set(resolve(vaultRoot, record.note_path), {
+        source_key: record.source_key,
+        content_sha256: record.content_sha256,
+        source_span_index: record.source_span_index,
+      });
+    }
+  }
+  return index;
+}
+
+/** Extract unique claim anchors from a selected note's YAML frontmatter. */
+export function extractLinkedNoteAnchorIds(content: string): string[] {
+  const match = FRONTMATTER_PATTERN.exec(content);
+  if (match === null) return [];
+
+  let frontmatter: unknown;
+  try {
+    frontmatter = parseYaml(match[1] ?? "");
+  } catch {
+    return [];
+  }
+  if (!isRecord(frontmatter) || !Array.isArray(frontmatter.claims)) return [];
+
+  const seen = new Set<string>();
+  const anchors: string[] = [];
+  for (const claim of frontmatter.claims) {
+    if (!isRecord(claim) || !Array.isArray(claim.anchors)) continue;
+    for (const anchor of claim.anchors) {
+      if (typeof anchor !== "string") continue;
+      const normalized = anchor.trim();
+      if (normalized.length === 0 || seen.has(normalized)) continue;
+      seen.add(normalized);
+      anchors.push(normalized);
+    }
+  }
+  return anchors;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    return undefined;
+  }
+  return value.map((item) => item.trim());
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort((a, b) => a.localeCompare(b));
+  const rightSorted = [...right].sort((a, b) => a.localeCompare(b));
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+function optionalNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+/**
+ * Validate the hard hydration bound and immediate sibling graph before reading text.
+ * Committed indexes passed staged validation, but retrieval still fails closed on drift.
+ */
+function boundedSpanEntries(index: SourceSpanIndex): SourceSpanRef[] | undefined {
+  if (
+    index.schema_version !== SOURCE_SPAN_CONTRACT_VERSION ||
+    index.default_expansion.previous !== 1 ||
+    index.default_expansion.next !== 1 ||
+    index.spans.length === 0
+  ) {
+    return undefined;
+  }
+
+  const entries = [...index.spans].sort(
+    (left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id),
+  );
+  const ids = new Set<string>();
+  const paths = new Set<string>();
+  const sequences = new Set<number>();
+
+  for (const [position, entry] of entries.entries()) {
+    if (
+      entry.profile !== index.profile ||
+      !Number.isSafeInteger(entry.sequence) ||
+      entry.sequence !== position + 1 ||
+      ids.has(entry.id) ||
+      paths.has(entry.path) ||
+      sequences.has(entry.sequence) ||
+      !entry.path.startsWith(`${SOURCE_SPANS_DIR}/`) ||
+      isAbsolute(entry.path) ||
+      entry.path.includes("\\") ||
+      entry.path.split("/").some((segment) => segment === "." || segment === "..")
+    ) {
+      return undefined;
+    }
+
+    const previous = position > 0 ? entries[position - 1]?.id : undefined;
+    const next = position + 1 < entries.length ? entries[position + 1]?.id : undefined;
+    if (entry.prev_id !== previous || entry.next_id !== next) return undefined;
+
+    ids.add(entry.id);
+    paths.add(entry.path);
+    sequences.add(entry.sequence);
+  }
+  return entries;
+}
+
+function resolveManagedSpanPath(vaultRoot: string, relativePath: string): string | undefined {
+  const root = resolve(vaultRoot);
+  const absolutePath = resolve(root, relativePath);
+  const relativePathFromRoot = relative(root, absolutePath);
+  if (
+    relativePathFromRoot.length === 0 ||
+    relativePathFromRoot.startsWith("..") ||
+    isAbsolute(relativePathFromRoot)
+  ) {
+    return undefined;
+  }
+
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realSpanPath = fs.realpathSync(absolutePath);
+    const relativeRealPath = relative(realRoot, realSpanPath);
+    if (relativeRealPath.startsWith("..") || isAbsolute(relativeRealPath)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return absolutePath;
+}
+
+function parseHydratedSpan(
+  vaultRoot: string,
+  record: ManifestSpanHydrationRecord,
+  entry: SourceSpanRef,
+): HydratedSourceSpan | undefined {
+  const absolutePath = resolveManagedSpanPath(vaultRoot, entry.path);
+  if (absolutePath === undefined) return undefined;
+
+  let content: string;
+  try {
+    content = fs.readFileSync(absolutePath, "utf8");
+  } catch {
+    return undefined;
+  }
+  if (sourceSpanContentSha256(content) !== entry.sha256) return undefined;
+
+  const parsed = FRONTMATTER_PATTERN.exec(content);
+  if (parsed === null) return undefined;
+
+  let frontmatter: unknown;
+  try {
+    frontmatter = parseYaml(parsed[1] ?? "");
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(frontmatter) || !isRecord(frontmatter.okv)) return undefined;
+
+  const metadata = frontmatter.okv;
+  const anchorIds = stringArray(metadata.anchor_ids);
+  const title = optionalNonEmptyString(frontmatter.title);
+  const body = (parsed[2] ?? "").trim();
+  if (
+    frontmatter.type !== "Source Span" ||
+    frontmatter.contract_version !== SOURCE_SPAN_CONTRACT_VERSION ||
+    title === undefined ||
+    body.length === 0 ||
+    metadata.span_id !== entry.id ||
+    metadata.source_key !== record.source_key ||
+    metadata.content_sha256 !== record.content_sha256 ||
+    metadata.profile !== entry.profile ||
+    metadata.sequence !== entry.sequence ||
+    metadata.prev !== entry.prev_id ||
+    metadata.next !== entry.next_id ||
+    anchorIds === undefined ||
+    anchorIds.some((anchorId) => anchorId.length === 0) ||
+    !sameStrings(anchorIds, entry.anchor_ids)
+  ) {
+    return undefined;
+  }
+
+  const timestamp = optionalNonEmptyString(frontmatter.timestamp);
+  const speaker = optionalNonEmptyString(metadata.speaker);
+  const anchorKind = optionalNonEmptyString(metadata.anchor_kind);
+  const heading = optionalNonEmptyString(metadata.heading);
+  const parentLabel = optionalNonEmptyString(metadata.parent_label);
+  const slideNumber = metadata.slide_number;
+  if (
+    slideNumber !== undefined &&
+    (!Number.isSafeInteger(slideNumber) || (slideNumber as number) < 1)
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: entry.id,
+    path: absolutePath,
+    profile: entry.profile,
+    sequence: entry.sequence,
+    anchor_ids: [...entry.anchor_ids],
+    text: body,
+    title,
+    ...(timestamp === undefined ? {} : { timestamp }),
+    ...(speaker === undefined ? {} : { speaker }),
+    ...(slideNumber === undefined ? {} : { slide_number: slideNumber as number }),
+    ...(anchorKind === undefined ? {} : { anchor_kind: anchorKind }),
+    ...(heading === undefined ? {} : { heading }),
+    ...(parentLabel === undefined ? {} : { parent_label: parentLabel }),
+  };
+}
+
+/**
+ * Hydrate exact source evidence only for claim anchors found in one selected note.
+ * Each returned set contains at most exact + one previous + one next document.
+ */
+export function hydrateLinkedNoteSourceSpans(
+  notePath: string,
+  vaultRoot: string,
+  record: ManifestSpanHydrationRecord,
+): HydratedSourceSpanSet[] {
+  let noteContent: string;
+  try {
+    noteContent = fs.readFileSync(notePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const anchorIds = extractLinkedNoteAnchorIds(noteContent);
+  const entries = boundedSpanEntries(record.source_span_index);
+  if (anchorIds.length === 0 || entries === undefined) return [];
+
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  const parsedById = new Map<string, HydratedSourceSpan | undefined>();
+  const hydrate = (entry: SourceSpanRef): HydratedSourceSpan | undefined => {
+    if (!parsedById.has(entry.id)) {
+      parsedById.set(entry.id, parseHydratedSpan(vaultRoot, record, entry));
+    }
+    return parsedById.get(entry.id);
+  };
+
+  const hydratedSets: HydratedSourceSpanSet[] = [];
+  for (const anchorId of anchorIds) {
+    const matches = entries.filter((entry) => entry.anchor_ids.includes(anchorId));
+    if (matches.length !== 1) continue;
+
+    const exactEntry = matches[0]!;
+    const exact = hydrate(exactEntry);
+    if (exact === undefined) continue;
+
+    const previousEntry =
+      exactEntry.prev_id === undefined ? undefined : entriesById.get(exactEntry.prev_id);
+    const nextEntry =
+      exactEntry.next_id === undefined ? undefined : entriesById.get(exactEntry.next_id);
+    const previous = previousEntry === undefined ? undefined : hydrate(previousEntry);
+    const next = nextEntry === undefined ? undefined : hydrate(nextEntry);
+
+    hydratedSets.push({
+      anchor_id: anchorId,
+      profile: record.source_span_index.profile,
+      exact,
+      ...(previous === undefined ? {} : { previous }),
+      ...(next === undefined ? {} : { next }),
+    });
+  }
+  return hydratedSets;
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,10 +1358,16 @@ export function buildRetrieveResponse(
 
   // Build the manifest index once for all selected candidates.
   const manifestIndex = buildManifestIndex(vaultRoot);
+  const manifestSpanIndex = buildManifestSpanIndex(vaultRoot);
 
   const results: RetrieveResult[] = selected.map(({ candidate, score }) => {
     const hydrated = hydrateLinkedNotes(candidate, vaultRoot);
-    const linked_notes = filterNotesViaManifest(hydrated, manifestIndex);
+    const linked_notes = filterNotesViaManifest(hydrated, manifestIndex).map((note) => {
+      const spanRecord = manifestSpanIndex.get(resolve(note.path));
+      if (spanRecord === undefined) return note;
+      const sourceSpans = hydrateLinkedNoteSourceSpans(note.path, vaultRoot, spanRecord);
+      return sourceSpans.length === 0 ? note : { ...note, source_spans: sourceSpans };
+    });
     const excerpt = extractExcerpt(candidate).slice(0, EXCERPT_MAX_CHARS);
     return {
       path: candidate.path,
@@ -1171,14 +1515,9 @@ export function loadEvalFixtures(fixturesPath: string): RetrieveEvalCase[] {
   for (let i = 0; i < parsed.length; i++) {
     const entry = parsed[i] as Record<string, unknown>;
     if (typeof entry.query !== "string" || entry.query.trim() === "") {
-      throw new Error(
-        `loadEvalFixtures: entry[${i}].query must be a non-empty string`,
-      );
+      throw new Error(`loadEvalFixtures: entry[${i}].query must be a non-empty string`);
     }
-    if (
-      !Array.isArray(entry.expected_topic_paths) ||
-      entry.expected_topic_paths.length === 0
-    ) {
+    if (!Array.isArray(entry.expected_topic_paths) || entry.expected_topic_paths.length === 0) {
       throw new Error(
         `loadEvalFixtures: entry[${i}].expected_topic_paths must be a non-empty array`,
       );
@@ -1336,9 +1675,10 @@ export const EVAL_THRESHOLDS = {
  * @param metrics - Aggregate metrics from a RetrieveEvalReport.
  * @returns An object with `pass` (boolean) and `reasons` (array of failure strings).
  */
-export function checkEvalThresholds(
-  metrics: RetrieveEvalMetrics,
-): { pass: boolean; reasons: string[] } {
+export function checkEvalThresholds(metrics: RetrieveEvalMetrics): {
+  pass: boolean;
+  reasons: string[];
+} {
   const reasons: string[] = [];
 
   if (metrics.hit_rate < EVAL_THRESHOLDS.min_hit_rate) {

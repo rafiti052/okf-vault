@@ -7,8 +7,47 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CliError } from "../../dist/cli/cli.js";
 import { ExitCode } from "../../dist/cli/cli.js";
-import { initializeVault } from "../../dist/vault/manifest.js";
-import { isValidVaultRoot, resolveVaultRoot, handleRetrieve, loadTopicCandidateFiles, parseTopicCandidateFile, tokenize, scoreCandidate, rankCandidates, assignConfidence, selectResults, generateBroadeningHints, extractNoteSummary, hydrateLinkedNotes, buildManifestIndex, filterNotesViaManifest, buildRetrieveResponse, RETRIEVE_SCHEMA_VERSION, loadEvalFixtures, runRetrieveEval, checkEvalThresholds, EVAL_THRESHOLDS, RETRIEVE_EVAL_SCHEMA_VERSION } from "../../dist/vault/retrieve.js";
+import {
+  initializeVault,
+  loadManifest,
+  upsertCommittedSource,
+  saveManifest,
+  type SourceSpanIndex,
+} from "../../dist/vault/manifest.js";
+import { NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
+import {
+  isValidVaultRoot,
+  resolveVaultRoot,
+  handleRetrieve,
+  loadTopicCandidateFiles,
+  parseTopicCandidateFile,
+  tokenize,
+  scoreCandidate,
+  rankCandidates,
+  assignConfidence,
+  selectResults,
+  generateBroadeningHints,
+  extractNoteSummary,
+  hydrateLinkedNotes,
+  buildManifestIndex,
+  buildManifestSpanIndex,
+  extractLinkedNoteAnchorIds,
+  hydrateLinkedNoteSourceSpans,
+  filterNotesViaManifest,
+  buildRetrieveResponse,
+  RETRIEVE_SCHEMA_VERSION,
+  loadEvalFixtures,
+  runRetrieveEval,
+  checkEvalThresholds,
+  EVAL_THRESHOLDS,
+  RETRIEVE_EVAL_SCHEMA_VERSION,
+} from "../../dist/vault/retrieve.js";
+import {
+  createSourceSpanDocument,
+  createSourceSpanId,
+  renderSourceSpanMarkdown,
+} from "../../dist/vault/source-spans.js";
+import { sourceSpanContentSha256 } from "../../dist/vault/source-spans-validation.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..", "..");
@@ -18,6 +57,114 @@ function makeVaultRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), "okv-retrieve-test-"));
   initializeVault(dir);
   return dir;
+}
+
+function installRetrievalSpanFixture(): {
+  vault: string;
+  notePath: string;
+  candidate: ReturnType<typeof parseTopicCandidateFile>;
+  index: SourceSpanIndex;
+} {
+  const vault = makeVaultRoot();
+  const sourceKey = "local:/sources/retrieval-article.md";
+  const contentSha256 = "d".repeat(64);
+  const spanIds = [1, 2, 3].map((sequence) =>
+    createSourceSpanId(sourceKey, contentSha256, "article", sequence),
+  );
+  const bodies = [
+    "Previous bounded source context.",
+    "Exact source evidence with span-only-needle.",
+    "Next bounded source context.",
+  ];
+  const anchorIds = [["anchor-previous"], ["anchor-exact"], ["anchor-next"]];
+  const renderedDocuments = bodies.map((body, index) => {
+    const sequence = index + 1;
+    const document = createSourceSpanDocument({
+      sourceKey,
+      contentSha256,
+      profile: "article",
+      sequence,
+      anchorIds: anchorIds[index]!,
+      title: `Article span ${sequence}`,
+      description: `Bounded article evidence ${sequence}`,
+      body,
+      heading: `Section ${sequence}`,
+      ...(index > 0 ? { prev: spanIds[index - 1]! } : {}),
+      ...(index + 1 < spanIds.length ? { next: spanIds[index + 1]! } : {}),
+    });
+    return { document, content: renderSourceSpanMarkdown(document) };
+  });
+
+  const index: SourceSpanIndex = {
+    schema_version: "okf-source-spans/1.0.0",
+    profile: "article",
+    default_expansion: { previous: 1, next: 1 },
+    spans: renderedDocuments.map(({ document, content }, position) => ({
+      id: document.frontmatter.okv.span_id,
+      path: document.relativePath,
+      sha256: sourceSpanContentSha256(content),
+      profile: "article",
+      sequence: position + 1,
+      anchor_ids: [...document.frontmatter.okv.anchor_ids],
+      ...(position > 0 ? { prev_id: spanIds[position - 1]! } : {}),
+      ...(position + 1 < spanIds.length ? { next_id: spanIds[position + 1]! } : {}),
+    })),
+  };
+
+  for (const { document, content } of renderedDocuments) {
+    const spanPath = join(vault, document.relativePath);
+    mkdirSync(dirname(spanPath), { recursive: true });
+    writeFileSync(spanPath, content, "utf8");
+  }
+
+  const notePath = join(vault, "notes", "retrieval-article.md");
+  writeFileSync(
+    notePath,
+    [
+      "---",
+      "type: Article Note",
+      "title: Retrieval Article",
+      "claims:",
+      "  - id: claim-001",
+      "    text: Exact evidence claim.",
+      "    anchors:",
+      "      - anchor-exact",
+      "---",
+      "",
+      "A selected semantic note about bounded evidence.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  let manifest = loadManifest(vault);
+  manifest = upsertCommittedSource(manifest, {
+    source_key: sourceKey,
+    kind: "local",
+    origin: "/sources/retrieval-article.md",
+    content_sha256: contentSha256,
+    contract_version: NOTE_CONTRACT_VERSION,
+    note_path: "notes/retrieval-article.md",
+    status: "committed",
+    commit: "abc1234",
+    source_span_index: index,
+    processed_at: new Date().toISOString(),
+  });
+  saveManifest(vault, manifest);
+
+  const topicPath = join(vault, "topics", "bounded-evidence.md");
+  const topicContent = [
+    "---",
+    "title: Bounded Evidence",
+    "tags: [evidence]",
+    "description: Semantic topic for evidence hydration.",
+    "---",
+    "Bounded evidence is linked to [[../notes/retrieval-article]].",
+    "",
+  ].join("\n");
+  writeFileSync(topicPath, topicContent, "utf8");
+  const candidate = parseTopicCandidateFile({ path: topicPath, content: topicContent });
+  return { vault, notePath, candidate, index };
 }
 
 /** Create a plain temp directory that is NOT a vault root. */
@@ -183,13 +330,7 @@ describe("handleRetrieve — eval mode", () => {
     "retrieve-eval",
     "eval-cases.json",
   );
-  const evalVaultRoot = join(
-    projectRoot,
-    "test",
-    "fixtures",
-    "vaults",
-    "retrieve-eval",
-  );
+  const evalVaultRoot = join(projectRoot, "test", "fixtures", "vaults", "retrieve-eval");
 
   it("returns VAULT_ROOT_NOT_FOUND when --eval supplied with no vault root and bad cwd", () => {
     const plain = makePlainDir();
@@ -232,7 +373,11 @@ describe("handleRetrieve — eval mode", () => {
   });
 
   it("eval report always has status ok regardless of threshold pass/fail", () => {
-    const outcome = handleRetrieve(["--eval", evalVaultRoot], () => makePlainDir(), evalFixturesPath);
+    const outcome = handleRetrieve(
+      ["--eval", evalVaultRoot],
+      () => makePlainDir(),
+      evalFixturesPath,
+    );
     const r = outcome.result as { status: string };
     assert.equal(r.status, "ok");
   });
@@ -273,8 +418,15 @@ describe("CLI integration — okv retrieve root resolution", () => {
       cwd: vault,
       encoding: "utf8",
     });
-    assert.equal(result.status, 0, `Expected exit 0 but got ${result.status}. stderr: ${result.stderr}`);
-    const parsed = JSON.parse(result.stdout) as { status: string; data: { schema_version: string } };
+    assert.equal(
+      result.status,
+      0,
+      `Expected exit 0 but got ${result.status}. stderr: ${result.stderr}`,
+    );
+    const parsed = JSON.parse(result.stdout) as {
+      status: string;
+      data: { schema_version: string };
+    };
     assert.equal(parsed.status, "ok");
     assert.equal(parsed.data.schema_version, "okv-retrieve/1.0.0");
   });
@@ -372,7 +524,10 @@ describe("loadTopicCandidateFiles", () => {
 // ---------------------------------------------------------------------------
 
 /** Build a minimal RawTopicFile for parser unit tests. */
-function makeRawFile(name: string, content: string): import("../../dist/vault/retrieve.js").RawTopicFile {
+function makeRawFile(
+  name: string,
+  content: string,
+): import("../../dist/vault/retrieve.js").RawTopicFile {
   return {
     path: join("/fake/vault/topics", name),
     content,
@@ -381,19 +536,22 @@ function makeRawFile(name: string, content: string): import("../../dist/vault/re
 
 describe("parseTopicCandidateFile — frontmatter extraction", () => {
   it("extracts title, tags, and description from valid frontmatter", () => {
-    const raw = makeRawFile("agents.md", [
-      "---",
-      "title: Agent Workflows",
-      "description: Notes about agentic systems.",
-      "tags:",
-      "  - agents",
-      "  - automation",
-      "---",
-      "",
-      "# Agent Workflows",
-      "",
-      "Prose about agents.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "agents.md",
+      [
+        "---",
+        "title: Agent Workflows",
+        "description: Notes about agentic systems.",
+        "tags:",
+        "  - agents",
+        "  - automation",
+        "---",
+        "",
+        "# Agent Workflows",
+        "",
+        "Prose about agents.",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.path, raw.path);
@@ -403,55 +561,40 @@ describe("parseTopicCandidateFile — frontmatter extraction", () => {
   });
 
   it("falls back to first heading when frontmatter has no title", () => {
-    const raw = makeRawFile("agents.md", [
-      "---",
-      "tags: [agents]",
-      "---",
-      "",
-      "# Agent Systems",
-      "",
-      "Prose here.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "agents.md",
+      ["---", "tags: [agents]", "---", "", "# Agent Systems", "", "Prose here."].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.title, "Agent Systems");
   });
 
   it("emits empty title when frontmatter has no title and body has no heading", () => {
-    const raw = makeRawFile("empty.md", [
-      "---",
-      "tags: [misc]",
-      "---",
-      "",
-      "Just some prose without a heading.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "empty.md",
+      ["---", "tags: [misc]", "---", "", "Just some prose without a heading."].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.title, "");
   });
 
   it("emits empty description when frontmatter description is absent", () => {
-    const raw = makeRawFile("no-desc.md", [
-      "---",
-      "title: My Topic",
-      "tags: [misc]",
-      "---",
-      "",
-      "Prose.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "no-desc.md",
+      ["---", "title: My Topic", "tags: [misc]", "---", "", "Prose."].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.description, "");
   });
 
   it("emits empty tags array when frontmatter tags is absent", () => {
-    const raw = makeRawFile("no-tags.md", [
-      "---",
-      "title: No Tags",
-      "---",
-      "",
-      "Prose.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "no-tags.md",
+      ["---", "title: No Tags", "---", "", "Prose."].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.deepEqual(candidate.tags, []);
@@ -469,15 +612,18 @@ describe("parseTopicCandidateFile — frontmatter extraction", () => {
   });
 
   it("tolerates unparseable frontmatter YAML gracefully", () => {
-    const raw = makeRawFile("bad-yaml.md", [
-      "---",
-      ": this is invalid yaml: [unclosed",
-      "---",
-      "",
-      "# Fallback Heading",
-      "",
-      "Prose.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "bad-yaml.md",
+      [
+        "---",
+        ": this is invalid yaml: [unclosed",
+        "---",
+        "",
+        "# Fallback Heading",
+        "",
+        "Prose.",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     // Should not throw; title falls back to heading
@@ -489,19 +635,22 @@ describe("parseTopicCandidateFile — frontmatter extraction", () => {
 
 describe("parseTopicCandidateFile — prose extraction", () => {
   it("prose contains the body text after frontmatter", () => {
-    const raw = makeRawFile("topic.md", [
-      "---",
-      "title: My Topic",
-      "---",
-      "",
-      "# My Topic",
-      "",
-      "First paragraph.",
-      "",
-      "## Details",
-      "",
-      "More detail.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "topic.md",
+      [
+        "---",
+        "title: My Topic",
+        "---",
+        "",
+        "# My Topic",
+        "",
+        "First paragraph.",
+        "",
+        "## Details",
+        "",
+        "More detail.",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.ok(candidate.prose.includes("First paragraph."));
@@ -509,22 +658,25 @@ describe("parseTopicCandidateFile — prose extraction", () => {
   });
 
   it("preserves bilingual Portuguese/English content in prose", () => {
-    const raw = makeRawFile("bilingual.md", [
-      "---",
-      "title: Bilingual Topic",
-      "description: Tópico bilíngue sobre agentes de IA e agent workflows.",
-      "tags: [agentes, agents, automação]",
-      "---",
-      "",
-      "# Bilingual Topic",
-      "",
-      "Este tópico descreve agent workflows e automação de processos.",
-      "This topic describes agent workflows and process automation.",
-      "",
-      "## Notas neste tópico",
-      "",
-      "- [[notes/agent-note]]",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "bilingual.md",
+      [
+        "---",
+        "title: Bilingual Topic",
+        "description: Tópico bilíngue sobre agentes de IA e agent workflows.",
+        "tags: [agentes, agents, automação]",
+        "---",
+        "",
+        "# Bilingual Topic",
+        "",
+        "Este tópico descreve agent workflows e automação de processos.",
+        "This topic describes agent workflows and process automation.",
+        "",
+        "## Notas neste tópico",
+        "",
+        "- [[notes/agent-note]]",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.ok(candidate.description.includes("agentes de IA"));
@@ -564,41 +716,38 @@ describe("parseTopicCandidateFile — linked-note extraction", () => {
   });
 
   it("returns empty linkedNotePaths when body contains no wikilinks", () => {
-    const raw = makeRawFile("no-links.md", [
-      "---",
-      "title: No Links",
-      "---",
-      "",
-      "Prose without any links.",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "no-links.md",
+      ["---", "title: No Links", "---", "", "Prose without any links."].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.deepEqual(candidate.linkedNotePaths, []);
   });
 
   it("deduplicates repeated wikilinks", () => {
-    const raw = makeRawFile("dup-links.md", [
-      "---",
-      "title: Dup Links",
-      "---",
-      "",
-      "- [[notes/note-a]]",
-      "- [[notes/note-a]]",
-      "- [[notes/note-b]]",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "dup-links.md",
+      [
+        "---",
+        "title: Dup Links",
+        "---",
+        "",
+        "- [[notes/note-a]]",
+        "- [[notes/note-a]]",
+        "- [[notes/note-b]]",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.linkedNotePaths.length, 2);
   });
 
   it("extracts wikilinks with display-text aliases ([[path|alias]])", () => {
-    const raw = makeRawFile("aliased.md", [
-      "---",
-      "title: Aliased",
-      "---",
-      "",
-      "- [[notes/note-a|Note A Display]]",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "aliased.md",
+      ["---", "title: Aliased", "---", "", "- [[notes/note-a|Note A Display]]"].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.linkedNotePaths.length, 1);
@@ -606,20 +755,23 @@ describe("parseTopicCandidateFile — linked-note extraction", () => {
   });
 
   it("extracts linked notes from 'Notas neste tópico' section (Portuguese section heading)", () => {
-    const raw = makeRawFile("pt-section.md", [
-      "---",
-      "title: Portuguese Topic",
-      "---",
-      "",
-      "# Portuguese Topic",
-      "",
-      "Synthesized prose aqui.",
-      "",
-      "## Notas neste tópico",
-      "",
-      "- [[notes/nota-um]]",
-      "- [[notes/nota-dois]]",
-    ].join("\n"));
+    const raw = makeRawFile(
+      "pt-section.md",
+      [
+        "---",
+        "title: Portuguese Topic",
+        "---",
+        "",
+        "# Portuguese Topic",
+        "",
+        "Synthesized prose aqui.",
+        "",
+        "## Notas neste tópico",
+        "",
+        "- [[notes/nota-um]]",
+        "- [[notes/nota-dois]]",
+      ].join("\n"),
+    );
 
     const candidate = parseTopicCandidateFile(raw);
     assert.equal(candidate.linkedNotePaths.length, 2);
@@ -800,7 +952,10 @@ describe("scoreCandidate — field weight ordering", () => {
     const titleScore = scoreCandidate("agents", titleCandidate);
     const proseScore = scoreCandidate("agents", proseCandidate);
 
-    assert.ok(titleScore > proseScore, `Title score ${titleScore} should exceed prose score ${proseScore}`);
+    assert.ok(
+      titleScore > proseScore,
+      `Title score ${titleScore} should exceed prose score ${proseScore}`,
+    );
   });
 
   it("tag match outscores an equivalent prose-only match", () => {
@@ -810,17 +965,26 @@ describe("scoreCandidate — field weight ordering", () => {
     const tagScore = scoreCandidate("agents", tagCandidate);
     const proseScore = scoreCandidate("agents", proseCandidate);
 
-    assert.ok(tagScore > proseScore, `Tag score ${tagScore} should exceed prose score ${proseScore}`);
+    assert.ok(
+      tagScore > proseScore,
+      `Tag score ${tagScore} should exceed prose score ${proseScore}`,
+    );
   });
 
   it("description match outscores an equivalent prose-only match", () => {
-    const descCandidate = makeCandidate({ description: "Notes about agents.", prose: "Other content." });
+    const descCandidate = makeCandidate({
+      description: "Notes about agents.",
+      prose: "Other content.",
+    });
     const proseCandidate = makeCandidate({ description: "", prose: "Notes about agents." });
 
     const descScore = scoreCandidate("agents", descCandidate);
     const proseScore = scoreCandidate("agents", proseCandidate);
 
-    assert.ok(descScore > proseScore, `Description score ${descScore} should exceed prose score ${proseScore}`);
+    assert.ok(
+      descScore > proseScore,
+      `Description score ${descScore} should exceed prose score ${proseScore}`,
+    );
   });
 
   it("title + tag + description + prose match accumulates contributions from all fields", () => {
@@ -1201,7 +1365,10 @@ describe("selectResults — integration: close thematic matches", () => {
     // Results must be in descending score order (deterministic)
     const scores = result.candidates.map((r) => r.score);
     for (let i = 1; i < scores.length; i++) {
-      assert.ok((scores[i - 1] as number) >= (scores[i] as number), "scores must be non-increasing");
+      assert.ok(
+        (scores[i - 1] as number) >= (scores[i] as number),
+        "scores must be non-increasing",
+      );
     }
   });
 
@@ -1232,7 +1399,10 @@ describe("selectResults — integration: close thematic matches", () => {
     const result = selectResults(ranked);
 
     const paths = result.candidates.map((r) => r.candidate.path);
-    assert.ok(!paths.includes("/vault/topics/unrelated.md"), "weak unrelated candidate must not appear");
+    assert.ok(
+      !paths.includes("/vault/topics/unrelated.md"),
+      "weak unrelated candidate must not appear",
+    );
   });
 });
 
@@ -1250,30 +1420,58 @@ function makeCandidateForHints(
 
 describe("generateBroadeningHints — confidence gating", () => {
   it("returns empty array when confidence is high and coverage_gap is false", () => {
-    const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], ["/vault/notes/note1.md"]);
+    const selected = makeCandidateForHints(
+      "/vault/topics/ai.md",
+      ["ai", "agents"],
+      ["/vault/notes/note1.md"],
+    );
     const adjacent = makeCandidateForHints("/vault/topics/productivity.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai agents", "high", false, [{ candidate: selected, score: 30 }], [selected, adjacent]);
+    const hints = generateBroadeningHints(
+      "ai agents",
+      "high",
+      false,
+      [{ candidate: selected, score: 30 }],
+      [selected, adjacent],
+    );
     assert.deepEqual(hints, []);
   });
 
   it("returns hints when confidence is medium", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], []);
     const adjacent = makeCandidateForHints("/vault/topics/productivity.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai agents", "medium", false, [{ candidate: selected, score: 10 }], [selected, adjacent]);
+    const hints = generateBroadeningHints(
+      "ai agents",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, adjacent],
+    );
     assert.ok(hints.length > 0, "expected hints for medium confidence");
   });
 
   it("returns hints when confidence is low", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
     const adjacent = makeCandidateForHints("/vault/topics/agents.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai", "low", false, [{ candidate: selected, score: 2 }], [selected, adjacent]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "low",
+      false,
+      [{ candidate: selected, score: 2 }],
+      [selected, adjacent],
+    );
     assert.ok(hints.length > 0, "expected hints for low confidence");
   });
 
   it("returns hints when confidence is high but coverage_gap is true", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
     const adjacent = makeCandidateForHints("/vault/topics/agents.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai", "high", true, [{ candidate: selected, score: 30 }], [selected, adjacent]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "high",
+      true,
+      [{ candidate: selected, score: 30 }],
+      [selected, adjacent],
+    );
     assert.ok(hints.length > 0, "coverage_gap overrides high-confidence suppression");
   });
 });
@@ -1283,7 +1481,13 @@ describe("generateBroadeningHints — shared-tag adjacency", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "agents"], []);
     const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
     const unrelated = makeCandidateForHints("/vault/topics/cooking.md", ["food"], []);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling, unrelated]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, sibling, unrelated],
+    );
     const hintPaths = hints.map((h) => h.topic_path);
     assert.ok(hintPaths.includes("/vault/topics/autonomous.md"), "shared-tag sibling must appear");
     assert.ok(!hintPaths.includes("/vault/topics/cooking.md"), "unrelated topic must not appear");
@@ -1291,14 +1495,26 @@ describe("generateBroadeningHints — shared-tag adjacency", () => {
 
   it("excludes the selected result itself from hints", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected],
+    );
     assert.ok(!hints.map((h) => h.topic_path).includes("/vault/topics/ai.md"));
   });
 
   it("emits reason string describing the shared tags", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["agents"], []);
     const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, sibling],
+    );
     assert.ok(hints.length > 0);
     assert.ok(hints[0]?.reason.includes("agents"));
   });
@@ -1306,7 +1522,13 @@ describe("generateBroadeningHints — shared-tag adjacency", () => {
   it("tag matching is case-insensitive", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["Agents"], []);
     const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], []);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, sibling],
+    );
     assert.ok(hints.map((h) => h.topic_path).includes("/vault/topics/autonomous.md"));
   });
 });
@@ -1316,8 +1538,18 @@ describe("generateBroadeningHints — shared linked-note adjacency", () => {
     const note = "/vault/notes/shared.md";
     const selected = makeCandidateForHints("/vault/topics/ai.md", [], [note]);
     const sibling = makeCandidateForHints("/vault/topics/automation.md", [], [note]);
-    const unrelated = makeCandidateForHints("/vault/topics/cooking.md", [], ["/vault/notes/food.md"]);
-    const hints = generateBroadeningHints("agents", "medium", false, [{ candidate: selected, score: 5 }], [selected, sibling, unrelated]);
+    const unrelated = makeCandidateForHints(
+      "/vault/topics/cooking.md",
+      [],
+      ["/vault/notes/food.md"],
+    );
+    const hints = generateBroadeningHints(
+      "agents",
+      "medium",
+      false,
+      [{ candidate: selected, score: 5 }],
+      [selected, sibling, unrelated],
+    );
     const hintPaths = hints.map((h) => h.topic_path);
     assert.ok(hintPaths.includes("/vault/topics/automation.md"));
     assert.ok(!hintPaths.includes("/vault/topics/cooking.md"));
@@ -1327,7 +1559,13 @@ describe("generateBroadeningHints — shared linked-note adjacency", () => {
     const note = "/vault/notes/shared.md";
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["agents"], [note]);
     const sibling = makeCandidateForHints("/vault/topics/autonomous.md", ["agents"], [note]);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, sibling],
+    );
     assert.equal(hints.filter((h) => h.topic_path === "/vault/topics/autonomous.md").length, 1);
   });
 });
@@ -1335,31 +1573,65 @@ describe("generateBroadeningHints — shared linked-note adjacency", () => {
 describe("generateBroadeningHints — bounded output and suggested queries", () => {
   it("caps total hints at 5", () => {
     const selected = makeCandidateForHints("/vault/topics/main.md", ["ai"], []);
-    const siblings = Array.from({ length: 10 }, (_, i) => makeCandidateForHints(`/vault/topics/s${i}.md`, ["ai"], []));
-    const hints = generateBroadeningHints("something", "medium", false, [{ candidate: selected, score: 5 }], [selected, ...siblings]);
+    const siblings = Array.from({ length: 10 }, (_, i) =>
+      makeCandidateForHints(`/vault/topics/s${i}.md`, ["ai"], []),
+    );
+    const hints = generateBroadeningHints(
+      "something",
+      "medium",
+      false,
+      [{ candidate: selected, score: 5 }],
+      [selected, ...siblings],
+    );
     assert.ok(hints.length <= 5);
   });
 
   it("returns empty array when no adjacent topics exist", () => {
     const selected = makeCandidateForHints("/vault/topics/main.md", ["rare"], []);
     const unrelated = makeCandidateForHints("/vault/topics/other.md", ["different"], []);
-    const hints = generateBroadeningHints("query", "medium", false, [{ candidate: selected, score: 5 }], [selected, unrelated]);
+    const hints = generateBroadeningHints(
+      "query",
+      "medium",
+      false,
+      [{ candidate: selected, score: 5 }],
+      [selected, unrelated],
+    );
     assert.deepEqual(hints, []);
   });
 
   it("output is deterministic across calls", () => {
     const selected = makeCandidateForHints("/vault/topics/main.md", ["ai"], []);
-    const siblings = ["a", "b", "c"].map((x) => makeCandidateForHints(`/vault/topics/${x}.md`, ["ai"], []));
+    const siblings = ["a", "b", "c"].map((x) =>
+      makeCandidateForHints(`/vault/topics/${x}.md`, ["ai"], []),
+    );
     const all = [selected, ...siblings];
-    const h1 = generateBroadeningHints("q", "medium", false, [{ candidate: selected, score: 5 }], all).map((h) => h.topic_path);
-    const h2 = generateBroadeningHints("q", "medium", false, [{ candidate: selected, score: 5 }], all).map((h) => h.topic_path);
+    const h1 = generateBroadeningHints(
+      "q",
+      "medium",
+      false,
+      [{ candidate: selected, score: 5 }],
+      all,
+    ).map((h) => h.topic_path);
+    const h2 = generateBroadeningHints(
+      "q",
+      "medium",
+      false,
+      [{ candidate: selected, score: 5 }],
+      all,
+    ).map((h) => h.topic_path);
     assert.deepEqual(h1, h2);
   });
 
   it("attaches suggested_query from tag vocabulary not in original query", () => {
     const selected = makeCandidateForHints("/vault/topics/ai.md", ["ai", "autonomous-agents"], []);
     const sibling = makeCandidateForHints("/vault/topics/automation.md", ["ai"], []);
-    const hints = generateBroadeningHints("ai", "medium", false, [{ candidate: selected, score: 10 }], [selected, sibling]);
+    const hints = generateBroadeningHints(
+      "ai",
+      "medium",
+      false,
+      [{ candidate: selected, score: 10 }],
+      [selected, sibling],
+    );
     const withQuery = hints.filter((h) => h.suggested_query !== undefined);
     assert.ok(withQuery.length > 0, "expected suggested_query on at least one hint");
     assert.ok(withQuery[0]?.suggested_query?.includes("autonomous"));
@@ -1393,13 +1665,7 @@ describe("extractNoteSummary", () => {
   });
 
   it("skips leading headings before the first prose paragraph", () => {
-    const content = [
-      "# Note Title",
-      "",
-      "## Section",
-      "",
-      "Actual prose starts here.",
-    ].join("\n");
+    const content = ["# Note Title", "", "## Section", "", "Actual prose starts here."].join("\n");
     const summary = extractNoteSummary(content);
     assert.equal(summary, "Actual prose starts here.");
   });
@@ -1429,14 +1695,7 @@ describe("extractNoteSummary", () => {
   });
 
   it("skips blank lines at the start of body after frontmatter", () => {
-    const content = [
-      "---",
-      "title: Note",
-      "---",
-      "",
-      "",
-      "First prose paragraph here.",
-    ].join("\n");
+    const content = ["---", "title: Note", "---", "", "", "First prose paragraph here."].join("\n");
     const summary = extractNoteSummary(content);
     assert.equal(summary, "First prose paragraph here.");
   });
@@ -1447,7 +1706,9 @@ describe("extractNoteSummary", () => {
 // ---------------------------------------------------------------------------
 
 /** Build a minimal TopicMapCandidate for hydration tests. */
-function makeCandidateWithLinks(linkedNotePaths: string[]): ReturnType<typeof makeCandidate> & { linkedNotePaths: string[] } {
+function makeCandidateWithLinks(
+  linkedNotePaths: string[],
+): ReturnType<typeof makeCandidate> & { linkedNotePaths: string[] } {
   return {
     ...makeCandidate({ path: "/vault/topics/t.md" }),
     linkedNotePaths,
@@ -1491,13 +1752,13 @@ describe("hydrateLinkedNotes — summary extraction", () => {
     const notesDir = join(vault, "notes");
     mkdirSync(notesDir, { recursive: true });
     const notePath = join(notesDir, "note.md");
-    writeFileSync(notePath, [
-      "---",
-      "title: Test Note",
-      "---",
-      "",
-      "This note discusses topic retrieval in detail.",
-    ].join("\n"), "utf8");
+    writeFileSync(
+      notePath,
+      ["---", "title: Test Note", "---", "", "This note discusses topic retrieval in detail."].join(
+        "\n",
+      ),
+      "utf8",
+    );
 
     const candidate = makeCandidateWithLinks([notePath]);
     const notes = hydrateLinkedNotes(candidate, vault);
@@ -1572,33 +1833,41 @@ describe("hydrateLinkedNotes — integration: realistic topic result", () => {
     mkdirSync(notesDir, { recursive: true });
 
     const notePath = join(notesDir, "agent-note.md");
-    writeFileSync(notePath, [
-      "---",
-      "title: Agent Workflows",
-      "source_key: granola-abc",
-      "kind: granola",
-      "---",
-      "",
-      "This note describes how agents coordinate tasks using topic maps.",
-      "",
-      "More detail follows here.",
-    ].join("\n"), "utf8");
+    writeFileSync(
+      notePath,
+      [
+        "---",
+        "title: Agent Workflows",
+        "source_key: granola-abc",
+        "kind: granola",
+        "---",
+        "",
+        "This note describes how agents coordinate tasks using topic maps.",
+        "",
+        "More detail follows here.",
+      ].join("\n"),
+      "utf8",
+    );
 
     // Write a topic map that links to the note.
     const topicPath = join(topicsDir, "agents.md");
-    writeFileSync(topicPath, [
-      "---",
-      "title: Agents",
-      "tags: [agents, automation]",
-      "description: Topic map for agent automation.",
-      "---",
-      "",
-      "Overview of agent automation.",
-      "",
-      "## Notas neste tópico",
-      "",
-      `- [[../notes/agent-note]]`,
-    ].join("\n"), "utf8");
+    writeFileSync(
+      topicPath,
+      [
+        "---",
+        "title: Agents",
+        "tags: [agents, automation]",
+        "description: Topic map for agent automation.",
+        "---",
+        "",
+        "Overview of agent automation.",
+        "",
+        "## Notas neste tópico",
+        "",
+        `- [[../notes/agent-note]]`,
+      ].join("\n"),
+      "utf8",
+    );
 
     const rawFiles = loadTopicCandidateFiles(vault);
     assert.equal(rawFiles.length, 1);
@@ -1624,11 +1893,75 @@ describe("hydrateLinkedNotes — integration: realistic topic result", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Source-span hydration — Task 12
+// ---------------------------------------------------------------------------
+
+describe("extractLinkedNoteAnchorIds", () => {
+  it("extracts unique claim anchors in note order", () => {
+    const content = [
+      "---",
+      "claims:",
+      "  - id: claim-001",
+      "    anchors: [anchor-a, anchor-b]",
+      "  - id: claim-002",
+      "    anchors: [anchor-b, anchor-c]",
+      "---",
+      "Note body.",
+    ].join("\n");
+    assert.deepEqual(extractLinkedNoteAnchorIds(content), ["anchor-a", "anchor-b", "anchor-c"]);
+  });
+});
+
+describe("hydrateLinkedNoteSourceSpans", () => {
+  it("hydrates the exact linked-note anchor with one previous and one next sibling", () => {
+    const { vault, notePath } = installRetrievalSpanFixture();
+    const record = buildManifestSpanIndex(vault).get(notePath);
+    assert.ok(record !== undefined);
+
+    const hydrated = hydrateLinkedNoteSourceSpans(notePath, vault, record);
+
+    assert.equal(hydrated.length, 1);
+    const set = hydrated[0]!;
+    assert.equal(set.anchor_id, "anchor-exact");
+    assert.equal(set.profile, "article");
+    assert.equal(set.exact.sequence, 2);
+    assert.equal(set.exact.text, "Exact source evidence with span-only-needle.");
+    assert.equal(set.exact.heading, "Section 2");
+    assert.equal(set.previous?.sequence, 1);
+    assert.equal(set.previous?.text, "Previous bounded source context.");
+    assert.equal(set.next?.sequence, 3);
+    assert.equal(set.next?.text, "Next bounded source context.");
+    assert.equal([set.previous, set.exact, set.next].filter(Boolean).length, 3);
+  });
+
+  it("fails closed when the manifest requests an unbounded sibling expansion", () => {
+    const { vault, notePath, index } = installRetrievalSpanFixture();
+    const record = buildManifestSpanIndex(vault).get(notePath);
+    assert.ok(record !== undefined);
+    const unboundedRecord = {
+      ...record,
+      source_span_index: {
+        ...index,
+        default_expansion: { previous: 1, next: 2 },
+      },
+    } as unknown as typeof record;
+
+    assert.deepEqual(hydrateLinkedNoteSourceSpans(notePath, vault, unboundedRecord), []);
+  });
+
+  it("does not hydrate span text after indexed content hash drift", () => {
+    const { vault, notePath, index } = installRetrievalSpanFixture();
+    const record = buildManifestSpanIndex(vault).get(notePath);
+    assert.ok(record !== undefined);
+    writeFileSync(join(vault, index.spans[1]!.path), "tampered span text\n", "utf8");
+
+    assert.deepEqual(hydrateLinkedNoteSourceSpans(notePath, vault, record), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // buildManifestIndex + filterNotesViaManifest — unit tests (Task 10)
 // ---------------------------------------------------------------------------
-import { loadManifest, upsertCommittedSource, saveManifest } from "../../dist/vault/manifest.js";
-import { NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
-
 describe("buildManifestIndex", () => {
   it("returns empty map when manifest has no committed records", () => {
     const vault = makeVaultRoot();
@@ -1664,7 +1997,10 @@ describe("buildManifestIndex", () => {
     const index = buildManifestIndex(vault);
     assert.equal(index.size, 1);
     assert.ok(index.has(notePath));
-    assert.deepEqual(index.get(notePath), { source_key: "local:/sources/note-a.md", kind: "local" });
+    assert.deepEqual(index.get(notePath), {
+      source_key: "local:/sources/note-a.md",
+      kind: "local",
+    });
   });
 
   it("excludes skipped records from the index", () => {
@@ -1690,7 +2026,9 @@ describe("buildManifestIndex", () => {
 
 describe("filterNotesViaManifest", () => {
   it("returns empty array when index is empty", () => {
-    const notes = [{ path: "/vault/notes/note.md", summary: "s", provenance: { source_key: "", kind: "" } }];
+    const notes = [
+      { path: "/vault/notes/note.md", summary: "s", provenance: { source_key: "", kind: "" } },
+    ];
     const result = filterNotesViaManifest(notes, new Map());
     assert.deepEqual(result, []);
   });
@@ -1705,10 +2043,20 @@ describe("filterNotesViaManifest", () => {
   });
 
   it("excludes notes not in the manifest index", () => {
-    const index = new Map([["/vault/notes/committed.md", { source_key: "local:/c.md", kind: "local" }]]);
+    const index = new Map([
+      ["/vault/notes/committed.md", { source_key: "local:/c.md", kind: "local" }],
+    ]);
     const notes = [
-      { path: "/vault/notes/committed.md", summary: "ok", provenance: { source_key: "", kind: "" } },
-      { path: "/vault/notes/unknown.md", summary: "not ok", provenance: { source_key: "", kind: "" } },
+      {
+        path: "/vault/notes/committed.md",
+        summary: "ok",
+        provenance: { source_key: "", kind: "" },
+      },
+      {
+        path: "/vault/notes/unknown.md",
+        summary: "not ok",
+        provenance: { source_key: "", kind: "" },
+      },
     ];
     const result = filterNotesViaManifest(notes, index);
     assert.equal(result.length, 1);
@@ -1718,7 +2066,9 @@ describe("filterNotesViaManifest", () => {
   it("preserves summary and path while replacing provenance", () => {
     const notePath = "/vault/notes/n.md";
     const index = new Map([[notePath, { source_key: "granola:abc", kind: "granola" }]]);
-    const notes = [{ path: notePath, summary: "original summary", provenance: { source_key: "", kind: "" } }];
+    const notes = [
+      { path: notePath, summary: "original summary", provenance: { source_key: "", kind: "" } },
+    ];
     const result = filterNotesViaManifest(notes, index);
     assert.equal(result[0]?.summary, "original summary");
     assert.equal(result[0]?.path, notePath);
@@ -1797,7 +2147,8 @@ describe("buildRetrieveResponse — coverage_gap logic", () => {
     const vault = makeVaultRoot();
     const candidate = parseTopicCandidateFile({
       path: join(vault, "topics", "unrelated.md"),
-      content: "---\ntitle: Completely Unrelated\ntags: [xyz]\ndescription: xyz stuff\n---\nSome xyz prose.\n",
+      content:
+        "---\ntitle: Completely Unrelated\ntags: [xyz]\ndescription: xyz stuff\n---\nSome xyz prose.\n",
     });
     const response = buildRetrieveResponse("zzzzzzzzz totally absent", vault, [candidate]);
     assert.equal(response.coverage_gap, true);
@@ -1807,7 +2158,8 @@ describe("buildRetrieveResponse — coverage_gap logic", () => {
     const vault = makeVaultRoot();
     const candidate = parseTopicCandidateFile({
       path: join(vault, "topics", "agents.md"),
-      content: "---\ntitle: Agent Workflows\ntags: [agents, workflows]\ndescription: Notes about agents.\n---\nAgents do work.\n",
+      content:
+        "---\ntitle: Agent Workflows\ntags: [agents, workflows]\ndescription: Notes about agents.\n---\nAgents do work.\n",
     });
     const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
     assert.equal(response.coverage_gap, false);
@@ -1820,7 +2172,8 @@ describe("buildRetrieveResponse — response shape", () => {
     const vault = makeVaultRoot();
     const candidate = parseTopicCandidateFile({
       path: join(vault, "topics", "agents.md"),
-      content: "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
+      content:
+        "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
     });
     const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
     assert.equal(response.schema_version, RETRIEVE_SCHEMA_VERSION);
@@ -1835,7 +2188,8 @@ describe("buildRetrieveResponse — response shape", () => {
     const vault = makeVaultRoot();
     const candidate = parseTopicCandidateFile({
       path: join(vault, "topics", "agents.md"),
-      content: "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
+      content:
+        "---\ntitle: Agent Workflows\ntags: [agents]\ndescription: Notes about agents.\n---\nAgents do work in workflows.\n",
     });
     const response = buildRetrieveResponse("agent workflows", vault, [candidate]);
     assert.equal(response.results.length, 1);
@@ -1857,7 +2211,7 @@ describe("buildRetrieveResponse — response shape", () => {
     });
     const response = buildRetrieveResponse("long topic", vault, [candidate]);
     if (response.results.length > 0) {
-      assert.ok((response.results[0]!.excerpt.length) <= 512);
+      assert.ok(response.results[0]!.excerpt.length <= 512);
     }
   });
 
@@ -1874,6 +2228,67 @@ describe("buildRetrieveResponse — response shape", () => {
       assert.ok(typeof hint.topic_path === "string");
       assert.ok(typeof hint.reason === "string");
     }
+  });
+});
+
+describe("buildRetrieveResponse — bounded source-span hydration", () => {
+  it("adds source spans only after a selected linked note is hydrated", () => {
+    const { vault, candidate } = installRetrievalSpanFixture();
+
+    const response = buildRetrieveResponse("bounded evidence", vault, [candidate]);
+
+    assert.equal(response.coverage_gap, false);
+    const note = response.results[0]?.linked_notes[0];
+    assert.ok(note !== undefined);
+    assert.equal(note.source_spans?.length, 1);
+    assert.equal(note.source_spans?.[0]?.anchor_id, "anchor-exact");
+    assert.equal(
+      note.source_spans?.[0]?.exact.text,
+      "Exact source evidence with span-only-needle.",
+    );
+  });
+
+  it("does not expose span text to first-hop topic candidate ranking", () => {
+    const { vault } = installRetrievalSpanFixture();
+    const candidates = loadTopicCandidateFiles(vault).map(parseTopicCandidateFile);
+
+    assert.equal(candidates.length, 1);
+    assert.ok(!candidates[0]!.prose.includes("span-only-needle"));
+    const ranked = rankCandidates("span-only-needle", candidates);
+    assert.equal(ranked[0]?.score, 0);
+  });
+
+  it("preserves the legacy linked-note shape when the source has no span index", () => {
+    const vault = makeVaultRoot();
+    const notePath = join(vault, "notes", "legacy.md");
+    writeFileSync(
+      notePath,
+      "---\nclaims:\n  - id: claim-legacy\n    anchors: [anchor-legacy]\n---\n\nLegacy note.\n",
+      "utf8",
+    );
+    let manifest = loadManifest(vault);
+    manifest = upsertCommittedSource(manifest, {
+      source_key: "local:/sources/legacy.md",
+      kind: "local",
+      origin: "/sources/legacy.md",
+      content_sha256: "e".repeat(64),
+      contract_version: NOTE_CONTRACT_VERSION,
+      note_path: "notes/legacy.md",
+      status: "committed",
+      commit: "abc1234",
+      processed_at: new Date().toISOString(),
+    });
+    saveManifest(vault, manifest);
+    const candidate = parseTopicCandidateFile({
+      path: join(vault, "topics", "legacy.md"),
+      content:
+        "---\ntitle: Legacy Retrieval\ntags: [legacy]\ndescription: Legacy topic.\n---\nLegacy [[../notes/legacy]].\n",
+    });
+
+    const response = buildRetrieveResponse("legacy retrieval", vault, [candidate]);
+    const note = response.results[0]?.linked_notes[0];
+    assert.ok(note !== undefined);
+    assert.equal("source_spans" in note, false);
   });
 });
 
@@ -1931,10 +2346,7 @@ describe("loadEvalFixtures", () => {
   });
 
   it("throws when fixture file does not exist", () => {
-    assert.throws(
-      () => loadEvalFixtures("/does/not/exist/eval-cases.json"),
-      /loadEvalFixtures/,
-    );
+    assert.throws(() => loadEvalFixtures("/does/not/exist/eval-cases.json"), /loadEvalFixtures/);
   });
 
   it("throws when fixture file contains invalid JSON", () => {
@@ -1960,13 +2372,7 @@ describe("runRetrieveEval", () => {
     "retrieve-eval",
     "eval-cases.json",
   );
-  const evalVaultRoot = join(
-    projectRoot,
-    "test",
-    "fixtures",
-    "vaults",
-    "retrieve-eval",
-  );
+  const evalVaultRoot = join(projectRoot, "test", "fixtures", "vaults", "retrieve-eval");
 
   it("produces a report with the correct schema_version", () => {
     const fixtures = loadEvalFixtures(evalFixturesPath);
@@ -2009,9 +2415,7 @@ describe("runRetrieveEval", () => {
       assert.ok(typeof qr.coverage_gap === "boolean");
       assert.ok(typeof qr.top_score === "number");
       assert.ok(typeof qr.duration_ms === "number");
-      assert.ok(
-        qr.confidence === "high" || qr.confidence === "medium" || qr.confidence === "low",
-      );
+      assert.ok(qr.confidence === "high" || qr.confidence === "medium" || qr.confidence === "low");
       assert.ok(qr.top_result_path === null || typeof qr.top_result_path === "string");
     }
   });

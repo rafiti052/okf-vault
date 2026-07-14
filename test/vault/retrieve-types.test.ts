@@ -17,6 +17,8 @@ import {
   type RetrieveResponse,
   type RetrieveResult,
   type LinkedNote,
+  type HydratedSourceSpan,
+  type HydratedSourceSpanSet,
   type BroadeningHint,
   type RetrieveEvalReport,
   type RetrieveEvalQueryResult,
@@ -34,6 +36,33 @@ function makeLinkedNote(overrides: Partial<LinkedNote> = {}): LinkedNote {
     path: "/vault/knowledge/notes/note-a.md",
     summary: "A note about AI governance.",
     provenance: { source_key: "granola-abc123", kind: "granola" },
+    ...overrides,
+  };
+}
+
+function makeHydratedSourceSpan(overrides: Partial<HydratedSourceSpan> = {}): HydratedSourceSpan {
+  return {
+    id: "span-002-example",
+    path: "/vault/knowledge/references/sources/example/span-002.md",
+    profile: "article",
+    sequence: 2,
+    anchor_ids: ["anchor-002"],
+    text: "Exact bounded source evidence.",
+    title: "Article span 2",
+    heading: "Evidence",
+    ...overrides,
+  };
+}
+
+function makeHydratedSourceSpanSet(
+  overrides: Partial<HydratedSourceSpanSet> = {},
+): HydratedSourceSpanSet {
+  return {
+    anchor_id: "anchor-002",
+    profile: "article",
+    exact: makeHydratedSourceSpan(),
+    previous: makeHydratedSourceSpan({ id: "span-001-example", sequence: 1 }),
+    next: makeHydratedSourceSpan({ id: "span-003-example", sequence: 3 }),
     ...overrides,
   };
 }
@@ -197,6 +226,23 @@ describe("RetrieveResult contract", () => {
     assert.equal(note.provenance.source_key, "");
     assert.equal(note.provenance.kind, "");
   });
+
+  it("allows bounded source-span sets with profile-specific metadata", () => {
+    const note = makeLinkedNote({ source_spans: [makeHydratedSourceSpanSet()] });
+    const set = note.source_spans?.[0];
+    assert.ok(set !== undefined);
+    assert.equal(set.anchor_id, "anchor-002");
+    assert.equal(set.profile, "article");
+    assert.equal(set.exact.heading, "Evidence");
+    assert.equal(set.previous?.sequence, 1);
+    assert.equal(set.next?.sequence, 3);
+  });
+
+  it("keeps source_spans optional for legacy linked-note responses", () => {
+    const note = makeLinkedNote();
+    assert.equal(note.source_spans, undefined);
+    assert.equal("source_spans" in (JSON.parse(JSON.stringify(note)) as object), false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -315,8 +361,10 @@ describe("RetrieveErrorCode serialization", () => {
       RetrieveErrorCode.NOT_YET_IMPLEMENTED,
     ];
     for (const code of usageCodes) {
-      assert.ok(code.startsWith("USAGE_") || code === "NOT_YET_IMPLEMENTED",
-        `${code} should be a usage-class error`);
+      assert.ok(
+        code.startsWith("USAGE_") || code === "NOT_YET_IMPLEMENTED",
+        `${code} should be a usage-class error`,
+      );
     }
   });
 });
@@ -333,10 +381,7 @@ describe("TopicMapCandidate contract", () => {
       tags: ["ai", "governance", "policy"],
       description: "Topic map covering AI regulatory frameworks.",
       prose: "This topic synthesizes current AI governance approaches...",
-      linkedNotePaths: [
-        "/vault/knowledge/notes/note-a.md",
-        "/vault/knowledge/notes/note-b.md",
-      ],
+      linkedNotePaths: ["/vault/knowledge/notes/note-a.md", "/vault/knowledge/notes/note-b.md"],
     };
 
     assert.ok(typeof candidate.path === "string");
@@ -412,6 +457,31 @@ describe("JSON field name stability", () => {
     const provenance = note["provenance"] as Record<string, unknown>;
     assert.ok("source_key" in provenance);
     assert.ok("kind" in provenance);
+  });
+
+  it("serializes bounded source-span evidence with snake_case profile metadata", () => {
+    const response = makeRetrieveResponse({
+      results: [
+        makeRetrieveResult({
+          linked_notes: [makeLinkedNote({ source_spans: [makeHydratedSourceSpanSet()] })],
+        }),
+      ],
+    });
+    const parsed = JSON.parse(JSON.stringify(response)) as {
+      results: Array<{
+        linked_notes: Array<{ source_spans: Array<Record<string, unknown>> }>;
+      }>;
+    };
+    const set = parsed.results[0]?.linked_notes[0]?.source_spans[0];
+    assert.ok(set !== undefined);
+    assert.ok("anchor_id" in set);
+    assert.ok("profile" in set);
+    assert.ok("exact" in set);
+    assert.ok("previous" in set);
+    assert.ok("next" in set);
+    const exact = set["exact"] as Record<string, unknown>;
+    assert.ok("anchor_ids" in exact);
+    assert.ok("heading" in exact);
   });
 
   it("RetrieveEvalReport serializes with all expected top-level keys", () => {
