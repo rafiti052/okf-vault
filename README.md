@@ -18,7 +18,7 @@ flowchart LR
 | Component      | Location                               | Role                                                      |
 | -------------- | -------------------------------------- | --------------------------------------------------------- |
 | Workflow skill | `.agents/skills/okf-vault/`            | Orchestration, curator interaction, conversion profiles   |
-| Helper CLI     | `src/vault/`, `src/cli.ts`             | Deterministic validation, manifest, graph, dossiers, Git  |
+| Helper CLI     | `src/vault/`, `src/cli.ts`             | Deterministic validation, source spans, retrieval, Git    |
 | Contracts      | `.agents/skills/okf-vault/references/` | Note contract, envelopes, vault layout, helper invocation |
 
 The skill decides _what_ to process; the helper decides _whether_ staged output is safe to commit.
@@ -106,18 +106,24 @@ Full command list with availability labels and stub links: [commands/registry.md
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `init`                          | Create vault layout, manifest, indexes, log, and initial Git commit. No args: `./knowledge/` from repo root plus skill adapters. With path: vault only. |
 | `inspect`                       | Check manifest status (`new`, `already_processed`, or `changed_conflict`) for a source                                                                  |
-| `validate-staged`               | Validate staged notes against the note contract and envelope anchors                                                                                    |
-| `commit`                        | Atomically install a validated source into the vault and update the manifest                                                                            |
+| `validate-staged`               | Validate staged notes and profile-specific source spans against envelope anchors                                                                        |
+| `commit`                        | Atomically install a validated note, source-span references, and manifest index                                                                         |
 | `dossier`                       | Generate dossiers for organize-mode curation                                                                                                            |
 | `validate-proposals`            | Validate curation proposal JSON before curator review                                                                                                   |
 | `validate-graph`                | Check graph navigation, indexes, and link consistency                                                                                                   |
 | `validate`                      | Run the consolidated quality gate (contracts, manifest, graph, recovery state)                                                                          |
 | `visualize`                     | Build the configured OKF visualizer HTML output                                                                                                         |
 | `recover`                       | Recover from a failed transaction using the journal                                                                                                     |
-| `retrieve <vault-root> <query>` | Natural-language query over topic maps — returns ranked results with confidence and coverage-gap signal                                                 |
+| `retrieve <vault-root> <query>` | Topic-first query with confidence, coverage signals, linked notes, and bounded post-selection `source_spans`                                            |
 | `retrieve --eval <vault-root>`  | Run the fixed eval corpus; exits 0 on pass, 3 on threshold miss (hit rate ≥ 0.8)                                                                        |
 
 All commands emit a single JSON object on stdout and human diagnostics on stderr. Exit codes 0–5 map to success, unexpected, usage, validation, conflict, and transaction failures.
+
+### Managed source evidence
+
+Committed semantic notes remain under `notes/`, and topic maps remain under `topics/`. The helper stores durable source evidence separately as Markdown references at `references/sources/<source-slug>/span-XXX.md`; `.okf-vault/manifest.json` indexes their paths, hashes, profiles, and anchor coverage. These reference documents are helper-managed provenance, so curators should re-ingest a source instead of editing spans directly.
+
+Retrieval keeps its semantic boundary: topic maps are ranked first, committed linked notes are selected next, and only then may a note's claim anchors hydrate `source_spans`. Each hydration set contains one `exact` span and at most one `previous` and one `next` span. Raw source-span text is not a first-hop search surface. Removing or superseding spans updates the current tree, but old text can remain in Git history.
 
 ## Agent-assisted workflow
 

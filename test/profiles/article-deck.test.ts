@@ -99,6 +99,22 @@ describe("conversion profile documents", () => {
       }
     }
   });
+
+  it("documents article and deck source-span anatomy and bounded hydration", () => {
+    const article = readFileSync(join(profilesDir, "article.md"), "utf8");
+    assert.match(article, /ordered source-span reference documents/i);
+    assert.match(article, /heading/);
+    assert.match(article, /parent_label/);
+    assert.match(article, /envelope anchor order/i);
+    assert.match(article, /at most one previous and one next span/i);
+
+    const deck = readFileSync(join(profilesDir, "deck.md"), "utf8");
+    assert.match(deck, /anchor_kind: slide/);
+    assert.match(deck, /anchor_kind: speaker_note/);
+    assert.match(deck, /slide_number/);
+    assert.match(deck, /slide text followed by that slide's optional speaker notes/i);
+    assert.match(deck, /at most one previous and one next span/i);
+  });
 });
 
 describe("article and deck source-span fixture matrix", () => {

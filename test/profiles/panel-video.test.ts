@@ -118,6 +118,22 @@ describe("conversion profile documents", () => {
     assert.match(content, /granularity|paragraph-level|paragraph boundaries/i);
     assert.match(content, /nearest preceding/i);
   });
+
+  it("documents panel and video source-span anatomy and bounded hydration", () => {
+    const panel = readFileSync(join(profilesDir, "panel.md"), "utf8");
+    assert.match(panel, /ordered turn-level source spans/i);
+    assert.match(panel, /anchor_kind: timestamp-speaker/);
+    assert.match(panel, /timestamp-only and speaker-only turns/i);
+    assert.match(panel, /envelope anchor order/i);
+    assert.match(panel, /at most one previous and one next turn/i);
+
+    const video = readFileSync(join(profilesDir, "video.md"), "utf8");
+    assert.match(video, /one timestamp source span per usable `timestamp` anchor/i);
+    assert.match(video, /envelope transcript order/i);
+    assert.match(video, /never sorts segments or invents finer timing/i);
+    assert.match(video, /anchor_kind: timestamp/);
+    assert.match(video, /at most one previous and one next segment/i);
+  });
 });
 
 describe("panel and video source-span fixture matrix", () => {
