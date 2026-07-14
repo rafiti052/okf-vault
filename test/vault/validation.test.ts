@@ -14,9 +14,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExitCode, dispatch, parseArgs } from "../../dist/cli/cli.js";
-import { initializeVault } from "../../dist/vault/manifest.js";
+import { initializeVault, type SourceSpanProfile } from "../../dist/vault/manifest.js";
 import { MANIFEST_RELATIVE_PATH, NOTE_CONTRACT_VERSION } from "../../dist/vault/constants.js";
+import { generateArticleSpanDocuments } from "../../dist/vault/source-spans-article.js";
+import { generateDeckSourceSpans } from "../../dist/vault/source-spans-deck.js";
+import { generatePanelSourceSpans } from "../../dist/vault/source-spans-panel.js";
+import { generateVideoSourceSpans } from "../../dist/vault/source-spans-video.js";
 import {
+  renderSourceSpanMarkdown,
+  type SourceSpanDocument,
+} from "../../dist/vault/source-spans.js";
+import {
+  SOURCE_SPAN_VALIDATION_CODES,
   buildValidationReport,
   isVaultRelativePath,
   loadSourceEnvelope,
@@ -24,6 +33,7 @@ import {
   validateSourceEnvelope,
   validateStagedNotes,
   validateValidationReport,
+  type SourceEnvelope,
   type ValidationReport,
 } from "../../dist/vault/validation.js";
 import { youtubeAccepted, youtubeRejected } from "../fixtures/youtube-fixtures.js";
@@ -49,6 +59,41 @@ function stageNote(
   mkdirSync(targetDir, { recursive: true });
   copyFileSync(join(notesDir, fixtureName), join(stagingDir, stagedName));
   return stagingDir;
+}
+
+function stageArticleSourceSpans(
+  stagingDir: string,
+  envelope: ReturnType<typeof loadSourceEnvelope>,
+): string[] {
+  return stageSourceSpanDocuments(stagingDir, generateArticleSpanDocuments(envelope));
+}
+
+function stageSourceSpanDocuments(
+  stagingDir: string,
+  documents: readonly SourceSpanDocument[],
+): string[] {
+  return documents.map((document) => {
+    const target = join(stagingDir, document.relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, renderSourceSpanMarkdown(document), "utf8");
+    return document.relativePath;
+  });
+}
+
+function generatedSourceSpans(
+  profile: SourceSpanProfile,
+  envelope: SourceEnvelope,
+): SourceSpanDocument[] {
+  switch (profile) {
+    case "article":
+      return generateArticleSpanDocuments(envelope);
+    case "video":
+      return generateVideoSourceSpans(envelope);
+    case "panel":
+      return generatePanelSourceSpans(envelope);
+    case "deck":
+      return generateDeckSourceSpans(envelope);
+  }
 }
 
 function stageGoldNote(vaultRoot: string, runId: string, notePath: string, stagedName: string) {
@@ -159,6 +204,80 @@ describe("staged note contract validation", () => {
     const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
     assert.equal(result.report.status, "pass");
     assert.equal(result.report.issues.length, 0);
+    assert.equal(result.report.summary, "All staged notes passed note-contract validation.");
+    assert.deepEqual(result.source_span_paths, []);
+    assert.equal(result.source_span_count, 0);
+    assert.equal(result.source_profile, undefined);
+  });
+
+  it("passes generated source spans and reports their staged profile and paths", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-article-spans-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageNote(vaultRoot, "run-article-spans", "article-valid.md");
+    const envelope = loadEnvelope("article-local.json");
+    const sourceSpanPaths = stageArticleSourceSpans(stagingDir, envelope);
+
+    const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
+
+    assert.equal(result.report.status, "pass");
+    assert.equal(result.report.summary, "All staged notes and source spans passed validation.");
+    assert.deepEqual(result.report.issues, []);
+    assert.equal(result.source_profile, "article");
+    assert.equal(result.source_span_count, sourceSpanPaths.length);
+    assert.deepEqual(result.source_span_paths, sourceSpanPaths);
+    assert.deepEqual(result.staged_paths, ["notes/staged-note.md"]);
+  });
+
+  it("surfaces source-span issue codes for malformed staged span output", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-validate-bad-spans-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageNote(vaultRoot, "run-bad-spans", "article-valid.md");
+    const envelope = loadEnvelope("article-local.json");
+    const [sourceSpanPath] = stageArticleSourceSpans(stagingDir, envelope);
+    assert.ok(sourceSpanPath);
+    writeFileSync(join(stagingDir, sourceSpanPath), "tampered staged span\n", { flag: "a" });
+
+    const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
+
+    assert.equal(result.report.status, "fail");
+    assert.ok(
+      result.report.issues.some(
+        (entry) => entry.code === SOURCE_SPAN_VALIDATION_CODES.hashMismatch,
+      ),
+    );
+    assert.equal(result.source_span_count, 1);
+    assert.equal(result.source_profile, "article");
+  });
+
+  it("passes staged source spans for every supported source-note profile", () => {
+    const cases: Array<{
+      profile: SourceSpanProfile;
+      note: string;
+      envelope: string;
+    }> = [
+      { profile: "article", note: "article-valid.md", envelope: "article-local.json" },
+      { profile: "video", note: "video-valid.md", envelope: "video-transcript.json" },
+      { profile: "panel", note: "panel-valid.md", envelope: "panel-transcript.json" },
+      { profile: "deck", note: "deck-valid.md", envelope: "deck-five-slides.json" },
+    ];
+
+    for (const testCase of cases) {
+      const vaultRoot = mkdtempSync(join(tmpdir(), `okf-validate-${testCase.profile}-spans-`));
+      initializeVault(vaultRoot);
+      const stagingDir = stageNote(vaultRoot, `run-${testCase.profile}-spans`, testCase.note);
+      const envelope = loadEnvelope(testCase.envelope);
+      const sourceSpanPaths = stageSourceSpanDocuments(
+        stagingDir,
+        generatedSourceSpans(testCase.profile, envelope),
+      );
+
+      const result = validateStagedNotes(vaultRoot, stagingDir, envelope);
+
+      assert.equal(result.report.status, "pass", `${testCase.profile} spans should pass`);
+      assert.equal(result.source_profile, testCase.profile);
+      assert.equal(result.source_span_count, sourceSpanPaths.length);
+      assert.deepEqual(result.source_span_paths, sourceSpanPaths);
+    }
   });
 
   it("rejects staging directories outside the vault tmp directory", () => {
@@ -521,6 +640,65 @@ describe("validate-staged CLI integration", () => {
     assert.equal(payload.status, "ok");
     assert.equal(payload.data.status, "pass");
     assert.equal(beforeManifest, afterManifest);
+  });
+
+  it("exits 0 and reports accepted staged source spans", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-cli-validate-spans-pass-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageNote(vaultRoot, "run-spans-pass", "article-valid.md");
+    const envelopePath = join(envelopesDir, "article-local.json");
+    const envelope = loadSourceEnvelope(envelopePath);
+    const sourceSpanPaths = stageArticleSourceSpans(stagingDir, envelope);
+
+    const result = spawnSync(
+      process.execPath,
+      [bin, "validate-staged", vaultRoot, stagingDir, envelopePath],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(result.status, ExitCode.SUCCESS);
+    const payload = JSON.parse(result.stdout.trim()) as {
+      status: string;
+      data: ValidationReport & {
+        source_span_count: number;
+        source_span_paths: string[];
+        source_profile: string;
+      };
+    };
+    assert.equal(payload.status, "ok");
+    assert.equal(payload.data.status, "pass");
+    assert.equal(payload.data.source_span_count, sourceSpanPaths.length);
+    assert.deepEqual(payload.data.source_span_paths, sourceSpanPaths);
+    assert.equal(payload.data.source_profile, "article");
+  });
+
+  it("exits 3 and returns source-span issue codes for malformed staged spans", () => {
+    const vaultRoot = mkdtempSync(join(tmpdir(), "okf-cli-validate-spans-fail-"));
+    initializeVault(vaultRoot);
+    const stagingDir = stageNote(vaultRoot, "run-spans-fail", "article-valid.md");
+    const envelopePath = join(envelopesDir, "article-local.json");
+    const envelope = loadSourceEnvelope(envelopePath);
+    const [sourceSpanPath] = stageArticleSourceSpans(stagingDir, envelope);
+    assert.ok(sourceSpanPath);
+    writeFileSync(join(stagingDir, sourceSpanPath), "tampered staged span\n", { flag: "a" });
+
+    const result = spawnSync(
+      process.execPath,
+      [bin, "validate-staged", vaultRoot, stagingDir, envelopePath],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(result.status, ExitCode.VALIDATION);
+    const payload = JSON.parse(result.stdout.trim()) as {
+      status: string;
+      data: ValidationReport & { source_span_count: number };
+    };
+    assert.equal(payload.status, "ok");
+    assert.equal(payload.data.status, "fail");
+    assert.equal(payload.data.source_span_count, 1);
+    assert.ok(
+      payload.data.issues.some((entry) => entry.code === SOURCE_SPAN_VALIDATION_CODES.hashMismatch),
+    );
   });
 
   it("exits 3 for a broken deck fixture without mutating managed notes", () => {

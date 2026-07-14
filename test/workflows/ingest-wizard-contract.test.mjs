@@ -28,6 +28,7 @@ const root = join(__dirname, "..", "..");
 const skillDir = skillRoot(root);
 const ingestWizardPath = join(skillDir, "references", "ingest-wizard.md");
 const sessionSourcePath = join(root, "src", "vault", "session.ts");
+const stagedValidationSourcePath = join(root, "src", "vault", "validation.ts");
 
 /**
  * @param {string} markdown
@@ -288,6 +289,16 @@ describe("ingest-wizard handoff payload", () => {
 
 describe("ingest-wizard contract integration", () => {
   const text = readFileSync(ingestWizardPath, "utf8");
+
+  it("routes staged source spans through validation and structured CLI reporting", () => {
+    const validationSource = readFileSync(stagedValidationSourcePath, "utf8");
+
+    assert.match(validationSource, /validateSourceSpanDocuments\(/u);
+    assert.match(validationSource, /source_span_count/u);
+    assert.match(validationSource, /source_span_paths/u);
+    assert.match(validationSource, /source_profile/u);
+    assert.match(validationSource, /SOURCE_SPAN_VALIDATION_CODES/u);
+  });
 
   it("resolves all relative links to existing files under the skill directory", () => {
     const links = extractRelativeLinks(text);

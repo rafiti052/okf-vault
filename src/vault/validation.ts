@@ -6,8 +6,24 @@ import addFormatsImport from "ajv-formats";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { parse as parseYaml } from "yaml";
 import { type DispatchOutcome, ExitCode, failure, success } from "../cli/cli.js";
-import { NOTE_CONTRACT_VERSION, TMP_DIR } from "./constants.js";
-import { deriveSourceKey, loadManifest } from "./manifest.js";
+import { NOTE_CONTRACT_VERSION, SOURCE_SPANS_DIR, TMP_DIR } from "./constants.js";
+import {
+  deriveSourceKey,
+  loadManifest,
+  type SourceSpanIndex,
+  type SourceSpanProfile,
+} from "./manifest.js";
+import { generateArticleSpanDocuments } from "./source-spans-article.js";
+import { generateDeckSourceSpans } from "./source-spans-deck.js";
+import { generatePanelSourceSpans } from "./source-spans-panel.js";
+import {
+  SOURCE_SPAN_VALIDATION_CODES,
+  sourceSpanContentSha256,
+  validateSourceSpanDocuments,
+  type SourceSpanMarkdownDocument,
+} from "./source-spans-validation.js";
+import { generateVideoSourceSpans } from "./source-spans-video.js";
+import { renderSourceSpanMarkdown, type SourceSpanDocument } from "./source-spans.js";
 
 export {
   SOURCE_SPAN_VALIDATION_CODES,
@@ -29,6 +45,13 @@ export const SOURCE_NOTE_TYPES = [
 ] as const;
 
 export type SourceNoteType = (typeof SOURCE_NOTE_TYPES)[number];
+
+const SOURCE_NOTE_PROFILE: Readonly<Record<SourceNoteType, SourceSpanProfile>> = {
+  "Article Note": "article",
+  "Video Transcript Note": "video",
+  "Panel Transcript Note": "panel",
+  "Slide Deck Note": "deck",
+};
 
 export const MANDATORY_SECTIONS = [
   "# Summary",
@@ -823,11 +846,13 @@ function validateDeckNarrativeClaims(
   return issues;
 }
 
-function collectStagedNotes(stagingRoot: string): {
+function collectStagedOutput(stagingRoot: string): {
   notes: ParsedNote[];
+  sourceSpans: SourceSpanMarkdownDocument[];
   issues: ValidationIssue[];
 } {
   const notes: ParsedNote[] = [];
+  const sourceSpans: SourceSpanMarkdownDocument[] = [];
   const issues: ValidationIssue[] = [];
   const resolvedStaging = resolve(stagingRoot);
 
@@ -855,9 +880,18 @@ function collectStagedNotes(stagingRoot: string): {
       }
 
       const content = fs.readFileSync(fullPath, "utf8");
+      if (relativePath.startsWith(`${SOURCE_SPANS_DIR}/`)) {
+        sourceSpans.push({ relativePath, content });
+        continue;
+      }
+
       const parsed = parseNoteContent(relativePath, content);
       if (Array.isArray(parsed)) {
         issues.push(...parsed);
+        continue;
+      }
+      if (parsed.frontmatter.type === "Source Span") {
+        sourceSpans.push({ relativePath, content });
         continue;
       }
       notes.push(parsed);
@@ -866,11 +900,112 @@ function collectStagedNotes(stagingRoot: string): {
 
   if (!fs.existsSync(resolvedStaging)) {
     issues.push(issue("STAGING_NOT_FOUND", `Staging directory does not exist: ${resolvedStaging}`));
-    return { notes, issues };
+    return { notes, sourceSpans, issues };
   }
 
   walk(resolvedStaging);
-  return { notes, issues };
+  sourceSpans.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  return { notes, sourceSpans, issues };
+}
+
+function sourceSpanProfileForNotes(notes: readonly ParsedNote[]): SourceSpanProfile | undefined {
+  const profiles = new Set<SourceSpanProfile>();
+  for (const note of notes) {
+    const noteType = note.frontmatter.type;
+    if (
+      typeof noteType === "string" &&
+      (SOURCE_NOTE_TYPES as readonly string[]).includes(noteType)
+    ) {
+      profiles.add(SOURCE_NOTE_PROFILE[noteType as SourceNoteType]);
+    }
+  }
+  return profiles.size === 1 ? [...profiles][0] : undefined;
+}
+
+function generateExpectedSourceSpans(
+  profile: SourceSpanProfile,
+  envelope: SourceEnvelope,
+): SourceSpanDocument[] {
+  switch (profile) {
+    case "article":
+      return generateArticleSpanDocuments(envelope);
+    case "video":
+      return generateVideoSourceSpans(envelope);
+    case "panel":
+      return generatePanelSourceSpans(envelope);
+    case "deck":
+      return generateDeckSourceSpans(envelope);
+  }
+}
+
+function buildExpectedSourceSpanIndex(
+  profile: SourceSpanProfile,
+  documents: readonly SourceSpanDocument[],
+): SourceSpanIndex {
+  return {
+    schema_version: "okf-source-spans/1.0.0",
+    profile,
+    default_expansion: { previous: 1, next: 1 },
+    spans: documents.map((document) => {
+      const metadata = document.frontmatter.okv;
+      return {
+        id: metadata.span_id,
+        path: document.relativePath,
+        sha256: sourceSpanContentSha256(renderSourceSpanMarkdown(document)),
+        profile,
+        sequence: metadata.sequence,
+        anchor_ids: [...metadata.anchor_ids],
+        ...(metadata.prev === undefined ? {} : { prev_id: metadata.prev }),
+        ...(metadata.next === undefined ? {} : { next_id: metadata.next }),
+      };
+    }),
+  };
+}
+
+function validateStagedSourceSpans(
+  notes: readonly ParsedNote[],
+  sourceSpans: readonly SourceSpanMarkdownDocument[],
+  envelope: SourceEnvelope,
+): { issues: ValidationIssue[]; profile?: SourceSpanProfile } {
+  if (sourceSpans.length === 0) {
+    return { issues: [] };
+  }
+
+  const profile = sourceSpanProfileForNotes(notes);
+  if (profile === undefined) {
+    return {
+      issues: [
+        issue(
+          SOURCE_SPAN_VALIDATION_CODES.indexInvalid,
+          "Source-span validation requires exactly one staged source-note profile.",
+        ),
+      ],
+    };
+  }
+
+  try {
+    const expectedDocuments = generateExpectedSourceSpans(profile, envelope);
+    return {
+      profile,
+      issues: validateSourceSpanDocuments({
+        profile,
+        envelope,
+        index: buildExpectedSourceSpanIndex(profile, expectedDocuments),
+        documents: sourceSpans,
+      }),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Source-span generation failed.";
+    return {
+      profile,
+      issues: [
+        issue(
+          SOURCE_SPAN_VALIDATION_CODES.documentInvalid,
+          `Source-span validation could not derive expected output: ${message}`,
+        ),
+      ],
+    };
+  }
 }
 
 function realpathWithMissingTail(path: string): string {
@@ -903,11 +1038,14 @@ function validateStagingRoot(vaultRoot: string, stagingDir: string): ValidationI
 export function buildValidationReport(
   contractVersion: string,
   issues: ValidationIssue[],
+  includesSourceSpans = false,
 ): ValidationReport {
   const status = issues.length === 0 ? "pass" : "fail";
   const summary =
     status === "pass"
-      ? "All staged notes passed note-contract validation."
+      ? includesSourceSpans
+        ? "All staged notes and source spans passed validation."
+        : "All staged notes passed note-contract validation."
       : `${issues.length} validation issue(s) found in staged output.`;
 
   const report: ValidationReport = {
@@ -925,6 +1063,9 @@ export function buildValidationReport(
 export interface ValidateStagedResult {
   report: ValidationReport;
   staged_paths: string[];
+  source_span_count: number;
+  source_span_paths: string[];
+  source_profile?: SourceSpanProfile;
 }
 
 export function validateStagedNotes(
@@ -934,8 +1075,13 @@ export function validateStagedNotes(
 ): ValidateStagedResult {
   const manifest = loadManifest(vaultRoot);
   const stagingRootIssues = validateStagingRoot(vaultRoot, stagingDir);
-  const { notes, issues: stagingIssues } =
-    stagingRootIssues.length === 0 ? collectStagedNotes(stagingDir) : { notes: [], issues: [] };
+  const {
+    notes,
+    sourceSpans,
+    issues: stagingIssues,
+  } = stagingRootIssues.length === 0
+    ? collectStagedOutput(stagingDir)
+    : { notes: [], sourceSpans: [], issues: [] };
   const issues = [...stagingIssues, ...validateSourceEnvelope(envelope)];
   issues.push(...stagingRootIssues);
 
@@ -947,10 +1093,22 @@ export function validateStagedNotes(
     issues.push(...validateNoteStructure(note, manifest.note_contract_version, envelope));
   }
 
-  const report = buildValidationReport(manifest.note_contract_version, issues);
+  const sourceSpanValidation = validateStagedSourceSpans(notes, sourceSpans, envelope);
+  issues.push(...sourceSpanValidation.issues);
+
+  const report = buildValidationReport(
+    manifest.note_contract_version,
+    issues,
+    sourceSpans.length > 0,
+  );
   return {
     report,
     staged_paths: notes.map((note) => note.relativePath),
+    source_span_count: sourceSpans.length,
+    source_span_paths: sourceSpans.map((document) => document.relativePath),
+    ...(sourceSpanValidation.profile === undefined
+      ? {}
+      : { source_profile: sourceSpanValidation.profile }),
   };
 }
 
@@ -1154,6 +1312,9 @@ export function handleValidateStaged(args: string[]): DispatchOutcome {
       result: success("validate-staged", {
         ...result.report,
         staged_paths: result.staged_paths,
+        source_span_count: result.source_span_count,
+        source_span_paths: result.source_span_paths,
+        ...(result.source_profile === undefined ? {} : { source_profile: result.source_profile }),
       }),
       ...(exitCode === ExitCode.VALIDATION ? { diagnostic: result.report.summary } : {}),
     };
